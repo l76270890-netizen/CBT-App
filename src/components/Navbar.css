@@ -1,0 +1,263 @@
+/* TOP NAVBAR */
+.navbar {
+  background: #F8FAFC;
+  border-bottom: 1px solid #E2E8F0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.navbar-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  height: 65px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-logo {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1E90FF;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* DESKTOP NAV */
+.nav-links {
+  display: flex;
+  gap: 8px;
+}
+.nav-link {
+  background: none;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #475569;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.nav-link:hover {
+  background: #F1F5F9;
+}
+.nav-link.active {
+  background: #EFF6FF;
+  color: #1E90FF;
+}
+
+/* HAMBURGER - HIDDEN ON DESKTOP */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+}
+.bar {
+  width: 24px;
+  height: 2px;
+  background: #1E293B;
+  border-radius: 2px;
+  transition: 0.3s;
+}
+.bar.open:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+.bar.open:nth-child(2) { opacity: 0; }
+.bar.open:nth-child(3) { transform: rotate(-45deg) translate(7px, -6px); }
+
+/* SIDEBAR */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 98;
+  opacity: 0;
+  visibility: hidden;
+  transition: 0.3s;
+}
+.sidebar-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: -280px;
+  width: 280px;
+  height: 100vh;
+  background: white;
+  z-index: 99;
+  transition: 0.3s ease;
+  box-shadow: 2px 0 20px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+}
+.sidebar.open {
+  left: 0;
+  z-index: 100;
+}
+
+.sidebar-header {
+  padding: 20px;
+  border-bottom: 1px solid #E2E8F0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: #64748B;
+  cursor: pointer;
+}
+
+.sidebar-links {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  
+  gap: 4px;
+}
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  border: none;
+  padding: 14px 16px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.sidebar-link:hover {
+  background: #F1F5F9;
+}
+.sidebar-link.active {
+  background: #EFF6FF;
+  color: #1E90FF;
+}
+
+/* BOTTOM NAV - MOBILE ONLY */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid #E2E8F0;
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0;
+  z-index: 97;
+}
+.nav-item {
+  background: none;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #64748B;
+}
+.nav-item.active {
+  color: #1E90FF;
+}
+.nav-icon { font-size: 20px; }
+.nav-label { font-size: 11px; font-weight: 600; }
+
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .nav-links {
+    display: none; /* Hide desktop nav */
+  }
+  .hamburger {
+    display: flex; /* Show hamburger */
+  }
+}
+@media (min-width: 769px) {
+  .bottom-nav {
+    display: none; /* Hide bottom nav on desktop */
+  }
+  .sidebar, .sidebar-overlay, .hamburger {
+    display: none; /* Hide sidebar stuff on desktop */
+  }
+
+
+  /* HAMBURGER - HIDDEN ON DESKTOP */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  transition: 0.2s;
+}
+.hamburger:hover {
+  background: #F1F5F9;
+}
+.hamburger:active {
+  transform: scale(0.95);
+}
+
+.bar {
+  width: 24px;
+  height: 3px;
+  background: #1E293B;
+  border-radius: 3px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+
+/* ANIMATION WHEN OPEN */
+.hamburger.open .bar:nth-child(1) { 
+  transform: rotate(45deg) translate(7px, 7px); 
+}
+.hamburger.open .bar:nth-child(2) { 
+  opacity: 0;
+  transform: translateX(-20px);
+}
+.hamburger.open .bar:nth-child(3) { 
+  transform: rotate(-45deg) translate(7px, -7px); 
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

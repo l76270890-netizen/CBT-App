@@ -1,0 +1,196 @@
+.account-page {
+  background: #F8FAFC;
+  min-height: 100vh;
+  padding: 20px;
+  padding-bottom: 100px;
+}
+
+.account-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 20px;
+}
+
+/* PROFILE CARD */
+.profile-card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid #E2E8F0;
+  margin-bottom: 20px;
+}
+
+.profile-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1E90FF 0%, #0f3cae 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.profile-info h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 2px;
+}
+.profile-info p {
+  font-size: 14px;
+  color: #64748B;
+  margin-bottom: 6px;
+}
+
+.subscription-badge {
+  background: #D1FAE5;
+  color: #059669;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+/* STATS GRID */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 14px;
+  padding: 16px;
+  text-align: center;
+  border: 1px solid #E2E8F0;
+}
+.stat-icon {
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+.stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1E90FF;
+}
+.stat-label {
+  font-size: 11px;
+  color: #64748B;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* MENU LIST */
+.account-menu {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #E2E8F0;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.menu-row {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  border-bottom: 1px solid #F1F5F9;
+  transition: 0.2s;
+}
+.menu-row:last-child {
+  border-bottom: none;
+}
+.menu-row:hover {
+  background: #F8FAFC;
+}
+
+.menu-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.menu-icon {
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  background: #EFF6FF;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.menu-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0F172A;
+}
+.menu-desc {
+  font-size: 12px;
+  color: #64748B;
+}
+.menu-chevron {
+  font-size: 22px;
+  color: #CBD5E1;
+}
+
+/* UPGRADE CARD */
+.upgrade-card {
+  background: linear-gradient(135deg, #1E90FF 0%, #0f3cae 100%);
+  color: white;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.upgrade-card h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.upgrade-card p {
+  font-size: 13px;
+  opacity: 0.9;
+}
+.btn-upgrade {
+  background: white;
+  color: #1E90FF;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* LOGOUT */
+.btn-logout {
+  width: 100%;
+  background: #FEE2E2;
+  color: #DC2626;
+  border: none;
+  padding: 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.btn-logout:hover {
+  background: #FECACA;
+}

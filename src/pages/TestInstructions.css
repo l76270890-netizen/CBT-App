@@ -1,0 +1,118 @@
+.instruction-page {
+  background: #F8FAFC;
+  min-height: 100vh;
+  padding: 16px;
+  padding-bottom: 100px;
+}
+
+.instruction-header {
+  text-align: center;
+  margin-bottom: 20px;
+  position: relative;
+}
+.back-circle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: white;
+  border: 1px solid #E2E8F0;
+  color: #0F172A;
+  font-size: 20px;
+  cursor: pointer;
+}
+.instruction-header h1 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0F172A;
+}
+.instruction-header p {
+  font-size: 13px;
+  color: #64748B;
+}
+
+.info-card, .instruction-card, .warning-card {
+  background: white;
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 16px;
+  border: 1px solid #E2E8F0;
+}
+.info-card h3, .instruction-card h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: #0F172A;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #F1F5F9;
+  font-size: 14px;
+}
+.info-row:last-child { border-bottom: none; }
+.info-row span { color: #64748B; }
+
+.instruction-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.instruction-card li {
+  padding: 10px 0;
+  padding-left: 24px;
+  position: relative;
+  font-size: 14px;
+  color: #334155;
+  line-height: 1.6;
+}
+.instruction-card li:before {
+  content: "•";
+  color: #1E90FF;
+  font-weight: bold;
+  position: absolute;
+  left: 0;
+  font-size: 20px;
+}
+.green-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background: #10B981;
+  border-radius: 50%;
+  margin: 0 4px;
+}
+
+.warning-card {
+  background: #FEF2F2;
+  border-color: #FECACA;
+  display: flex;
+  gap: 12px;
+}
+.warning-icon { font-size: 20px; }
+.warning-card h4 { font-size: 14px; font-weight: 700; color: #DC2626; margin-bottom: 4px; }
+.warning-card p { font-size: 13px; color: #991B1B; }
+
+.start-section {
+  position: fixed;
+  bottom: 20px;
+  left: 16px;
+  right: 16px;
+  max-width: 500px;
+  margin: 0 auto;
+}
+.start-test-btn {
+  width: 100%;
+  padding: 16px;
+  background: #10B981;
+  color: white;
+  font-size: 16px;
+  font-weight: 800;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+}

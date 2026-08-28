@@ -1,0 +1,239 @@
+.exams-page1 {
+  background: #fff;
+  min-height: 100vh;
+  min-width: 104.5%;
+  right: 7.8px;
+  position: relative;
+  padding-bottom: 90px; /* space for sticky button + navbar */
+}
+
+/* TOPBAR */
+.exams-topbar {
+  background: #F8FAFC;
+  padding: 16px;
+  border-bottom: 1px solid #E2E8F0;
+  position: sticky;
+  top: -8px; /* height of main navbar */
+  z-index: 90;
+}
+
+
+.exams-topbar h1 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1E293B;
+}
+.back-btn {
+  background: #F1F5F9;
+  border: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 20px;
+  cursor: pointer;
+  color: #334155;
+  transition: 0.2s;
+}
+.back-btn:active {
+  transform: scale(0.95);
+}
+
+/* INFO SECTION */
+.exams-info-section {
+  padding: 20px;
+}
+.test-type-label {
+  font-size: 11px;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.test-type-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+.exams-desc {
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.6;
+  border-top: 1px #acb2bb solid;
+}
+
+/* ALERT CARD */
+.alert-card {
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 0 20px 20px 20px;
+  display: flex;
+  margin-top: 15px;
+  gap: 12px;
+  align-items: flex-start;
+}
+.alert-icon {
+  background: #2563EB;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.alert-text {
+  font-size: 14px;
+  color: #1E40AF;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* SUBJECT LIST */
+.subject-list {
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.subject-card {
+  background: white;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: 0.2s all ease;
+  position: relative;
+}
+.subject-card:hover {
+  border-color: #1E90FF;
+  transform: translateY(-1px);
+}
+.subject-card:active {
+  transform: scale(0.99);
+}
+.subject-card.selected {
+  border-color: #1E90FF;
+  background: #EFF6FF;
+}
+
+.subject-icon-wrap {
+  background: #D1FAE5;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.subject-details {
+  flex: 1;
+  pointer-events: none; /* let parent handle click */
+}
+.subject-name {
+  font-weight: 700;
+  font-size: 16px;
+  color: #0F172A;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.required-badge {
+  font-size: 10px;
+  background: #FEE2E2;
+  color: #DC2626;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+.subject-meta {
+  font-size: 13px;
+  color: #059669;
+  font-weight: 600;
+}
+
+.checkbox {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #CBD5E1;
+  border-radius: 6px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+  transition: 0.2s;
+  pointer-events: none;
+}
+.subject-card.selected .checkbox {
+  background: #1E90FF;
+  border-color: #1E90FF;
+}
+
+/* STICKY CONTINUE BUTTON */
+.sticky-continue {
+  position: fixed;
+  bottom: -2px; /* above bottom navbar */
+  left: 0;
+  right: 0;
+  padding: 16px 20px;
+  background: linear-gradient(to top, #F8FAFC 80%, transparent);
+  z-index: 99;
+}
+@media (min-width: 768px) {
+  .sticky-continue {
+    max-width: 600px;
+    margin: 0 auto;
+    left: 0;
+    right: 0;
+  }
+}
+
+.selected-summary {
+  text-align: center;
+  font-size: 13px;
+  color: #64748B;
+  margin-bottom: 10px;
+  font-weight: 600;
+   position: relative;
+}
+
+.btn-continue {
+  width: 100%;
+  background: #10B981;
+  color: white;
+  border: none;
+  padding: 16px;
+  position: relative;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition: 0.3s;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+.btn-continue:hover {
+  background: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+}
+.btn-continue:active {
+  transform: scale(0.98);
+}

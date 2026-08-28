@@ -1,0 +1,140 @@
+.config-page {
+  background: #F5F5F5;
+  min-height: 100vh;
+  padding: 16px;
+  padding-bottom: 80px;
+}
+
+.config-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.back-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #E8F5E9;
+  border: none;
+  color: #2E7D32;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.config-header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0D47A1;
+}
+
+.config-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.config-card h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #212121;
+  margin-bottom: 12px;
+}
+
+/* MODE OPTIONS */
+.mode-options {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.mode-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1.5px solid #E0E0E0;
+  border-radius: 12px;
+  background: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mode-option.active {
+  border-color: #00C853;
+  background: #F1F8E9;
+}
+.radio {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #BDBD;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mode-option.active .radio {
+  border-color: #00C853;
+}
+.radio-inner {
+  width: 10px;
+  height: 10px;
+  background: #00C853;
+  border-radius: 50%;
+}
+.mode-hint {
+  font-size: 12px;
+  color: #757575;
+  margin-top: 4px;
+}
+
+/* SELECT */
+.config-select {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #E0E0E0;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  background: #fff;
+  appearance: none;
+}
+
+/* ACCOUNT ROWS */
+.account-title {
+  color: #01579B !important;
+  border-bottom: 1px solid #E0E0E0;
+  padding-bottom: 12px;
+}
+.config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.config-row label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #212121;
+}
+.config-row .config-select {
+  width: 140px;
+}
+
+/* CONTINUE BUTTON */
+.continue-btn {
+  width: 100%;
+  padding: 16px;
+  background: #00C853;
+  color: white;
+  font-size: 15px;
+  font-weight: 800;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  margin-top: 8px;
+  letter-spacing: 0.5px;
+}

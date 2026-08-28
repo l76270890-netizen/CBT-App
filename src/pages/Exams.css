@@ -1,0 +1,156 @@
+
+.exams-page {
+  background: #F8FAFC;
+  min-height: 100vh;
+  padding-bottom: 10px;
+}
+
+/* HEADER */
+.exams-topbar1 {
+  background: white;
+  padding: 16px 20px;
+  border-bottom: 1px solid #d1d3d4;
+  position: sticky;
+  top: 65px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  z-index: 90;
+}
+.exams-topbar h1 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1E293B;
+}
+
+.back-btn {
+  background: #F1F5F9;
+  border: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+/* INFO SECTION */
+.exams-info-section {
+  padding: 20px;
+}
+.test-type-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+.exams-desc1 {
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.6;
+}
+
+/* EXAM CARDS GRID */
+.exam-grid {
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  z-index: 2; /* Make sure cards are above background */
+}
+
+.exam-main-card {
+  background: white;
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  transition: 0.2s all ease;
+  border: 1px solid #E2E8F0;
+  position: relative; /* IMPORTANT: for click to work */
+  z-index: 3;
+  user-select: none;
+}
+.exam-main-card:active {
+  transform: scale(0.98);
+}
+.exam-main-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(30, 144, 255, 0.1);
+  border-color: #BFDBFE;
+}
+
+.exam-main-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.exam-main-info {
+  flex: 1;
+  pointer-events: none; /* so clicks pass through to parent div */
+}
+.exam-main-info h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 4px;
+}
+.exam-main-info p {
+  font-size: 13px;
+  color: #64748B;
+  margin-bottom: 6px;
+}
+.exam-meta {
+  font-size: 12px;
+  color: #94A3B8;
+  font-weight: 600;
+}
+
+.chevron1 {
+   font-size: 35px;
+  color: #7a8088;
+  font-weight: 300;
+  pointer-events: none;
+}
+
+@media (max-width: 786px) {
+
+.exams-page{
+    background-color: #F8FAFC;
+     min-height: 80vh;
+     padding-bottom: 90px;
+}
+
+
+/* EXAM CARDS GRID */
+.exam-grid {
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  position: relative;
+  z-index: 2; /* Make sure cards are above background */
+}
+
+.exam-main-card {
+  background: white;
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  transition: 0.2s all ease;
+  border: 1px solid #E2E8F0;
+  position: relative; /* IMPORTANT: for click to work */
+  z-index: 3;
+  user-select: none;
+}
+}

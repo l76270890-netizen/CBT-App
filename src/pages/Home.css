@@ -1,0 +1,131 @@
+.home-page {
+  background: #F8FAFC;
+  min-height: 100vh;
+  padding: 20px;
+  padding-bottom: 10px;
+  position: relative;
+  bottom: 55px;
+}
+
+.greeting {
+  color: #64748B;
+  font-size: 14px;
+  font-weight: 500;
+}
+.home-title {
+  font-size: 28px;
+  margin-bottom: 24px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+/* STATS CARD */
+.stats-card {
+  background: linear-gradient(135deg, #c83e11 0%, #ae6e0f 100%);
+  color: white;
+  padding: 24px;
+  border-radius: 18px;
+  margin-bottom: 28px;
+}
+.stats-card h2 {
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1;
+}
+.stats-card p {
+  margin-bottom: 16px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+.btn-white {
+  background: white;
+  color: #1E90FF;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* EXAM LIST */
+.section-title1 {
+  margin-bottom: 16px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0F172A;
+}
+.exam-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.exam-row {
+  background: white;
+  padding: 16px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  border: 1px solid #E2E8F0;
+  transition: 0.2s all ease;
+}
+.exam-row:hover {
+  border-color: #1E90FF;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(30, 144, 255, 0.1);
+}
+.exam-row:active {
+  transform: scale(0.99);
+}
+
+.exam-row-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.exam-icon {
+  font-size: 28px;
+  background: #EFF6FF;
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.exam-row-left h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 2px;
+}
+.exam-row-left p {
+  color: #64748B;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.chevron {
+  color: #64748B;
+  font-size: 35px;
+  font-weight: 300;
+}
+
+
+  
+.more-btn{
+  display: flex;
+  justify-content: space-between;
+}
+
+
+.para-btn{
+  color: #64748B;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+
