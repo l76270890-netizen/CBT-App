@@ -1,3 +1,4 @@
+
 type Props = {
   setActivePage: (page: string) => void
   setSelectedExam: (exam: string) => void
@@ -11,8 +12,8 @@ export default function Home({ setActivePage, setSelectedExam }: Props) {
   const [examsPracticed] = useState(0)
 
   const exams = [
-    { id: 'JAMB', title: 'JAMB (UTME)', desc: 'Objective only', icon: '📘',  color: '#1E90FF', },
-    { id: 'POST UTME', title: 'POST UTME', desc: 'Objective only', icon: '📙',  color: '#e85906' },
+    { id: 'JAMB', title: 'JAMB (UTME)', desc: 'Objective only', icon: '📘', color: '#1E90FF', },
+    { id: 'POST UTME', title: 'POST UTME', desc: 'Objective only', icon: '📙', color: '#e85906' },
     { id: 'WAEC', title: 'WAEC', desc: 'Objective only', icon: '📗', color: '#10b962' },
     { id: 'NECO', title: 'NECO', desc: 'Objective only', icon: '📕', color: '#e01071' },
   ]
@@ -41,8 +42,15 @@ export default function Home({ setActivePage, setSelectedExam }: Props) {
 
       {/* Featured Exams */}
      <div className="more-btn">
-       <h3 className="section-title1">Featured Exams</h3>       
-          <p className="para-btn">see more ›</p>
+       <h3 className="section-title1">Featured Exams</h3> 
+          <p 
+            className="para-btn" 
+            onClick={() => setActivePage('exams')} // <- ADDED THIS
+            role="button"
+            tabIndex={0}
+          >
+            see more ›
+          </p>
      </div>
       <div className="exam-list">
         {exams.map((exam) => (

@@ -1,0 +1,22 @@
+.review-page { background: #F8FAFC; min-height: 100vh; padding-bottom: 20px; }
+.review-header {
+  background: white; padding: 16px; display: flex; align-items: center; gap: 12px;
+  border-bottom: 1px solid #E2E8F0; position: sticky; top: 0; z-index: 10;
+}
+.review-header h1 { font-size: 18px; margin: 0; }
+.back-btn { background: #F1F5F9; border: none; width: 36px; height: 36px; border-radius: 10px; cursor: pointer; }
+.review-list { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.review-card { background: white; border-radius: 16px; padding: 16px; border: 1px solid #E2E8F0; }
+.review-q-header { display: flex; justify-content: space-between; margin-bottom: 12px; font-weight: 700; }
+.status.correct { color: #10B981; }
+.status.wrong { color: #EF4444; }
+.review-q-text { font-weight: 600; margin-bottom: 12px; }
+.review-options { display: flex; flex-direction: column; gap: 8px; }
+.review-option { padding: 12px; border-radius: 10px; border: 2px solid #E2E8F0; display: flex; gap: 10px; }
+.correct-answer { border-color: #10B981; background: #F0FDF4; }
+.wrong-answer { border-color: #EF4444; background: #FEF2F2; }
+.opt-label { font-weight: 800; }
+
+@media (min-width: 768px) {
+ .review-list { max-width: 800px; margin: 0 auto; padding: 24px; }
+}

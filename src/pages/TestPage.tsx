@@ -2,7 +2,7 @@ type Props = {
   setActivePage: (page: string) => void
   testConfig: {
     examType: string
-    subjects: any[] // <-- CHANGED
+    subjects: any[]
     totalQuestions: number
     duration: number
     mode: 'exam' | 'practice'
@@ -15,7 +15,6 @@ import { useState, useEffect } from 'react'
 import './TestPage.css'
 
 export default function Test({ setActivePage, testConfig }: Props) {
-  // Generate questions for all selected subjects
   const mockQuestions = Array.from({ length: testConfig.totalQuestions || 10 }).map((_, i) => {
     const subjectIndex = i % testConfig.subjects.length
     const subject = testConfig.subjects[subjectIndex]?.subject || 'JAMB'
@@ -34,6 +33,10 @@ export default function Test({ setActivePage, testConfig }: Props) {
   const [answers, setAnswers] = useState<(number | null)[]>(Array(questions.length).fill(null))
   const [timeLeft, setTimeLeft] = useState(testConfig.duration * 60)
   const [showGrid, setShowGrid] = useState(false)
+  const [showCalc, setShowCalc] = useState(false) // NEW
+
+  // Calculator state
+  const [calcInput, setCalcInput] = useState('0')
 
   useEffect(() => {
     if (timeLeft <= 0) { handleSubmit(); return }
@@ -59,19 +62,36 @@ export default function Test({ setActivePage, testConfig }: Props) {
     return `${m}:${sec.toString().padStart(2, '0')}`
   }
 
+  // Calculator functions
+  const calcPress = (val: string) => {
+    if (val === 'C') setCalcInput('0')
+    else if (val === '=') {
+      try { setCalcInput(eval(calcInput).toString()) } 
+      catch { setCalcInput('Error') }
+    }
+    else if (val === '⌫') setCalcInput(prev => prev.length > 1? prev.slice(0, -1) : '0')
+    else setCalcInput(prev => prev === '0'? val : prev + val)
+  }
+
   const q = questions[current]
+  const answeredCount = answers.filter(a => a!== null).length
 
   return (
     <div className="test-page1">
+      {/* HEADER */}
       <div className="test-header">
         <button className="exit-btn" onClick={() => setActivePage('testConfig')}>✕</button>
         <div className="test-info">
-          <div className="test-subject">{q.subject}</div> {/* Shows current question subject */}
-          <div className="test-q-count">Question {current + 1} of {questions.length}</div>
+          <div className="test-subject">{q.subject}</div>
+          <div className="test-q-count">Q {current + 1}/{questions.length} • {answeredCount} Answered</div>
         </div>
-        <div className={`test-timer ${timeLeft < 300? 'warning' : ''}`}>⏱ {formatTime(timeLeft)}</div>
+        <div className="header-right">
+          <button className="icon-btn" onClick={() => setShowCalc(!showCalc)}>🧮</button>
+          <div className={`test-timer ${timeLeft < 300? 'warning' : ''}`}>⏱ {formatTime(timeLeft)}</div>
+        </div>
       </div>
 
+      {/* BODY */}
       <div className="test-body">
         <div className="question-card">
           <h2 className="question-text">{q.question}</h2>
@@ -86,9 +106,13 @@ export default function Test({ setActivePage, testConfig }: Props) {
         </div>
       </div>
 
+      {/* FOOTER */}
       <div className="test-footer">
         <button className="nav-btn" disabled={current === 0} onClick={() => setCurrent(c => c - 1)}>← Previous</button>
-        <button className="grid-btn" onClick={() => setShowGrid(!showGrid)}>{current + 1}/{questions.length}</button>
+        <button className="grid-btn" onClick={() => setShowGrid(!showGrid)}>
+          <span>{current + 1}/{questions.length}</span>
+          <div className="progress-bar"><div style={{width: `${(answeredCount/questions.length)*100}%`}}></div></div>
+        </button>
         {current === questions.length - 1? (
           <button className="submit-btn" onClick={handleSubmit}>Submit</button>
         ) : (
@@ -96,6 +120,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
         )}
       </div>
 
+      {/* QUESTION GRID MODAL */}
       {showGrid && (
         <div className="grid-overlay" onClick={() => setShowGrid(false)}>
           <div className="grid-modal" onClick={e => e.stopPropagation()}>
@@ -108,6 +133,24 @@ export default function Test({ setActivePage, testConfig }: Props) {
               ))}
             </div>
             <button className="submit-btn full" onClick={handleSubmit}>Submit Test</button>
+          </div>
+        </div>
+      )}
+
+      {/* CALCULATOR MODAL */}
+      {showCalc && (
+        <div className="calc-overlay" onClick={() => setShowCalc(false)}>
+          <div className="calc-modal" onClick={e => e.stopPropagation()}>
+            <div className="calc-header">
+              <h3>Calculator</h3>
+              <button onClick={() => setShowCalc(false)}>✕</button>
+            </div>
+            <div className="calc-display">{calcInput}</div>
+            <div className="calc-keys">
+              {['C','⌫','/','*','7','8','9','-','4','5','6','+','1','2','3','=','0','.'].map(key => (
+                <button key={key} className={`calc-key ${key === '='? 'equals' : ''}`} onClick={() => calcPress(key)}>{key}</button>
+              ))}
+            </div>
           </div>
         </div>
       )}

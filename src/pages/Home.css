@@ -121,11 +121,13 @@
   justify-content: space-between;
 }
 
-
-.para-btn{
-  color: #64748B;
-  font-size: 18px;
+.para-btn {
+  color: #6366f1;
   font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
 }
-
+.para-btn:hover {
+  opacity: 0.7;
+}
 

@@ -138,3 +138,15 @@
   margin-top: 8px;
   letter-spacing: 0.5px;
 }
+
+
+.selected-subjects-list{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.total-q{
+  font-size: 17px;
+  margin-top: 15px;
+}

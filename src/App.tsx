@@ -8,6 +8,7 @@ import Navbar from './components/Navbar'
 import Study from './pages/Study' 
 import Account from './pages/Account'
 import Result from './pages/Result' 
+import Review from './pages/Review' // <-- 1. IMPORT REVIEW
 
 // ADD THIS TYPE
 type TestMode = "exam" | "practice"
@@ -18,7 +19,7 @@ type TestConfigType = {
   totalQuestions: number;
   year: string;
   duration: number;
-  mode: TestMode; // <- now TS knows it's only 2 values
+  mode: TestMode;
   difficulty: string;
   showAnswers: boolean;
   topic: string;
@@ -27,19 +28,19 @@ type TestConfigType = {
 function App() {
   const [page, setPage] = useState('home')
   const [selectedExam, setSelectedExam] = useState('JAMB')
-  const [testConfig, setTestConfig] = useState<TestConfigType>({ // <- add <TestConfigType> here
+  const [testConfig, setTestConfig] = useState<TestConfigType>({
     examType: 'JAMB',
-    subjects: ['math'], // default subject so test doesn't crash
+    subjects: ['math'],
     totalQuestions: 40,
     year: '2024',
     duration: 40,
-    mode: 'exam', // now this is valid
+    mode: 'exam',
     difficulty: 'Normal',
     showAnswers: false,
     topic: 'All Topics'
   })
 
-  const hideNavbarPages = ['subjects', 'testConfig', 'test', 'result'] // hide navbar on test + result
+  const hideNavbarPages = ['subjects', 'testConfig', 'test', 'result', 'review'] // <-- 2. ADD 'review' here
 
   const renderPage = () => {
     switch(page) {
@@ -59,6 +60,8 @@ function App() {
         return <Test setActivePage={setPage} testConfig={testConfig} />
       case 'result':
         return <Result setActivePage={setPage} />
+      case 'review': // <-- 3. ADD REVIEW ROUTE
+        return <Review setActivePage={setPage} />
       case 'classroom':
         return <Study
           setActivePage={setPage}

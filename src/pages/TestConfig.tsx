@@ -53,7 +53,6 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig }:
         <div className="selected-subjects-list">
           {testConfig.subjects.map((s: any) => (
             <div key={s.subject} className="selected-subject-item">
-               <hr />
               <span>{s.icon} {s.subject}</span>
               <span>{s.questions} Qs</span>
             </div>
