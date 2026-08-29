@@ -48,7 +48,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
   }
 
   const handleSubmit = () => {
-    const score = answers.reduce((acc, ans, i) => ans === questions[i].answer? acc + 1 : acc, 0)
+   const score = answers.reduce((acc: number, ans, i) => ans === questions[i]?.answer? acc + 1 : acc, 0)
     localStorage.setItem('lastTestResult', JSON.stringify({ score, total: questions.length, answers }))
     setActivePage('result')
   }

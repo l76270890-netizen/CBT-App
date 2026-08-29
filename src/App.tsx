@@ -9,16 +9,31 @@ import Study from './pages/Study'
 import Account from './pages/Account'
 import Result from './pages/Result' 
 
+// ADD THIS TYPE
+type TestMode = "exam" | "practice"
+
+type TestConfigType = {
+  examType: string;
+  subjects: string[];
+  totalQuestions: number;
+  year: string;
+  duration: number;
+  mode: TestMode; // <- now TS knows it's only 2 values
+  difficulty: string;
+  showAnswers: boolean;
+  topic: string;
+}
+
 function App() {
   const [page, setPage] = useState('home')
   const [selectedExam, setSelectedExam] = useState('JAMB')
-  const [testConfig, setTestConfig] = useState({
+  const [testConfig, setTestConfig] = useState<TestConfigType>({ // <- add <TestConfigType> here
     examType: 'JAMB',
     subjects: ['math'], // default subject so test doesn't crash
     totalQuestions: 40,
     year: '2024',
     duration: 40,
-    mode: 'exam',
+    mode: 'exam', // now this is valid
     difficulty: 'Normal',
     showAnswers: false,
     topic: 'All Topics'
