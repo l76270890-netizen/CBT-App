@@ -1,115 +1,149 @@
 type Props = {
   activePage: string
   setActivePage: (page: string) => void
-  userName?: string // add this if you have it
+  userName?: string
 }
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { Home, FileText, BookOpen, History, User, LogOut, Settings, Bell, Menu, X, ChevronRight, Edit2 } from 'lucide-react'
 import './Navbar.css'
 
 export default function Navbar({ activePage, setActivePage, userName = "Lawrence" }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
-  
-  // Sidebar menu - matches your screenshot
- const sidebarItems = [
-  { id: 'home', label: 'Home', icon: '🏠' },
-  { id: 'exams', label: 'Exams', icon: '📝' },
-  { id: 'classroom', label: 'Study', icon: '📚' }, // <-- Changed label + icon
-   { id: 'history', label: 'Practice History', icon: '⏱' },
-   { id: 'analytics', label: 'Performance Analysis', icon: '📊' },
-     { id: 'account', label: 'Account', icon: '👤' },
-    { id: 'logout', label: 'Log out', icon: '⏻' },
-  
-]
 
-
-  // Bottom nav - keep it simple for mobile
   const navItems = [
-    { id: 'home', label: 'Home', icon: '🏠' },
-    { id: 'exams', label: 'Exams', icon: '📝' },
-    { id: 'classroom', label: 'Study', icon: '📚' },
-    { id: 'account', label: 'Account', icon: '👤' },
+    { id: 'home', label: 'Home', icon: Home, mobileLabel: 'Home' },
+    { id: 'exams', label: 'Exams', icon: FileText, mobileLabel: 'Exams' },
+    { id: 'classroom', label: 'Study', icon: BookOpen, mobileLabel: 'Study' },
+    { id: 'practiceHistory', label: 'History', icon: History, mobileLabel: 'History' },
+    { id: 'account', label: 'Account', icon: User, mobileLabel: 'Account' },
   ]
 
+  const extraItems = [
+    { id: 'admin', label: 'Admin Dashboard', icon: Settings },
+    { id: 'logout', label: 'Log out', icon: LogOut, danger: true },
+  ]
+
+  // Lock body scroll when menu open
+  useEffect(() => {
+    if(menuOpen) document.body.style.overflow = 'hidden'
+    else document.body.style.overflow = 'auto'
+    return () => { document.body.style.overflow = 'auto' }
+  }, [menuOpen])
+
   const handleNavClick = (id: string) => {
+    if (id === 'logout') {
+      if(confirm("Logout?")) { localStorage.clear(); setActivePage('home') }
+      return
+    }
     setActivePage(id)
     setMenuOpen(false)
   }
 
   return (
     <>
-      {/* TOP BAR - MOBILE + DESKTOP */}
       <header className="navbar">
         <div className="navbar-container">
-          {/* HAMBURGER - MOBILE ONLY */}
-          <button 
-            className="hamburger" 
-            onClick={() => setMenuOpen(!menuOpen)}
-            aria-label="Menu"
-          >
-            <span className={`bar ${menuOpen ? 'open' : ''}`}></span>
-            <span className={`bar ${menuOpen ? 'open' : ''}`}></span>
-            <span className={`bar ${menuOpen ? 'open' : ''}`}></span>
+          <button className="hamburger" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+            <Menu size={20} />
           </button>
-          
-          {/* DESKTOP NAV */}
+
+          <div className="navbar-logo">YOUR<span>CBT</span></div>
+
           <nav className="nav-links">
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                className={`nav-link ${activePage === item.id ? 'active' : ''}`}
-                onClick={() => handleNavClick(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
+            {navItems.map((item) => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.id}
+                  className={`nav-link ${activePage === item.id? 'active' : ''}`}
+                  onClick={() => handleNavClick(item.id)}
+                >
+                  <Icon size={18} /> {item.label}
+                </button>
+              )
+            })}
           </nav>
+
+          <div className="navbar-right">
+            <button className="bell-btn" aria-label="Notifications">
+              <Bell size={20} />
+              <span className="bell-dot"></span>
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* SIDEBAR OVERLAY - MOBILE */}
-      <div className={`sidebar-overlay ${menuOpen ? 'show' : ''}`} onClick={() => setMenuOpen(false)}></div>
-      
-      <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
-        {/* PROFILE HEADER - from screenshot */}
+      <div className={`sidebar-overlay ${menuOpen? 'show' : ''}`} onClick={() => setMenuOpen(false)}></div>
+
+      <aside className={`sidebar ${menuOpen? 'open' : ''}`}>
         <div className="sidebar-header">
-          <button className="close-btn" onClick={() => setMenuOpen(false)}>×</button>
           <div className="profile-section">
             <div className="avatar">
-              <img src={`https://ui-avatars.com/api/?name=${userName}&background=10B981&color=fff&size=128`} alt="avatar" />
+              <img src={`https://ui-avatars.com/api/?name=${userName}&background=1d4be3&color=fff&bold=true`} alt="avatar" />
             </div>
-            <h3>{userName}</h3>
-            <button className="edit-profile" onClick={() => handleNavClick('profile')}>Edit Profile</button>
-          </div>
-        </div>
-        
-        {/* SIDEBAR MENU - from screenshot */}
-        <nav className="sidebar-links">
-          {sidebarItems.map((item) => (
-            <button
-              key={item.id}
-              className={`sidebar-link ${activePage === item.id ? 'active' : ''}`}
-              onClick={() => handleNavClick(item.id)}
-            >
-              <span>{item.icon}</span>
-              {item.label}
+            <div className="profile-text">
+              <h3>{userName}</h3>
+              <span>Free Plan • {JSON.parse(localStorage.getItem('practiceHistory')||'[]').length} Tests</span>
+            </div>
+            <button className="edit-profile" onClick={() => handleNavClick('account')}>
+              <Edit2 size={12} /> Edit
             </button>
-          ))}
+          </div>
+          <button className="close-btn" onClick={() => setMenuOpen(false)}><X size={20} /></button>
+        </div>
+
+        <nav className="sidebar-links">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            return (
+              <button
+                key={item.id}
+                className={`sidebar-link ${activePage === item.id? 'active' : ''}`}
+                onClick={() => handleNavClick(item.id)}
+              >
+                <span className="sidebar-icon"><Icon size={18} /></span>
+                {item.label}
+                <ChevronRight size={16} className="chevron" />
+              </button>
+            )
+          })}
+
+          <div className="sidebar-divider"></div>
+
+          {extraItems.map((item) => {
+            const Icon = item.icon
+            return (
+              <button
+                key={item.id}
+                className={`sidebar-link ${item.danger? 'danger' : 'muted'}`}
+                onClick={() => handleNavClick(item.id)}
+              >
+                <span className="sidebar-icon"><Icon size={18} /></span>
+                {item.label}
+              </button>
+            )
+          })}
         </nav>
+
+        <div className="sidebar-footer">YOURCBT v1.0 • Made for Nigeria 🇳🇬</div>
       </aside>
 
-      {/* MOBILE BOTTOM NAV */}
       <nav className="bottom-nav">
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            className={`nav-item ${activePage === item.id ? 'active' : ''}`}
-            onClick={() => handleNavClick(item.id)}
-          >
-            <span className="nav-icon">{item.icon}</span>
-            <span className="nav-label">{item.label}</span>
-          </button>
-        ))}
+        {navItems.map((item) => {
+          const Icon = item.icon
+          const isActive = activePage === item.id
+          return (
+            <button
+              key={item.id}
+              className={`nav-item ${isActive? 'active' : ''}`}
+              onClick={() => handleNavClick(item.id)}
+            >
+              <span className="nav-icon-wrap"><Icon size={22} /></span>
+              <span className="nav-label">{item.mobileLabel}</span>
+            </button>
+          )
+        })}
       </nav>
     </>
   )

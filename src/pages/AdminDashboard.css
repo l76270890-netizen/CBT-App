@@ -1,0 +1,93 @@
+.admin-container {
+  padding: 20px;
+  background: #f4f7fa;
+  min-height: 100vh;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.admin-card {
+  max-width: 800px;
+  margin: 20px auto;
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.admin-header h2 {
+  color: #1a73e8;
+  margin: 0;
+}
+
+.admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.row-3 {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 10px;
+}
+
+.admin-input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 15px;
+  box-sizing: border-box;
+}
+
+.admin-input:focus {
+  outline: none;
+  border-color: #1a73e8;
+}
+
+.admin-btn {
+  width: 100%;
+  padding: 14px;
+  background: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.admin-btn:hover {
+  background: #1558b0;
+}
+
+.admin-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.logout-btn {
+  padding: 8px 16px;
+  background: #d93025;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.success-msg {
+  color: #188038;
+  background: #e6f4ea;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+}

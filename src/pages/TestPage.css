@@ -1,6 +1,6 @@
 .test-page1 {
-  background: #F8FAFC;
-  min-height: 100vh;
+  background: #121212;
+  min-height: 10vh;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -10,7 +10,7 @@
 
 /* HEADER */
 .test-header {
-  background: white;
+  background: #121212;
   padding: 12px 16px;
   display: flex;
   align-items: center;
@@ -21,11 +21,13 @@
   z-index: 20;
   gap: 8px;
 }
+
 .exit-btn {
-  background: #F1F5F9;
+  background: #1e1e1e;
   border: none;
   width: 36px;
   height: 36px;
+  color: #fff;
   border-radius: 10px;
   font-size: 18px;
   cursor: pointer;
@@ -38,23 +40,33 @@
 .test-subject {
   font-weight: 800;
   font-size: 15px;
-  color: #0F172A;
+  color: #fff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .test-q-count {
   font-size: 12px;
-  color: #64748B;
+  color: #858686;
   font-weight: 600;
 }
 .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 18px;
 }
+
+.account{
+  background-color: #1e1e1e;
+  padding: 15px 26px;
+  width: 91.5%;
+  position: relative;
+  right: 8px;
+  margin-top: 10px;
+}
+
 .icon-btn {
-  background: #F1F5F9;
+  background: #4338CA;
   border: none;
   width: 36px;
   height: 36px;
@@ -63,16 +75,16 @@
   cursor: pointer;
 }
 .test-timer {
-  background: #F1F5F9;
+  background: #1e1e1e;
   padding: 6px 10px;
   border-radius: 8px;
   font-weight: 800;
   font-size: 14px;
-  color: #0F172A;
+  color: #fff;
   white-space: nowrap;
 }
 .test-timer.warning {
-  background: #FEE2E2;
+  background: #f7efef;
   color: #DC2626;
   animation: pulse 1s infinite;
 }
@@ -85,16 +97,17 @@
   overflow-y: auto;
 }
 .question-card {
-  background: white;
+  margin-top: 20px;
+  background: #121212;
   border-radius: 16px;
   padding: 20px;
-  border: 1px solid #E2E8F0;
+   border: 1.5px #38393a solid;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 .question-text {
   font-size: 17px;
   font-weight: 700;
-  color: #0F172A;
+  color: #ffff;
   line-height: 1.6;
   margin-bottom: 20px;
 }
@@ -107,24 +120,25 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  background: white;
+  background:#1e1e1e;
   border: 2px solid #E2E8F0;
   border-radius: 12px;
   padding: 14px 16px;
   font-size: 15px;
   font-weight: 600;
+  color: #fff;
   text-align: left;
   cursor: pointer;
   transition: all 0.2s;
 }
 .option-btn:hover {
   border-color: #6366F1;
-  background: #F5F3FF;
+  background: #1e1e1e;
 }
 .option-btn.selected {
-  border-color: #6366F1;
-  background: #EEF2FF;
-  color: #4338CA;
+  border-color: #10B981;
+  background: #1e1e1e;
+  color: #10B981;
 }
 .option-label {
   background: #F1F5F9;
@@ -148,18 +162,19 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: white;
+  background: #1e1e1e;
   padding: 12px 16px;
   display: flex;
   gap: 10px;
-  border-top: 1px solid #E2E8F0;
+  border-top: 1px solid #1e1e1e;
   z-index: 20;
 }
 .nav-btn {
-  background: #F1F5F9;
-  color: #475569;
+  background: #121212;
+  color: #808080;
   border: none;
-  padding: 12px 14px;
+ width: 100%;
+ height: 45px;
   border-radius: 12px;
   font-weight: 700;
   font-size: 14px;
@@ -172,7 +187,7 @@
   color: white;
 }
 .submit-btn {
-  background: #10B981;
+  background: #6366F1;
   color: white;
   border: none;
   padding: 12px 14px;
@@ -183,10 +198,11 @@
   flex: 1.2;
 }
 .grid-btn {
-  background: white;
+  background:#f7efef;
   border: 2px solid #E2E8F0;
+ width: 30%;
+ height: 45px;
   border-radius: 12px;
-  padding: 8px 10px;
   font-weight: 800;
   cursor: pointer;
   display: flex;
@@ -194,14 +210,14 @@
   gap: 4px;
   min-width: 70px;
 }
-.progress-bar {
+.progress-bar1 {
   height: 4px;
   background: #E2E8F0;
   border-radius: 2px;
   width: 100%;
   overflow: hidden;
 }
-.progress-bar div {
+.progress-bar1 div {
   height: 100%;
   background: #10B981;
   transition: width 0.3s;
@@ -241,7 +257,7 @@
   font-weight: 700;
   cursor: pointer;
 }
-.grid-item.answered { background: #DCFCE7; border-color: #10B981; }
+.grid-item.answered { background: #e3edf7; border-color: #6366F1; }
 .grid-item.active { background: #6366F1; color: white; border-color: #6366F1; }
 .submit-btn.full { width: 100%; }
 

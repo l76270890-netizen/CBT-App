@@ -8,9 +8,12 @@ import Navbar from './components/Navbar'
 import Study from './pages/Study' 
 import Account from './pages/Account'
 import Result from './pages/Result' 
-import Review from './pages/Review' // <-- 1. IMPORT REVIEW
+import PracticeHistory from './pages/PracticeHistory'
+import Review from './pages/Review'
+import AdminDashboard from './pages/AdminDashboard' // <-- ADD THIS
 
-// ADD THIS TYPE
+import TestInstructions from './pages/TestInstructions'
+
 type TestMode = "exam" | "practice"
 
 type TestConfigType = {
@@ -40,7 +43,8 @@ function App() {
     topic: 'All Topics'
   })
 
-  const hideNavbarPages = ['subjects', 'testConfig', 'test', 'result', 'review'] // <-- 2. ADD 'review' here
+  // Hide navbar on exam flow pages + admin
+  const hideNavbarPages = ['subjects', 'testConfig','TestInstructions', 'test', 'result', 'review', 'admin']
 
   const renderPage = () => {
     switch(page) {
@@ -60,7 +64,18 @@ function App() {
         return <Test setActivePage={setPage} testConfig={testConfig} />
       case 'result':
         return <Result setActivePage={setPage} />
-      case 'review': // <-- 3. ADD REVIEW ROUTE
+
+
+          case 'TestInstructions':
+        return <TestInstructions setActivePage={setPage} testConfig={{
+          examType: '',
+          subjects: [],
+          totalQuestions: 0,
+          duration: 0
+        }} />
+
+
+      case 'review':
         return <Review setActivePage={setPage} />
       case 'classroom':
         return <Study
@@ -70,6 +85,10 @@ function App() {
         />
       case 'account': 
         return <Account setActivePage={setPage} />
+      case 'practiceHistory': 
+        return <PracticeHistory setActivePage={setPage} />
+      case 'admin': // <-- ADD THIS
+        return <AdminDashboard />
       default: 
         return <Home setActivePage={setPage} setSelectedExam={setSelectedExam} />
     }

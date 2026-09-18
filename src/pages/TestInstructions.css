@@ -1,118 +1,76 @@
 .instruction-page {
-  background: #F8FAFC;
+  background: #121212;
   min-height: 100vh;
-  padding: 16px;
-  padding-bottom: 100px;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 16px 16px 120px;
+  box-sizing: border-box;
 }
-
 .instruction-header {
-  text-align: center;
-  margin-bottom: 20px;
-  position: relative;
+  display: flex; gap: 12px; align-items: center; margin-bottom: 16px;
 }
 .back-circle {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: white;
-  border: 1px solid #E2E8F0;
-  color: #0F172A;
-  font-size: 20px;
-  cursor: pointer;
+  width: 38px; height: 38px; border-radius: 10px; background: #1e1e1e;
+  border: 1px solid #2a2a2a; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
 }
-.instruction-header h1 {
-  font-size: 20px;
-  font-weight: 800;
-  color: #0F172A;
+.instruction-header h1 { font-size: 18px; font-weight: 800; color: #fff; margin: 0; }
+.instruction-header p { font-size: 12px; color: #8f9091; margin: 2px 0 0 0; }
+
+.info-card,.instruction-card,.warning-card,.agree-card {
+  background: #1e1e1e; border-radius: 14px; padding: 16px; margin-bottom: 12px; border: 1px solid #2a2a2a;
 }
-.instruction-header p {
-  font-size: 13px;
-  color: #64748B;
+.info-card h3,.instruction-card h3 {
+  font-size: 12px; font-weight: 700; margin: 0 0 14px 0; color: #fff;
+  display: flex; gap: 6px; align-items: center; text-transform: uppercase; letter-spacing: 0.5px;
 }
 
-.info-card, .instruction-card, .warning-card {
-  background: white;
-  border-radius: 14px;
-  padding: 20px;
-  margin-bottom: 16px;
-  border: 1px solid #E2E8F0;
-}
-.info-card h3, .instruction-card h3 {
-  font-size: 16px;
-  font-weight: 700;
-  margin-bottom: 16px;
-  color: #0F172A;
-}
+.info-grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.info-item{ background: #121212; padding: 10px 12px; border-radius: 10px; }
+.info-item span{ display: block; font-size: 10px; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
+.info-item strong{ font-size: 13px; color: #fff; }
+.info-item strong.highlight{ color: #60a5fa; }
 
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid #F1F5F9;
-  font-size: 14px;
-}
-.info-row:last-child { border-bottom: none; }
-.info-row span { color: #64748B; }
-
-.instruction-card ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
+.instruction-card ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
 .instruction-card li {
-  padding: 10px 0;
-  padding-left: 24px;
-  position: relative;
-  font-size: 14px;
-  color: #334155;
-  line-height: 1.6;
+  font-size: 13px; color: #d1d5db; line-height: 1.5; display: flex; gap: 10px; align-items: flex-start;
 }
-.instruction-card li:before {
-  content: "•";
-  color: #1E90FF;
-  font-weight: bold;
-  position: absolute;
-  left: 0;
-  font-size: 20px;
+.instruction-card li b{ color: #fff; }
+.icon-b{
+  width: 22px; height: 22px; background: #2a2a2a; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; color: #8f9091; flex-shrink: 0; margin-top: 1px;
 }
-.green-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  background: #10B981;
-  border-radius: 50%;
-  margin: 0 4px;
-}
+.dot{ width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot.green{ background: #22c55e; }
 
 .warning-card {
-  background: #FEF2F2;
-  border-color: #FECACA;
-  display: flex;
-  gap: 12px;
+  background: #1c1917; border-color: #451a03; display: flex; gap: 12px; align-items: flex-start;
 }
-.warning-icon { font-size: 20px; }
-.warning-card h4 { font-size: 14px; font-weight: 700; color: #DC2626; margin-bottom: 4px; }
-.warning-card p { font-size: 13px; color: #991B1B; }
+.warning-icon{ width: 32px; height: 32px; background: rgba(239,68,68,0.15); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #ef4444; flex-shrink: 0; }
+.warning-card h4 { font-size: 13px; font-weight: 700; color: #f87171; margin: 0 0 4px 0; }
+.warning-card p { font-size: 12px; color: #a8a29e; margin: 0; line-height: 1.4; }
+
+.agree-card{ padding: 12px 16px; }
+.agree-label{
+  display: flex; gap: 12px; align-items: center; font-size: 13px; color: #d1d5db; cursor: pointer;
+}
+.agree-label input{ display: none; }
+.custom-check{
+  width: 20px; height: 20px; border: 2px solid #3a3a3a; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.15s;
+}
+.agree-label input:checked +.custom-check{ background: #22c55e; border-color: #22c55e; }
+.agree-label input:checked +.custom-check::after{ content: '✓'; color: #fff; font-size: 12px; font-weight: 800; }
 
 .start-section {
-  position: fixed;
-  bottom: 20px;
-  left: 16px;
-  right: 16px;
-  max-width: 500px;
-  margin: 0 auto;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, #121212 90%, transparent);
+  z-index: 30; max-width: 600px; margin: 0 auto; text-align: center;
 }
 .start-test-btn {
-  width: 100%;
-  padding: 16px;
-  background: #10B981;
-  color: white;
-  font-size: 16px;
-  font-weight: 800;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
+  width: 100%; padding: 15px; background: #fff; color: #121212;
+  font-size: 14px; font-weight: 800; border: none; border-radius: 14px; cursor: pointer; transition: 0.2s;
 }
+.start-test-btn:disabled{ background: #2a2a2a; color: #6b7280; cursor: not-allowed; }
+.start-test-btn:not(:disabled):active{ transform: scale(0.98); }
+.hint{ font-size: 11px; color: #6b7280; margin-top: 8px; }
