@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { ArrowLeft, Clock, Timer, BookCheck, GraduationCap, Check } from 'lucide-react'
-import { TestConfigType } from './types'
+import type { TestConfigType, SubjectData } from '../types'
 import './TestConfig.css'
 
 type Props = {
@@ -51,7 +51,7 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig }:
       <div className="config-card highlight">
         <h3>Selected Subjects</h3>
         <div className="selected-subjects-list">
-          {testConfig.subjects.map((s) => (
+         {testConfig.subjects.map((s: SubjectData) => (
             <div key={s.subject} className="selected-subject-item">
               <span className="s-name">{s.subject}</span>
               <span className="s-q">{s.questions} Qs • {s.years}</span>

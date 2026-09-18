@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ArrowLeft, Clock, FileQuestion, AlertTriangle, CheckCircle2, Grid3X3, TimerOff, Info } from 'lucide-react'
-import { TestConfigType } from './types'
+import type { TestConfigType, SubjectData } from '../types'
 import './TestInstructions.css'
 
 type Props = {
@@ -28,7 +28,7 @@ export default function TestInstructions({ setActivePage, testConfig }: Props) {
           <div className="info-item"><span>Year</span><strong>{testConfig.year}</strong></div>
           <div className="info-item"><span>Mode</span><strong>{testConfig.mode} ({testConfig.difficulty})</strong></div>
           <div className="info-item"><span>Topic</span><strong>{testConfig.topic}</strong></div>
-          <div className="info-item full"><span>Subjects</span><strong>{testConfig.subjects.map(s=>s.subject).join(' + ')}</strong></div>
+          <div className="info-item full"><span>Subjects</span><strong>{testConfig.subjects.map((s: SubjectData) => s.subject).join(' + ')}</strong></div>
           <div className="info-item"><span>Questions</span><strong>{testConfig.totalQuestions}</strong></div>
           <div className="info-item"><span>Duration</span><strong className="highlight">{totalHours>0? `${totalHours}h ${mins}m` : `${mins}m`}</strong></div>
         </div>
