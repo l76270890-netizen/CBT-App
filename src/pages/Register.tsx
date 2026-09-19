@@ -33,19 +33,28 @@ export default function Register({ setActivePage }: { setActivePage: (p: string)
     setLoading(false)
   }
 
-  const handleGoogle = async () => {
-    try {
-      const cred = await signInWithPopup(auth, googleProvider)
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        name: cred.user.displayName,
-        email: cred.user.email,
-        createdAt: new Date().toISOString(),
-      }, { merge: true })
-      setActivePage('home')
-    } catch (e: any) {
+ const handleGoogle = async () => {
+  setError('')
+  try {
+    // Force logout of previous google session so chooser shows
+    googleProvider.setCustomParameters({ prompt: 'select_account' })
+    const cred = await signInWithPopup(auth, googleProvider)
+    
+    // save user
+    await setDoc(doc(db, 'users', cred.user.uid), {
+      name: cred.user.displayName,
+      email: cred.user.email,
+      photoURL: cred.user.photoURL,
+      createdAt: new Date().toISOString(),
+    }, { merge: true })
+    
+    setActivePage('home')
+  } catch (e: any) {
+    if(e.code !== 'auth/popup-closed-by-user'){
       setError(e.message)
     }
   }
+}
 
   return (
     <div className="auth-page">

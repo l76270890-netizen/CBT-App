@@ -5,9 +5,10 @@ type Props = {
 }
 
 import { useState, useEffect, useMemo } from 'react'
+import { onAuthStateChanged } from 'firebase/auth'
+import { collection, getDocs, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore'
+import { auth, db } from '../firebase'
 import { BookOpen, Search, X, Funnel, Flame, Trophy, Target, BarChart3 } from 'lucide-react'
-import { collection, getDocs, query, orderBy } from 'firebase/firestore'
-import { db } from '../firebase'
 import './Home.css'
 
 type ExamDoc = {
@@ -20,33 +21,60 @@ type ExamDoc = {
   totalQuestions?: number
 }
 
+type HistoryItem = {
+  score: number
+  total: number
+}
+
 export default function Home({ setActivePage, setSelectedExam, setTestConfig }: Props) {
-  const [name] = useState('Lawrence')
+  const [name, setName] = useState('User')
   const [searchQuery, setSearchQuery] = useState("")
   const [examsFromDb, setExamsFromDb] = useState<ExamDoc[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ practiced: 0, avgScore: 0, bestScore: 0, streak: 3 })
 
   useEffect(() => {
-    const history = JSON.parse(localStorage.getItem('practiceHistory') || '[]')
-    if (history.length > 0) {
-      const scores = history.map((h: any) => h.score || 0)
-      const total = scores.reduce((a: number, b: number) => a + b, 0)
-      setStats({
-        practiced: history.length,
-        avgScore: Math.round(total / scores.length),
-        bestScore: Math.max(...scores),
-        streak: 3
-      })
-    }
+    // 1. GET REAL USER NAME
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const snap = await getDoc(doc(db, 'users', user.uid))
+          setName(user.displayName || snap.data()?.name || 'User')
+        } catch {
+          setName(user.displayName || 'User')
+        }
+
+        // 2. LISTEN TO FIREBASE HISTORY - THIS IS THE FIX
+        const qHist = query(collection(db, `users/${user.uid}/history`), orderBy('createdAt', 'desc'))
+        const unsubHist = onSnapshot(qHist, (snap) => {
+          const history = snap.docs.map(d => d.data() as HistoryItem)
+          if (history.length > 0) {
+            const percents = history.map(h => Math.round((h.score / h.total) * 100))
+            const totalPercent = percents.reduce((a, b) => a + b, 0)
+            setStats({
+              practiced: history.length,
+              avgScore: Math.round(totalPercent / percents.length),
+              bestScore: Math.max(...percents),
+              streak: 3 // you can calculate streak later
+            })
+          } else {
+            setStats({ practiced: 0, avgScore: 0, bestScore: 0, streak: 0 })
+          }
+        })
+        return () => unsubHist()
+      }
+    })
+
     const fetchExams = async () => {
       try {
         const q = query(collection(db, "exams"), orderBy("createdAt", "desc"))
         const snap = await getDocs(q)
-        setExamsFromDb(snap.docs.map(d => ({ id: d.id,...d.data() } as ExamDoc)))
+        setExamsFromDb(snap.docs.map(d => ({ id: d.id, ...d.data() } as ExamDoc)))
       } finally { setLoading(false) }
     }
     fetchExams()
+
+    return () => unsubAuth()
   }, [])
 
   const filteredExams = useMemo(() => {
@@ -60,7 +88,6 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
   }, [searchQuery, examsFromDb])
 
   const handleExamClick = (exam: ExamDoc) => {
-    // FIX: Subjects page needs examType like JAMB, WAEC, not doc id
     setSelectedExam(exam.examType)
 
     if (exam.examType.toLowerCase().includes('general') || exam.subject.toLowerCase().includes('general')) {
@@ -77,7 +104,6 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
       return
     }
 
-    // Start from subjects -> it will show subjects for this examType
     setTestConfig((prev: any) => ({
      ...prev,
       examType: exam.examType,
@@ -86,7 +112,6 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
       customExamId: exam.id,
       customTitle: exam.title
     }))
-
     setActivePage('subjects')
   }
 

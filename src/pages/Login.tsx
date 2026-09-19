@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth'
-import { auth, googleProvider } from '../firebase'
+import { auth, db, googleProvider } from '../firebase'
 import './Auth.css'
+import { setDoc } from '@firebase/firestore'
+import { doc } from 'firebase/firestore/lite'
 
 export default function Login({ setActivePage }: { setActivePage: (p: string) => void }) {
   const [email, setEmail] = useState('')
@@ -22,14 +24,28 @@ export default function Login({ setActivePage }: { setActivePage: (p: string) =>
     setLoading(false)
   }
 
-  const handleGoogle = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider)
-      setActivePage('home')
-    } catch (e: any) {
+const handleGoogle = async () => {
+  setError('')
+  try {
+    // Force logout of previous google session so chooser shows
+    googleProvider.setCustomParameters({ prompt: 'select_account' })
+    const cred = await signInWithPopup(auth, googleProvider)
+    
+    // save user
+    await setDoc(doc(db, 'users', cred.user.uid), {
+      name: cred.user.displayName,
+      email: cred.user.email,
+      photoURL: cred.user.photoURL,
+      createdAt: new Date().toISOString(),
+    }, { merge: true })
+    
+    setActivePage('home')
+  } catch (e: any) {
+    if(e.code !== 'auth/popup-closed-by-user'){
       setError(e.message)
     }
   }
+}
 
   return (
     <div className="auth-page">

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
+import { auth, db } from '../firebase'
 import './Result.css'
 
 type Props = {
@@ -7,11 +9,44 @@ type Props = {
 
 export default function Result({ setActivePage }: Props) {
   const [result, setResult] = useState<any>(null)
+  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     const data = localStorage.getItem('lastTestResult')
-    if (data) setResult(JSON.parse(data))
+    if (data) {
+      const parsed = JSON.parse(data)
+      setResult(parsed)
+
+      // SAVE TO FIREBASE - ONLY ONCE
+      const alreadySaved = sessionStorage.getItem('historySaved')
+      if (!alreadySaved && auth.currentUser) {
+        saveToFirebase(parsed)
+        sessionStorage.setItem('historySaved', 'true')
+      }
+    }
   }, [])
+
+  const saveToFirebase = async (res: any) => {
+    const user = auth.currentUser
+    if (!user) return
+    try {
+      await addDoc(collection(db, `users/${user.uid}/history`), {
+        title: res.examTitle || res.subject || 'Practice Test',
+        score: res.score,
+        total: res.total,
+        duration: res.duration || '0m',
+        status: (res.score / res.total) >= 0.5? 'Passed' : 'Failed',
+        mode: res.mode || 'practice',
+        examType: res.examType || 'custom',
+        date: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+        answers: res.answers || [] // optional for review
+      })
+      setSaved(true)
+    } catch (e: any) {
+      console.log("Save error:", e.message)
+    }
+  }
 
   if (!result) return <div className="result-page"><div className="loader"></div></div>
 
@@ -26,8 +61,8 @@ export default function Result({ setActivePage }: Props) {
           <span>{passed? '✓ PASSED' : '✗ FAILED'}</span>
         </div>
 
-        <h1>Congratulations!</h1>
-        <p className="result-subtitle">Here is how you performed</p>
+        <h1>{passed? 'Congratulations!' : 'Keep Trying!'}</h1>
+        <p className="result-subtitle">Here is how you performed {saved && '• Saved to History ✓'}</p>
 
         <div className="score-circle-wrap">
           <div className="score-circle">
@@ -45,37 +80,22 @@ export default function Result({ setActivePage }: Props) {
         <div className="result-stats">
           <div className="stat-card correct">
             <div className="stat-icon">✓</div>
-            <div>
-              <span>Correct</span>
-              <strong>{result.score}</strong>
-            </div>
+            <div><span>Correct</span><strong>{result.score}</strong></div>
           </div>
           <div className="stat-card wrong">
             <div className="stat-icon">✗</div>
-            <div>
-              <span>Wrong</span>
-              <strong>{wrong}</strong>
-            </div>
+            <div><span>Wrong</span><strong>{wrong}</strong></div>
           </div>
           <div className="stat-card time">
             <div className="stat-icon">⏱</div>
-            <div>
-              <span>Time</span>
-              <strong>{result.duration || '25m'}</strong>
-            </div>
+            <div><span>Time</span><strong>{result.duration || '25m'}</strong></div>
           </div>
         </div>
 
         <div className="result-actions">
-          <button className="btn-primary" onClick={() => setActivePage('review')}>
-            Review Answers
-          </button>
-          <button className="btn-secondary" onClick={() => setActivePage('testConfig')}>
-            Retake Test
-          </button>
-          <button className="btn-ghost" onClick={() => setActivePage('home')}>
-            Back to Home
-          </button>
+          <button className="btn-primary" onClick={() => setActivePage('review')}>Review Answers</button>
+          <button className="btn-secondary" onClick={() => { sessionStorage.removeItem('historySaved'); setActivePage('testConfig') }}>Retake Test</button>
+          <button className="btn-ghost" onClick={() => { sessionStorage.removeItem('historySaved'); setActivePage('home') }}>Back to Home</button>
         </div>
       </div>
     </div>
