@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { onAuthStateChanged, updateProfile, signOut } from 'firebase/auth'
 import { doc, getDoc, updateDoc, collection, query, onSnapshot } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { auth, db, storage } from '../firebase'
+import { auth, db } from '../firebase'
 import { User, Download, Settings, HelpCircle, Info, ChevronRight, Crown, LogOut, Edit3, Camera } from 'lucide-react'
 import './Account.css'
 
@@ -34,7 +33,6 @@ export default function Account({ setActivePage }: Props) {
           setPhotoURL(user.photoURL || '')
         }
 
-        // FIREBASE HISTORY COUNT
         const q = query(collection(db, `users/${user.uid}/history`))
         const unsubCount = onSnapshot(q, (snap) => {
           setPracticed(snap.size)
@@ -50,16 +48,22 @@ export default function Account({ setActivePage }: Props) {
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file ||!fbUser) return
-    if (file.size > 2 * 1024 * 1024) return alert("Image must be <2MB")
+    if (!file || !fbUser) return
+    if (file.size > 700 * 1024) return alert("Image must be <700KB (Firebase limit)")
+
     setUploading(true)
     try {
-      const storageRef = ref(storage, `avatars/${fbUser.uid}`)
-      await uploadBytes(storageRef, file)
-      const url = await getDownloadURL(storageRef)
-      await updateProfile(fbUser, { photoURL: url })
-      await updateDoc(doc(db, 'users', fbUser.uid), { photoURL: url })
-      setPhotoURL(url)
+      // Convert to Base64 - NO STORAGE NEEDED
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+
+      await updateProfile(fbUser, { photoURL: base64 })
+      await updateDoc(doc(db, 'users', fbUser.uid), { photoURL: base64 })
+      setPhotoURL(base64)
     } catch (err: any) {
       alert("Upload failed: " + err.message)
     }
@@ -68,7 +72,7 @@ export default function Account({ setActivePage }: Props) {
 
   const handleEditName = async () => {
     const n = prompt("Enter new name", name)
-    if (!n ||!fbUser) return
+    if (!n || !fbUser) return
     try {
       await updateProfile(fbUser, { displayName: n })
       await updateDoc(doc(db, 'users', fbUser.uid), { name: n })
