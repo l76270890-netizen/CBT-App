@@ -7,9 +7,10 @@ type Props = {
   setActivePage: (page: string) => void
   testConfig: TestConfigType
   setTestConfig: (config: TestConfigType) => void
+  selectedExam?: any // <-- ADDED THIS
 }
 
-export default function TestConfig({ setActivePage, testConfig, setTestConfig }: Props) {
+export default function TestConfig({ setActivePage, testConfig, setTestConfig, selectedExam }: Props) {
   const [mode, setMode] = useState<'exam' | 'practice'>(testConfig.mode)
   const [duration, setDuration] = useState(testConfig.duration || Math.ceil(testConfig.totalQuestions * 1.2))
   const [year, setYear] = useState(testConfig.year)
@@ -32,27 +33,34 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig }:
       difficulty,
       topic,
       showAnswers: mode === 'practice',
-    }
+      // keep firebase exam id if present
+      examId: selectedExam?.id || (testConfig as any).examId || (testConfig as any).customExamId || '',
+      examTitle: selectedExam?.title || (testConfig as any).examTitle || (testConfig as any).customTitle || '',
+    } as any
     setTestConfig(finalConfig)
-    setActivePage('testInstructions') // <-- must be lowercase
+    setActivePage('testInstructions')
   }
 
   return (
     <div className="config-page">
       <div className="config-header">
         <button className="back-circle1" onClick={() => setActivePage('subjects')}><ArrowLeft size={18}/></button>
-        <div><h1>Configure Test</h1><p>{testConfig.examType} • {testConfig.totalQuestions} Questions</p></div>
+        <div><h1>Configure Test</h1><p>{testConfig.examType} • {testConfig.totalQuestions} Questions {selectedExam?.title ? `• ${selectedExam.title}` : ''}</p></div>
       </div>
 
       <div className="config-card highlight">
         <h3>Selected Subjects</h3>
         <div className="selected-subjects-list">
-         {testConfig.subjects.map((s: SubjectData) => (
-            <div key={s.subject} className="selected-subject-item">
-              <span className="s-name">{s.subject}</span>
-              <span className="s-q">{s.questions} Qs • {s.years}</span>
+         {testConfig.subjects.map((s: any) => {
+           const name = typeof s === 'string' ? s : s.subject
+           const qs = typeof s === 'string' ? '' : `${s.questions} Qs • ${s.years}`
+           return (
+            <div key={name} className="selected-subject-item">
+              <span className="s-name">{name}</span>
+              <span className="s-q">{qs}</span>
             </div>
-          ))}
+           )
+         })}
         </div>
         <div className="total-q"><span>Total</span><b>{testConfig.totalQuestions} Qs • {duration} mins • ~{timePerQuestion}s per Q</b></div>
       </div>

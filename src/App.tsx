@@ -15,9 +15,9 @@ import TestInstructions from './pages/TestInstructions'
 import GeneralKnowledge from './pages/GeneralKnowledge'
 import type { TestConfigType } from './types'
 
-function App() {
+export default function App() {
   const [page, setPage] = useState('home')
-  const [selectedExam, setSelectedExam] = useState<any>(null) // now OBJECT not string
+  const [selectedExam, setSelectedExam] = useState<any>(null)
   const [testConfig, setTestConfig] = useState<TestConfigType>({
     examType: 'JAMB',
     examId: '',
@@ -35,45 +35,22 @@ function App() {
   const hideNavbarPages = ['subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
   const AdminAny = AdminDashboard as any
 
-  const renderPage = () => {
-    switch(page) {
-      case 'home':
-        return <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />
-      case 'exams':
-  return <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />
-      case 'subjects':
-        return <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} />
-      case 'testConfig':
-        return <TestConfig setActivePage={setPage} testConfig={testConfig} setTestConfig={setTestConfig} selectedExam={selectedExam} />
-      case 'testInstructions':
-        return <TestInstructions setActivePage={setPage} testConfig={testConfig} />
-      case 'test':
-        return <Test setActivePage={setPage} testConfig={testConfig} />
-      case 'result':
-        return <Result setActivePage={setPage} />
-      case 'review':
-        return <Review setActivePage={setPage} />
-      case 'classroom':
-        return <Study setActivePage={setPage} selectedExam={selectedExam} setTestConfig={setTestConfig} />
-      case 'account':
-        return <Account setActivePage={setPage} />
-      case 'practiceHistory':
-        return <PracticeHistory setActivePage={setPage} />
-      case 'generalKnowledge':
-        return <GeneralKnowledge setActivePage={setPage} setTestConfig={setTestConfig} />
-      case 'admin':
-        return <AdminAny setActivePage={setPage} />
-      default:
-        return <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />
-    }
-  }
-
   return (
     <div>
       {!hideNavbarPages.includes(page) && <Navbar activePage={page} setActivePage={setPage} />}
-      {renderPage()}
+      {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
+      {page === 'exams' && <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
+      {page === 'subjects' && <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
+      {page === 'testConfig' && <TestConfig setActivePage={setPage} testConfig={testConfig} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
+      {page === 'testInstructions' && <TestInstructions setActivePage={setPage} testConfig={testConfig} />}
+      {page === 'test' && <Test setActivePage={setPage} testConfig={testConfig} />}
+      {page === 'result' && <Result setActivePage={setPage} />}
+      {page === 'review' && <Review setActivePage={setPage} />}
+      {page === 'classroom' && <Study setActivePage={setPage} selectedExam={selectedExam} setTestConfig={setTestConfig} />}
+      {page === 'account' && <Account setActivePage={setPage} />}
+      {page === 'practiceHistory' && <PracticeHistory setActivePage={setPage} />}
+      {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={setPage} setTestConfig={setTestConfig} />}
+      {page === 'admin' && <AdminAny setActivePage={setPage} />}
     </div>
   )
 }
-
-export default App
