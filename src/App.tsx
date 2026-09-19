@@ -1,4 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { onAuthStateChanged } from 'firebase/auth'
+import { auth } from './firebase'
+
 import Home from './pages/Home'
 import Exams from './pages/Exams'
 import Subjects from './pages/Subjects'
@@ -13,10 +16,14 @@ import Review from './pages/Review'
 import AdminDashboard from './pages/AdminDashboard'
 import TestInstructions from './pages/TestInstructions'
 import GeneralKnowledge from './pages/GeneralKnowledge'
+import LandingMobile from './pages/LandingMobile'
+import Login from './pages/Login'
+import Register from './pages/Register'
 import type { TestConfigType } from './types'
 
 export default function App() {
-  const [page, setPage] = useState('home')
+  const [page, setPage] = useState('landing')
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const [selectedExam, setSelectedExam] = useState<any>(null)
   const [testConfig, setTestConfig] = useState<TestConfigType>({
     examType: 'JAMB',
@@ -32,12 +39,46 @@ export default function App() {
     topic: 'All Topics'
   } as any)
 
-  const hideNavbarPages = ['subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
+  // AUTO CHECK LOGIN
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        if (page === 'landing' || page === 'login' || page === 'register') {
+          setPage('home')
+        }
+      } else {
+        // if no user and on protected page, go to landing
+        if (!['landing','login','register'].includes(page)) {
+          // keep them on landing unless they explicitly go to login
+        }
+      }
+      setCheckingAuth(false)
+    })
+    return () => unsub()
+  }, [])
+
+  const hideNavbarPages = ['landing', 'login', 'register', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
   const AdminAny = AdminDashboard as any
 
+  if (checkingAuth) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#121212', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 40, height: 40, background: '#1d4be3', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontWeight: 900 }}>E</div>
+          Loading...
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div>
+    <div style={{ background: '#121212', minHeight: '100vh' }}>
       {!hideNavbarPages.includes(page) && <Navbar activePage={page} setActivePage={setPage} />}
+
+      {page === 'landing' && <LandingMobile setActivePage={setPage} />}
+      {page === 'login' && <Login setActivePage={setPage} />}
+      {page === 'register' && <Register setActivePage={setPage} />}
+
       {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
       {page === 'exams' && <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
       {page === 'subjects' && <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
