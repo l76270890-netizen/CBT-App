@@ -59,38 +59,3 @@
 
 .admin-toast { margin-top: 14px; padding: 12px; border-radius: 10px; font-size: 13px; font-weight: 600; }
 .admin-toast.success { background: #0f2218; color: #10b981; border: 1px solid #1a3d2a; }
-
-
-
-.admin-tabs { display: flex; gap: 8px; margin: 16px 0; background: #0e0e16; padding: 6px; border-radius: 12px; width: fit-content; }
-.admin-tabs button { background: transparent; border: none; color: #8b8ba7; padding: 8px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
-.admin-tabs button.active { background: #1e1e2d; color: #fff; }
-.admin-tab { background: #1e1e2d; color: #fff; border: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; }
-.exam-list { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
-.exam-card { display: flex; justify-content: space-between; align-items: center; background: #0e0e16; border: 1px solid #252538; padding: 14px 16px; border-radius: 12px; }
-.exam-card b { color: #fff; display: block; font-size: 14px; }
-.exam-card span { color: #8b8ba7; font-size: 12px; }
-.exam-card button { background: transparent; border: none; cursor: pointer; font-size: 16px; }
-
-
-
-.big-input { font-size: 16px!important; font-weight: 600; }
-.admin-pill { background:#1e1e2d; color:#fff; padding:6px 12px; border-radius:20px; font-size:12px; font-weight:600; }
-.icon-btn { width:44px!important; background:#1e1e2d!important; border:1px solid #2a2a3d!important; color:#fff; }
-.custom-type-box { display:flex; gap:6px; margin-top:8px; animation: slideDown 0.2s ease; }
-.custom-type-box input { flex:1; }
-.admin-btn.sm { width:auto!important; padding:10px 16px!important; }
-.exam-info { flex:1; }
-.exam-meta { display:flex; gap:8px; margin-top:6px; align-items:center; flex-wrap:wrap; }
-.badge { background:#6c5cff22; color:#6c5cff; border:1px solid #6c5cff33; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:700; }
-.del-btn { background:transparent; border:none; cursor:pointer; font-size:18px; padding:8px; }
-@keyframes slideDown { from{opacity:0; transform:translateY(-5px)} to{opacity:1; transform:translateY(0)} }
-
-
-
-.flex-input { display:flex; gap:6px; }
-.flex-input select { flex:1; }
-.custom-box { display:flex; gap:6px; margin-top:8px; background:#0e0e16; padding:6px; border-radius:10px; border:1px solid #252538; animation: slideDown 0.2s ease; }
-.badge2 { background:#10b98122; color:#10b981; border:1px solid #10b98133; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:700; }
-.empty-text { text-align:center; color:#666; padding:20px; font-size:13px; }
-.big-input { font-size:16px!important; font-weight:600; }

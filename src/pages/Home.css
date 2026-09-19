@@ -85,3 +85,9 @@ body{ background: #121212; }
  .stats-grid1 { grid-template-columns: repeat(4,1fr); }
  .exam-list { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 }
+
+/* Add to your existing Home.css - no new file needed */
+.gk-btn {
+  width: 100%; padding: 14px; border-radius: 14px; border: none;
+  background: #1d4be3; color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 16px;
+}

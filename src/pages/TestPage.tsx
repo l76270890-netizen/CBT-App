@@ -51,7 +51,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
   const calculateDuration = useCallback(() => { const d = Date.now() - startTime; return `${Math.floor(d/60000)}m ${Math.floor((d%60000)/1000)}s` }, [startTime])
   const handleSubmit = useCallback(() => {
     if (!questions.length) return
-    const score = answers.reduce((a, ans, i) => ans === questions[i]?.answer? a+1 : a, 0)
+    const score = answers.reduce<number>((a, ans, i) => ans === questions[i]?.answer ? a + 1 : a, 0)
     const result = { id: Date.now(), title: `${testConfig.examType} - ${testConfig.subjects.map(s=>s.subject).join(', ')}`, date: new Date().toISOString(), score, total: questions.length, duration: calculateDuration(), status: score >= questions.length*0.5? 'Passed':'Failed', mode: testConfig.mode, answers, correctAnswers: questions.map(q=>q.answer) }
     localStorage.setItem('lastTestResult', JSON.stringify(result))
     const h = JSON.parse(localStorage.getItem('practiceHistory') || '[]')

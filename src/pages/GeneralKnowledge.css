@@ -1,0 +1,87 @@
+/* Use your exact Home.css - no new colors */
+.general-container {
+  padding: 20px 16px 90px;
+  max-width: 600px;
+  margin: 0 auto;
+  background: #121212;
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+}
+
+.general-header {
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, #1d4be3 0%, #0f172a 100%);
+  padding: 24px 20px;
+  border-radius: 18px;
+}
+
+.general-title { font-size: 24px; font-weight: 700; color: #fff; margin: 0; }
+.general-title span { color: #a5b4fc; }
+.general-subtitle { color: #cbd5e1; font-size: 13px; margin: 6px 0 12px 0; }
+
+.general-stats {
+  display: grid;
+  grid-template-columns: repeat(2,1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.general-card {
+  background: #1e1e1e;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid #2a2a2a;
+}
+
+.general-card h2 { font-size: 22px; font-weight: 700; color: #fff; margin: 0; }
+.general-card span { font-size: 11px; color: #9b9b9b; text-transform: uppercase; }
+
+.gk-start-card {
+  display: flex;
+  align-items: center;
+  background: #1e1e1e;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid #2a2a2a;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.gk-start-card:active { transform: scale(0.98); }
+.gk-start-card:hover { border-color: #1d4be3; }
+
+.gk-start-card .exam-info h4 { font-size: 15px; font-weight: 600; color: #fff; margin: 0; }
+.gk-start-card .exam-info p { font-size: 12px; color: #919293; margin: 2px 0 0; }
+
+.gk-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  background: #1d4be3;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 16px;
+}
+
+.gk-btn.secondary {
+  background: #1e1e1e;
+  border: 1px solid #2a2a2a;
+  color: #fff;
+  margin-top: 10px;
+}
+
+.no-result {
+  background: #1e1e1e;
+  padding: 20px;
+  border-radius: 14px;
+  text-align: center;
+  color: #8f9091;
+  font-size: 14px;
+}
+
+@media (min-width: 768px) {
+  .general-container { max-width: 900px; padding: 32px; }
+}
