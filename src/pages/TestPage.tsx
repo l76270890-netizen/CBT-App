@@ -10,17 +10,16 @@ export default function Test({ setActivePage, testConfig }: Props) {
   const [questions, setQuestions] = useState<Question[]>([])
   const [current, setCurrent] = useState(0)
   const [answers, setAnswers] = useState<(number | null)[]>([])
-  const [timeLeft, setTimeLeft] = useState((testConfig as any).duration * 60 || 3600)
+  const [timeLeft, setTimeLeft] = useState(testConfig.duration * 60 || 3600)
   const [showGrid, setShowGrid] = useState(false)
   const [showCalc, setShowCalc] = useState(false)
   const [calcInput, setCalcInput] = useState('0')
   const [loading, setLoading] = useState(true)
 
-  // Normalize subjects
   const getSubjectName = (s: any) => typeof s === 'string'? s : s?.subject || s?.name || 'General'
-  const subjectsList: string[] = ((testConfig as any).subjects || [(testConfig as any).subject] || []).map(getSubjectName)
-  const examType = (testConfig as any).examType || 'JAMB'
-  const examTitle = (testConfig as any).examTitle || (testConfig as any).title || examType
+  const subjectsList: string[] = (testConfig.subjects || []).map(getSubjectName)
+  const examType = testConfig.examType || 'JAMB'
+  const examTitle = testConfig.examTitle || testConfig.title || examType
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -53,14 +52,14 @@ export default function Test({ setActivePage, testConfig }: Props) {
       } catch (e) { console.log(e) }
 
       if (fetched.length === 0) {
-        const count = (testConfig as any).totalQuestions || 10
+        const count = testConfig.totalQuestions || 10
         fetched = Array.from({ length: count }).map((_, i) => {
           const sub = subjectsList[i % subjectsList.length] || examType
           return { id: `mock-${i}`, subject: sub, question: `${sub}: Question ${i + 1} (Add real questions in Flask Admin)`, options: ['Option A','Option B','Option C','Option D'], answer: i % 4, explanation: 'Add in admin' }
         })
       }
 
-      const shuffled = fetched.sort(() => 0.5 - Math.random()).slice(0, (testConfig as any).totalQuestions || fetched.length)
+      const shuffled = fetched.sort(() => 0.5 - Math.random()).slice(0, testConfig.totalQuestions || fetched.length)
       setQuestions(shuffled)
       setAnswers(Array(shuffled.length).fill(null))
       setLoading(false)
@@ -84,7 +83,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
       total: questions.length,
       duration: calculateDuration(),
       status: score >= questions.length*0.5? 'Passed':'Failed',
-      mode: (testConfig as any).mode,
+      mode: testConfig.mode,
       examType: examType,
       answers,
       correctAnswers: questions.map(q=>q.answer),
@@ -92,7 +91,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
     }
     localStorage.setItem('lastTestResult', JSON.stringify(result))
     setActivePage('result')
-  }, [answers, questions, setActivePage, calculateDuration, examType, subjectsList, examTitle, testConfig])
+  }, [answers, questions, setActivePage, calculateDuration, examType, subjectsList, examTitle, testConfig.mode])
 
   useEffect(() => { if(timeLeft<=0){handleSubmit(); return} const t=setInterval(()=>setTimeLeft(x=>x-1),1000); return()=>clearInterval(t)}, [timeLeft, handleSubmit])
 
@@ -114,7 +113,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
         <div className="question-card">
           <h2 className="question-text">{q.question}</h2>
           <div className="options">{q.options.map((opt,i)=><button key={i} className={`option-btn ${answers[current]===i?'selected':''}`} onClick={()=>{const c=[...answers]; c[current]=i; setAnswers(c)}}><span className="option-label">{String.fromCharCode(65+i)}</span><span>{opt}</span></button>)}</div>
-          {(testConfig as any).mode==='practice' && answers[current]!==null && <div style={{marginTop:16, padding:12, background:'#1e1e1e', borderRadius:10, color: answers[current]===q.answer?'#10B981':'#EF4444'}}>{answers[current]===q.answer?'✓ Correct':`✗ Correct: ${String.fromCharCode(65+q.answer)}`} {q.explanation && ` - ${q.explanation}`}</div>}
+          {testConfig.mode==='practice' && answers[current]!==null && <div style={{marginTop:16, padding:12, background:'#1e1e1e', borderRadius:10, color: answers[current]===q.answer?'#10B981':'#EF4444'}}>{answers[current]===q.answer?'✓ Correct':`✗ Correct: ${String.fromCharCode(65+q.answer)}`} {q.explanation && ` - ${q.explanation}`}</div>}
         </div>
       </div>
       <div className="test-footer">
