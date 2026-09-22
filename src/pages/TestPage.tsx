@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import type { TestConfigType } from '../types'
 import './TestPage.css'
+import { API_URL } from '../config'
 
 type Props = { setActivePage: (page: string) => void; testConfig: TestConfigType }
 type Question = { id: string; subject: string; question: string; options: string[]; answer: number; explanation?: string }
@@ -40,7 +41,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
           localStorage.removeItem('current_questions')
         } else {
           const subjectsParam = subjectsList.join(',')
-          const res = await fetch(`http://127.0.0.1:5000/api/questions?examType=${examType}&subjects=${subjectsParam}`)
+          const res = await fetch(`${API_URL}/api/questions?examType=${examType}&subjects=${subjectsParam}`)
           const data = await res.json()
           fetched = data.map((d: any) => ({
             id: d.id, subject: d.subject, question: d.question,

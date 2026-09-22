@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { BookOpen, Search, X, Funnel, Flame, Trophy, Target, BarChart3 } from 'lucide-react'
 import './Home.css'
+import { API_URL } from '../config'
 
 type ExamData = {
   id: string
@@ -22,9 +23,8 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
   const [stats, setStats] = useState({ practiced: 0, avgScore: 0, bestScore: 0, streak: 3 })
 
   useEffect(() => {
-    // Flask history
     if (user?.user_id) {
-      fetch(`http://127.0.0.1:5000/api/history/${user.user_id}`)
+      fetch(`${API_URL}/api/history/${user.user_id}`)
        .then(r => r.json()).then((history: any[]) => {
           if (history.length > 0) {
             const percents = history.map(h => Math.round((h.score / h.total) * 100))
@@ -37,8 +37,7 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
           }
         }).catch(()=>{})
     }
-    // Flask exams
-    fetch('http://127.0.0.1:5000/api/exams')
+    fetch(`${API_URL}/api/exams`)
      .then(r => r.json()).then(data => {
         const mapped = data.map((e:any) => ({
           id: e.id, title: e.title, examType: e.examType,

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { BookOpen, Calculator, Atom, Beaker, Zap, Landmark, DollarSign, Library, ArrowLeft, Search, Check } from 'lucide-react'
 import './Subjects.css'
+import { API_URL } from '../config'
 
 type SubjectItem = { subject: string; questions: number; years: string; required?: boolean }
 
@@ -21,11 +22,8 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam }:
     const fetchSubjects = async () => {
       setLoading(true)
       try {
-        // Flask: get questions for this examType
-        const res = await fetch(`http://127.0.0.1:5000/api/questions?examType=${selectedExam}`)
-        const data = await res.json() // [{subject, year,...}]
-
-        // Group by subject
+        const res = await fetch(`${API_URL}/api/questions?examType=${selectedExam}`)
+        const data = await res.json()
         const map: Record<string, { count: number; years: Set<string> }> = {}
         data.forEach((d: any) => {
           const subj = d.subject || "General"
@@ -34,72 +32,42 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam }:
           map[subj].count += 1
           if (year) map[subj].years.add(year)
         })
-
         const grouped: SubjectItem[] = Object.entries(map).map(([subject, info]) => ({
           subject,
           questions: info.count,
           years: Array.from(info.years).join(', ') || '2024',
           required: subject.toLowerCase().includes('english')
         }))
-
-        // If Flask has no questions yet, show mock so UI works
         if (grouped.length === 0) {
           const fallback = selectedExam === 'JAMB'
-           ? [{subject:'Use of English',questions:40,years:'2024',required:true},{subject:'Mathematics',questions:40,years:'2024'},{subject:'Biology',questions:40,years:'2024'},{subject:'Chemistry',questions:40,years:'2024'}]
+          ? [{subject:'Use of English',questions:40,years:'2024',required:true},{subject:'Mathematics',questions:40,years:'2024'},{subject:'Biology',questions:40,years:'2024'},{subject:'Chemistry',questions:40,years:'2024'}]
             : [{subject:'Mathematics',questions:20,years:'2024'}]
           setSubjects(fallback)
         } else {
           setSubjects(grouped)
         }
-      } catch (e) {
-        console.log(e)
-      } finally { setLoading(false) }
+      } catch (e) { console.log(e) } finally { setLoading(false) }
     }
     fetchSubjects()
   }, [selectedExam])
 
   const maxSubjects = selectedExam === 'JAMB'? 4 : 6
-
   useEffect(() => {
     const required = subjects.filter(s => s.required)
-    if (required.length && selectedSubjects.length === 0) {
-      setSelectedSubjects(required)
-    }
+    if (required.length && selectedSubjects.length === 0) { setSelectedSubjects(required) }
   }, [subjects])
 
-  const filtered = useMemo(() => {
-    if (!search) return subjects
-    return subjects.filter(s => s.subject.toLowerCase().includes(search.toLowerCase()))
-  }, [search, subjects])
-
+  const filtered = useMemo(() => { if (!search) return subjects; return subjects.filter(s => s.subject.toLowerCase().includes(search.toLowerCase())) }, [search, subjects])
   const toggleSubject = (subjectData: SubjectItem) => {
     const isSelected = selectedSubjects.find(s => s.subject === subjectData.subject)
-    if (isSelected) {
-      if (subjectData.required) return
-      setSelectedSubjects(selectedSubjects.filter(s => s.subject!== subjectData.subject))
-    } else {
-      if (selectedSubjects.length >= maxSubjects) return
-      setSelectedSubjects([...selectedSubjects, subjectData])
-    }
+    if (isSelected) { if (subjectData.required) return; setSelectedSubjects(selectedSubjects.filter(s => s.subject!== subjectData.subject)) }
+    else { if (selectedSubjects.length >= maxSubjects) return; setSelectedSubjects([...selectedSubjects, subjectData]) }
   }
-
   const handleContinue = () => {
     const totalQuestions = selectedSubjects.reduce((sum, s) => sum + s.questions, 0)
-    setTestConfig((prev: any) => ({
-     ...prev,
-      examType: selectedExam,
-      subjects: selectedSubjects,
-      totalQuestions,
-      year: '2024',
-      duration: Math.ceil(totalQuestions * 1.2) || 60,
-      mode: 'exam',
-      difficulty: 'Normal',
-      showAnswers: false,
-      topic: 'All Topics'
-    }))
+    setTestConfig((prev: any) => ({...prev, examType: selectedExam, subjects: selectedSubjects, totalQuestions, year: '2024', duration: Math.ceil(totalQuestions * 1.2) || 60, mode: 'exam', difficulty: 'Normal', showAnswers: false, topic: 'All Topics'}))
     setActivePage('testConfig')
   }
-
   const isSelected = (subject: string) => selectedSubjects.some(s => s.subject === subject)
   const totalQs = selectedSubjects.reduce((sum, s) => sum + s.questions, 0)
 
@@ -114,7 +82,6 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam }:
         <div className="search-wrapper small"><Search size={16} className="search-icon" /><input placeholder="Search subject..." value={search} onChange={e => setSearch(e.target.value)} /></div>
         <div className="alert-card"><div className="alert-icon">i</div><div className="alert-text">Subjects from Flask • {selectedExam}</div></div>
       </div>
-
       {loading? <div className="no-result">Loading subjects for {selectedExam} from Flask...</div> :
         filtered.length === 0? <div className="no-result">No subjects for {selectedExam}. Add in Admin.</div> :
           <div className="subject-list">
@@ -131,7 +98,6 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam }:
             })}
           </div>
       }
-
       {selectedSubjects.length > 0 && (
         <div className="sticky-continue">
           <div className="selected-summary"><span>{selectedSubjects.map(s => s.subject.split(' ')[0]).join(' + ')}</span><b>{selectedSubjects.length}/{maxSubjects} • {totalQs} Qs</b></div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { User, Download, Settings, HelpCircle, Info, ChevronRight, Crown, LogOut, Edit3, Camera } from 'lucide-react'
 import './Account.css'
+import { API_URL } from '../config'
 
 type Props = { setActivePage: (page: string) => void }
 
@@ -21,23 +22,21 @@ export default function Account({ setActivePage }: Props) {
     setName(user.username || 'User')
     setEmail(user.email || '')
 
-    // Flask history count
-    fetch(`http://127.0.0.1:5000/api/history/${user.user_id}`)
-      .then(r => r.json())
-      .then(data => setPracticed(data.length))
-      .catch(() => setPracticed(0))
+    // Flask history count - FIXED URL
+    fetch(`${API_URL}/api/history/${user.user_id}`)
+     .then(r => r.json())
+     .then(data => setPracticed(data.length))
+     .catch(() => setPracticed(0))
   }, [user])
 
   const handleEditName = async () => {
     const n = prompt("Enter new name", name)
     if (!n) return
     setName(n)
-    // save to localStorage + Flask
-    const updated = { ...user, username: n }
+    const updated = {...user, username: n }
     localStorage.setItem('cbt_user', JSON.stringify(updated))
-    // optional: call Flask update
     try {
-      await fetch(`http://127.0.0.1:5000/api/update-user/${user.user_id}`, {
+      await fetch(`${API_URL}/api/update-user/${user.user_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: n })
@@ -71,7 +70,7 @@ export default function Account({ setActivePage }: Props) {
 
       <div className="profile-card">
         <div className="profile-avatar" style={{ position: 'relative', padding: 0, overflow: 'hidden', width: 70, height: 70 }}>
-          {photoURL ? (
+          {photoURL? (
             <img src={photoURL} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
           ) : (
             <span style={{ fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#1d4be3', color: '#fff', borderRadius: '50%' }}>{name.charAt(0).toUpperCase()}</span>

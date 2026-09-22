@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { BarChart3, Trophy, Clock, Target, Trash2, RotateCcw, Award, Calendar } from 'lucide-react'
 import './PracticeHistory.css'
+import { API_URL } from '../config'
 
 type HistoryItem = { id: string; title: string; date: string; score: number; total: number; duration: string; status: 'Passed'|'Failed'; mode?: string }
 
@@ -12,7 +13,7 @@ export default function PracticeHistory({ setActivePage }: any) {
 
   useEffect(() => {
     if(!user?.user_id) return
-    fetch(`http://127.0.0.1:5000/api/history/${user.user_id}`).then(r=>r.json()).then(setHistory).catch(()=>{})
+    fetch(`${API_URL}/api/history/${user.user_id}`).then(r=>r.json()).then(setHistory).catch(()=>{})
   }, [user])
 
   const filtered = useMemo(() => filter==='all'? history : history.filter(h=>h.status===filter), [history, filter])
@@ -24,12 +25,12 @@ export default function PracticeHistory({ setActivePage }: any) {
 
   const handleDelete = async (id: string) => {
     if(!confirm("Delete?")) return
-    await fetch(`http://127.0.0.1:5000/api/history/${id}`, { method: 'DELETE' })
+    await fetch(`${API_URL}/api/history/${id}`, { method: 'DELETE' })
     setHistory(prev=>prev.filter(h=>h.id!==id))
   }
   const handleClear = async () => {
     if(!confirm("Clear all?")) return
-    await fetch(`http://127.0.0.1:5000/api/history/clear/${user.user_id}`, { method: 'DELETE' })
+    await fetch(`${API_URL}/api/history/clear/${user.user_id}`, { method: 'DELETE' })
     setHistory([])
   }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import "./AdminDashboard.css";
+import { API_URL as API } from "../config"; // <-- FIXED, uses your live link
 
 const defaultSubjects = ["Mathematics","English","Physics","Chemistry","Biology","Government","Economics","Literature","CRS","Geography"];
 const defaultExamTypes = ["JAMB","WAEC","NECO","POSTUTME"];
@@ -39,8 +40,6 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
-
-  const API = "http://127.0.0.1:5000";
 
   const fetchExams = async () => {
     const res = await fetch(`${API}/api/exams`);

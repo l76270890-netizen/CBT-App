@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
-import { BookOpen, Funnel, Search, X } from 'lucide-react'
+import { BookOpen, Search, X } from 'lucide-react'
 import './Exams.css'
+import { API_URL } from '../config'
 
 export default function Exams({ setActivePage, setSelectedExam, setTestConfig }: any) {
   const [exams, setExams] = useState<any[]>([]);
@@ -8,7 +9,7 @@ export default function Exams({ setActivePage, setSelectedExam, setTestConfig }:
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    fetch('http://127.0.0.1:5000/api/exams')
+    fetch(`${API_URL}/api/exams`)
       .then(r=>r.json())
       .then(data=>{ setExams(data); setLoading(false) })
   }, []);
