@@ -33,6 +33,10 @@ export default function Exams({ setActivePage, setSelectedExam, setTestConfig }:
       <div className="exams-header"><h1>Available Exams</h1><p>From Flask Backend</p></div>
       <div className="search-bar"><div className="search-wrapper"><Search className="search-icon" size={18} /><input type="text" placeholder="Search JAMB, WAEC..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input-box" />{searchQuery && <button className="clear-search-btn" onClick={() => setSearchQuery("")}><X size={16} /></button>}</div></div>
       <div className="exams-grid">{filteredExams.map(exam => (<div key={exam.id} className="exam-card" onClick={() => handleExamClick(exam)}><div className="exam-icon-wrap"><BookOpen size={22} /></div><div className="exam-details"><h4>{exam.title}</h4><p>{exam.examType} • {exam.subject} • {exam.year}</p><p style={{ fontSize: 11, color: '#888', marginTop: 4 }}>{exam.totalQuestions} Qs • {exam.duration}min</p></div><span className="chevron">›</span></div>))}</div>
+       <div className="study-tip">
+        💡 <b>How it works:</b> Click Exams name = start full exam. Click arrow = view subjects breakdown.
+      </div>
     </div>
+    
   )
 }

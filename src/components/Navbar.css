@@ -315,8 +315,8 @@ body {
 }
 
 .nav-item.active .nav-icon-wrap {
-  background: #fff;
-  color: #121212;
+  background: #1e1e1e;
+  color: #fff;
 }
 
 .nav-item.active {
