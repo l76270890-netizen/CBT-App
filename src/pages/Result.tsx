@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
-import { auth, db } from '../firebase'
+import { useAuth } from '../context/AuthContext'
 import './Result.css'
 
 type Props = {
@@ -10,6 +9,7 @@ type Props = {
 export default function Result({ setActivePage }: Props) {
   const [result, setResult] = useState<any>(null)
   const [saved, setSaved] = useState(false)
+  const { user } = useAuth()
 
   useEffect(() => {
     const data = localStorage.getItem('lastTestResult')
@@ -17,30 +17,43 @@ export default function Result({ setActivePage }: Props) {
       const parsed = JSON.parse(data)
       setResult(parsed)
 
-      // SAVE TO FIREBASE - ONLY ONCE
+      // SAVE TO FLASK - ONLY ONCE
       const alreadySaved = sessionStorage.getItem('historySaved')
-      if (!alreadySaved && auth.currentUser) {
-        saveToFirebase(parsed)
+      if (!alreadySaved && user?.user_id) {
+        saveToBackend(parsed)
         sessionStorage.setItem('historySaved', 'true')
+      } else if (!alreadySaved) {
+        // also save even if no user_id yet (fallback to localStorage user)
+        try {
+          const savedUser = JSON.parse(localStorage.getItem('cbt_user') || '{}')
+          if (savedUser.user_id) {
+            saveToBackend(parsed, savedUser)
+            sessionStorage.setItem('historySaved', 'true')
+          }
+        } catch {}
       }
     }
-  }, [])
+  }, [user])
 
-  const saveToFirebase = async (res: any) => {
-    const user = auth.currentUser
-    if (!user) return
+  const saveToBackend = async (res: any, overrideUser?: any) => {
+    const currentUser = overrideUser || user
+    const savedUser = currentUser || JSON.parse(localStorage.getItem('cbt_user') || '{}')
+
     try {
-      await addDoc(collection(db, `users/${user.uid}/history`), {
-        title: res.examTitle || res.subject || 'Practice Test',
-        score: res.score,
-        total: res.total,
-        duration: res.duration || '0m',
-        status: (res.score / res.total) >= 0.5? 'Passed' : 'Failed',
-        mode: res.mode || 'practice',
-        examType: res.examType || 'custom',
-        date: new Date().toISOString(),
-        createdAt: serverTimestamp(),
-        answers: res.answers || [] // optional for review
+      await fetch('http://localhost:5000/api/save-result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: savedUser.user_id,
+          email: savedUser.email,
+          title: res.examTitle || res.subject || 'Practice Test',
+          score: res.score,
+          total: res.total,
+          duration: res.duration || '0m',
+          status: (res.score / res.total) >= 0.5? 'Passed' : 'Failed',
+          mode: res.mode || 'exam',
+          examType: res.examType || 'GENERAL',
+        })
       })
       setSaved(true)
     } catch (e: any) {

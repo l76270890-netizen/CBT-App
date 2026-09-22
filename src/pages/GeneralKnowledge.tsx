@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react'
-import { collection, getDocs, query, where } from 'firebase/firestore'
-import { db } from '../firebase'
 import './GeneralKnowledge.css'
 
 export default function GeneralKnowledge({ setActivePage, setTestConfig }: any) {
@@ -9,16 +7,23 @@ export default function GeneralKnowledge({ setActivePage, setTestConfig }: any) 
 
   useEffect(()=>{
     const load = async () => {
-      const q = query(collection(db,"questions"), where("subject","==","General Knowledge"))
-      const snap = await getDocs(q)
-      setQuestions(snap.docs.map(d=>d.data()))
+      try {
+        const res = await fetch('http://127.0.0.1:5000/api/questions?subject=General Knowledge')
+        const data = await res.json()
+        setQuestions(data)
+      } catch(err) {
+        console.error(err)
+      }
       setLoading(false)
     }
     load()
   },[])
 
   const start = () => {
-    setTestConfig((prev:any)=>({...prev, examType: 'GENERAL', subjects: ['General Knowledge'], totalQuestions: questions.length || 20, duration: 30 }))
+    if(questions.length === 0) return alert("No questions yet, add in Flask Admin")
+    // save questions to localStorage for TestPage to use
+    localStorage.setItem('current_questions', JSON.stringify(questions))
+    setTestConfig((prev:any)=>({...prev, examType: 'GENERAL', subjects: ['General Knowledge'], totalQuestions: questions.length, duration: 30 }))
     setActivePage('testInstructions')
   }
 
@@ -26,7 +31,7 @@ export default function GeneralKnowledge({ setActivePage, setTestConfig }: any) 
     <div className="home-container">
       <div className="home-header">
         <h1 className="home-title">General <span>Knowledge</span></h1>
-        <p className="home-subtitle">Current affairs, history & general studies</p>
+        <p className="home-subtitle">Current affairs, history & general studies - From Flask</p>
       </div>
 
       <div className="stats-grid1">
@@ -34,7 +39,7 @@ export default function GeneralKnowledge({ setActivePage, setTestConfig }: any) 
         <div className="stats-card"><h2>30</h2><span>Minutes</span></div>
       </div>
 
-      {loading? <div className="no-result">Loading...</div> : (
+      {loading? <div className="no-result">Loading from Flask...</div> : (
         <div className="exam-card1" onClick={start} style={{cursor:'pointer'}}>
           <div className="exam-info"><h4>Start General Knowledge Test</h4><p>{questions.length} questions • Click to begin</p></div>
           <span className="chevron">›</span>

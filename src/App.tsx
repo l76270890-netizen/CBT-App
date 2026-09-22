@@ -1,6 +1,4 @@
 import { useEffect, useState } from 'react'
-import { onAuthStateChanged } from 'firebase/auth'
-import { auth } from './firebase'
 
 import Home from './pages/Home'
 import Exams from './pages/Exams'
@@ -20,6 +18,7 @@ import LandingMobile from './pages/LandingMobile'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import type { TestConfigType } from './types'
+import { AuthProvider } from './context/AuthContext'
 
 export default function App() {
   const [page, setPage] = useState('landing')
@@ -39,22 +38,21 @@ export default function App() {
     topic: 'All Topics'
   } as any)
 
-  // AUTO CHECK LOGIN
+  // CHECK FLASK LOGIN FROM localStorage
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        if (page === 'landing' || page === 'login' || page === 'register') {
-          setPage('home')
-        }
-      } else {
-        // if no user and on protected page, go to landing
-        if (!['landing','login','register'].includes(page)) {
-          // keep them on landing unless they explicitly go to login
-        }
+    const saved = localStorage.getItem('cbt_user')
+    if (saved) {
+      // if user exists and on landing/login/register, go home
+      if (['landing', 'login', 'register'].includes(page)) {
+        setPage('home')
       }
-      setCheckingAuth(false)
-    })
-    return () => unsub()
+    } else {
+      // no user - if on protected page, force to landing
+      if (!['landing', 'login', 'register'].includes(page)) {
+        setPage('landing')
+      }
+    }
+    setCheckingAuth(false)
   }, [])
 
   const hideNavbarPages = ['landing', 'login', 'register', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
@@ -72,26 +70,28 @@ export default function App() {
   }
 
   return (
-    <div style={{ background: '#121212', minHeight: '100vh' }}>
-      {!hideNavbarPages.includes(page) && <Navbar activePage={page} setActivePage={setPage} />}
+    <AuthProvider>
+      <div style={{ background: '#121212', minHeight: '100vh' }}>
+        {!hideNavbarPages.includes(page) && <Navbar activePage={page} setActivePage={setPage} />}
 
-      {page === 'landing' && <LandingMobile setActivePage={setPage} />}
-      {page === 'login' && <Login setActivePage={setPage} />}
-      {page === 'register' && <Register setActivePage={setPage} />}
+        {page === 'landing' && <LandingMobile setActivePage={setPage} />}
+        {page === 'login' && <Login setActivePage={setPage} />}
+        {page === 'register' && <Register setActivePage={setPage} />}
 
-      {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
-      {page === 'exams' && <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
-      {page === 'subjects' && <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
-      {page === 'testConfig' && <TestConfig setActivePage={setPage} testConfig={testConfig} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
-      {page === 'testInstructions' && <TestInstructions setActivePage={setPage} testConfig={testConfig} />}
-      {page === 'test' && <Test setActivePage={setPage} testConfig={testConfig} />}
-      {page === 'result' && <Result setActivePage={setPage} />}
-      {page === 'review' && <Review setActivePage={setPage} />}
-      {page === 'classroom' && <Study setActivePage={setPage} selectedExam={selectedExam} setTestConfig={setTestConfig} />}
-      {page === 'account' && <Account setActivePage={setPage} />}
-      {page === 'practiceHistory' && <PracticeHistory setActivePage={setPage} />}
-      {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={setPage} setTestConfig={setTestConfig} />}
-      {page === 'admin' && <AdminAny setActivePage={setPage} />}
-    </div>
+        {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
+        {page === 'exams' && <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
+        {page === 'subjects' && <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
+        {page === 'testConfig' && <TestConfig setActivePage={setPage} testConfig={testConfig} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
+        {page === 'testInstructions' && <TestInstructions setActivePage={setPage} testConfig={testConfig} />}
+        {page === 'test' && <Test setActivePage={setPage} testConfig={testConfig} />}
+        {page === 'result' && <Result setActivePage={setPage} />}
+        {page === 'review' && <Review setActivePage={setPage} />}
+        {page === 'classroom' && <Study setActivePage={setPage} selectedExam={selectedExam} setTestConfig={setTestConfig} />}
+        {page === 'account' && <Account setActivePage={setPage} />}
+        {page === 'practiceHistory' && <PracticeHistory setActivePage={setPage} />}
+        {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={setPage} setTestConfig={setTestConfig} />}
+        {page === 'admin' && <AdminAny setActivePage={setPage} />}
+      </div>
+    </AuthProvider>
   )
 }

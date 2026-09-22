@@ -1,6 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
-import { db } from '../firebase'
-import { collection, query, where, getDocs } from 'firebase/firestore'
+import { useEffect, useState, useCallback } from 'react'
 import type { TestConfigType } from '../types'
 import './TestPage.css'
 
@@ -23,20 +21,37 @@ export default function Test({ setActivePage, testConfig }: Props) {
       setLoading(true)
       let fetched: Question[] = []
       try {
-        for (const s of testConfig.subjects) {
-          const q = query(collection(db, 'questions'), where('subject', '==', s.subject), where('examType', '==', testConfig.examType))
-          const snap = await getDocs(q)
-          snap.forEach(doc => {
-            const d = doc.data() as any
-            fetched.push({ id: doc.id, subject: d.subject, question: d.question, options: [d.options.A, d.options.B, d.options.C, d.options.D], answer: ['A','B','C','D'].indexOf(d.correctAnswer), explanation: d.explanation })
-          })
+        // Try current_questions from GeneralKnowledge
+        const cached = localStorage.getItem('current_questions')
+        if (cached) {
+          const data = JSON.parse(cached)
+          fetched = data.map((d: any, i: number) => ({
+            id: d.id || `q-${i}`,
+            subject: d.subject || testConfig.examType,
+            question: d.question,
+            options: Array.isArray(d.options)? d.options : [d.options.A, d.options.B, d.options.C, d.options.D],
+            answer: typeof d.answer === 'number'? d.answer : ['A','B','C','D'].indexOf(d.answer || 'A'),
+            explanation: d.explanation || ''
+          }))
+          localStorage.removeItem('current_questions')
+        } else {
+          // Flask API
+          const subjectsParam = testConfig.subjects.map((s:any)=>s.subject || s).join(',')
+          const res = await fetch(`http://127.0.0.1:5000/api/questions?examType=${testConfig.examType}&subjects=${subjectsParam}`)
+          const data = await res.json()
+          fetched = data.map((d: any) => ({
+            id: d.id, subject: d.subject, question: d.question,
+            options: Array.isArray(d.options)? d.options : Object.values(d.options),
+            answer: typeof d.answer === 'string'? ['A','B','C','D'].indexOf(d.answer) : d.answer,
+            explanation: d.explanation
+          }))
         }
-      } catch {}
+      } catch (e) { console.log(e) }
 
       if (fetched.length === 0) {
-        fetched = Array.from({ length: testConfig.totalQuestions }).map((_, i) => {
-          const sub = testConfig.subjects[i % testConfig.subjects.length]?.subject || testConfig.examType
-          return { id: `mock-${i}`, subject: sub, question: `${sub}: Question ${i+1} - What is correct? (MOCK DATA - Add real questions in Admin)`, options: ['Option A','Option B','Option C','Option D'], answer: i % 4, explanation: 'Add real questions in admin panel' }
+        fetched = Array.from({ length: testConfig.totalQuestions || 10 }).map((_, i) => {
+          const sub = (testConfig.subjects[i % testConfig.subjects.length] as any)?.subject || testConfig.examType
+          return { id: `mock-${i}`, subject: sub, question: `${sub}: Question ${i+1} (Add real questions in Flask Admin)`, options: ['Option A','Option B','Option C','Option D'], answer: i % 4, explanation: 'Add in admin' }
         })
       }
 
@@ -49,13 +64,12 @@ export default function Test({ setActivePage, testConfig }: Props) {
   }, [testConfig])
 
   const calculateDuration = useCallback(() => { const d = Date.now() - startTime; return `${Math.floor(d/60000)}m ${Math.floor((d%60000)/1000)}s` }, [startTime])
+
   const handleSubmit = useCallback(() => {
     if (!questions.length) return
-    const score = answers.reduce<number>((a, ans, i) => ans === questions[i]?.answer ? a + 1 : a, 0)
-    const result = { id: Date.now(), title: `${testConfig.examType} - ${testConfig.subjects.map(s=>s.subject).join(', ')}`, date: new Date().toISOString(), score, total: questions.length, duration: calculateDuration(), status: score >= questions.length*0.5? 'Passed':'Failed', mode: testConfig.mode, answers, correctAnswers: questions.map(q=>q.answer) }
+    const score = answers.reduce<number>((a, ans, i) => ans === questions[i]?.answer? a + 1 : a, 0)
+    const result = { id: Date.now(), title: `${testConfig.examType} - ${testConfig.subjects.map((s:any)=>s.subject || s).join(', ')}`, examTitle: testConfig.examTitle || testConfig.examType, subject: testConfig.subjects[0]?.subject, date: new Date().toISOString(), score, total: questions.length, duration: calculateDuration(), status: score >= questions.length*0.5? 'Passed':'Failed', mode: testConfig.mode, examType: testConfig.examType, answers, correctAnswers: questions.map(q=>q.answer), questions }
     localStorage.setItem('lastTestResult', JSON.stringify(result))
-    const h = JSON.parse(localStorage.getItem('practiceHistory') || '[]')
-    localStorage.setItem('practiceHistory', JSON.stringify([result,...h]))
     setActivePage('result')
   }, [answers, questions, testConfig, setActivePage, calculateDuration])
 
@@ -63,7 +77,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
 
   const formatTime = (s:number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`
 
-  if (loading) return <div className="test-page1" style={{color:'#fff',padding:20}}>Loading {testConfig.examType} questions...</div>
+  if (loading) return <div className="test-page1" style={{color:'#fff',padding:20}}>Loading {testConfig.examType} questions from Flask...</div>
 
   const q = questions[current]
   const answeredCount = answers.filter(a=>a!==null).length

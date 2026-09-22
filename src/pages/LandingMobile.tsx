@@ -31,10 +31,9 @@ export default function LandingMobile({ setActivePage }: { setActivePage: (p: st
           <span className="dot"></span> #1 CBT PLATFORM IN NIGERIA
         </div>
 
-        <h1 className="landing-h1">
-          Prepare<br/>Smarter,<br/>
-          <span className="accent">Practice</span><br/>Better
-        </h1>
+        <div className="landing-h1">
+          <h2>Prepare Smarter, <span className="accent">Practice</span> Better</h2>
+        </div>
 
         <p className="landing-p">
           Experience real JAMB, WAEC & NECO exams with our AI-powered platform. Get instant results & detailed analysis.

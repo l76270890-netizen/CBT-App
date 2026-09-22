@@ -1,101 +1,66 @@
 import { useState, useEffect } from 'react'
-import { onAuthStateChanged, updateProfile, signOut } from 'firebase/auth'
-import { doc, getDoc, updateDoc, collection, query, onSnapshot } from 'firebase/firestore'
-import { auth, db } from '../firebase'
+import { useAuth } from '../context/AuthContext'
 import { User, Download, Settings, HelpCircle, Info, ChevronRight, Crown, LogOut, Edit3, Camera } from 'lucide-react'
 import './Account.css'
 
-type Props = {
-  setActivePage: (page: string) => void
-}
+type Props = { setActivePage: (page: string) => void }
 
 export default function Account({ setActivePage }: Props) {
-  const [fbUser, setFbUser] = useState<any>(null)
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const { user, logout } = useAuth()
+  const [name, setName] = useState(user?.username || 'User')
+  const [email, setEmail] = useState(user?.email || '')
   const [photoURL, setPhotoURL] = useState('')
   const [practiced, setPracticed] = useState(0)
-  const [uploading, setUploading] = useState(false)
   const subscription = 'Free Plan'
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setFbUser(user)
-        setEmail(user.email || '')
-        try {
-          const snap = await getDoc(doc(db, 'users', user.uid))
-          const data = snap.data()
-          setName(user.displayName || data?.name || 'User')
-          setPhotoURL(user.photoURL || data?.photoURL || '')
-        } catch {
-          setName(user.displayName || 'User')
-          setPhotoURL(user.photoURL || '')
-        }
-
-        const q = query(collection(db, `users/${user.uid}/history`))
-        const unsubCount = onSnapshot(q, (snap) => {
-          setPracticed(snap.size)
-        })
-        return () => unsubCount()
-
-      } else {
-        setActivePage('landing')
-      }
-    })
-    return () => unsub()
-  }, [])
-
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !fbUser) return
-    if (file.size > 700 * 1024) return alert("Image must be <700KB (Firebase limit)")
-
-    setUploading(true)
-    try {
-      // Convert to Base64 - NO STORAGE NEEDED
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
-
-      await updateProfile(fbUser, { photoURL: base64 })
-      await updateDoc(doc(db, 'users', fbUser.uid), { photoURL: base64 })
-      setPhotoURL(base64)
-    } catch (err: any) {
-      alert("Upload failed: " + err.message)
+    if (!user) {
+      setActivePage('landing')
+      return
     }
-    setUploading(false)
-  }
+    setName(user.username || 'User')
+    setEmail(user.email || '')
+
+    // Flask history count
+    fetch(`http://127.0.0.1:5000/api/history/${user.user_id}`)
+      .then(r => r.json())
+      .then(data => setPracticed(data.length))
+      .catch(() => setPracticed(0))
+  }, [user])
 
   const handleEditName = async () => {
     const n = prompt("Enter new name", name)
-    if (!n || !fbUser) return
+    if (!n) return
+    setName(n)
+    // save to localStorage + Flask
+    const updated = { ...user, username: n }
+    localStorage.setItem('cbt_user', JSON.stringify(updated))
+    // optional: call Flask update
     try {
-      await updateProfile(fbUser, { displayName: n })
-      await updateDoc(doc(db, 'users', fbUser.uid), { name: n })
-      setName(n)
-    } catch (e: any) {
-      alert(e.message)
-    }
+      await fetch(`http://127.0.0.1:5000/api/update-user/${user.user_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: n })
+      })
+    } catch {}
   }
 
   const handleLogout = async () => {
     if (confirm("Logout?")) {
-      await signOut(auth)
+      logout()
       setActivePage('landing')
     }
   }
 
   const menuItems = [
-    { id: 'profile', label: 'Edit Profile', icon: User, desc: 'Update your name & photo', action: handleEditName },
-    { id: 'download', label: 'Downloaded Subjects', icon: Download, desc: `${practiced} offline tests saved`, action: () => setActivePage('practiceHistory') },
+    { id: 'profile', label: 'Edit Profile', icon: User, desc: 'Update your name', action: handleEditName },
+    { id: 'download', label: 'Practice History', icon: Download, desc: `${practiced} tests from Flask DB`, action: () => setActivePage('practiceHistory') },
     { id: 'settings', label: 'Settings', icon: Settings, desc: 'Theme, notifications', action: () => alert('Settings coming soon') },
-    { id: 'help', label: 'Help & Support', icon: HelpCircle, desc: 'Chat with us on WhatsApp', action: () => window.open('https://wa.me/2340000000000', '_blank') },
-    { id: 'about', label: 'About Us', icon: Info, desc: 'Version 1.0.0 • YOURCBT', action: () => alert('YOURCBT v1 - Built for Nigerian students 🇳🇬') },
+    { id: 'help', label: 'Help & Support', icon: HelpCircle, desc: 'Chat with us', action: () => window.open('https://wa.me/2340000000000', '_blank') },
+    { id: 'about', label: 'About Us', icon: Info, desc: 'Version 2.0 Flask • EXAMCORE', action: () => alert('EXAMCORE v2 - Flask + React 🇳🇬') },
   ]
+
+  if (!user) return null
 
   return (
     <div className="account-page">
@@ -106,17 +71,16 @@ export default function Account({ setActivePage }: Props) {
 
       <div className="profile-card">
         <div className="profile-avatar" style={{ position: 'relative', padding: 0, overflow: 'hidden', width: 70, height: 70 }}>
-          {photoURL? (
+          {photoURL ? (
             <img src={photoURL} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
           ) : (
             <span style={{ fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#1d4be3', color: '#fff', borderRadius: '50%' }}>{name.charAt(0).toUpperCase()}</span>
           )}
-          <label htmlFor="avatarUpload" style={{ position: 'absolute', bottom: -2, right: -2, background: '#1d4be3', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '2px solid #121212' }}><Camera size={14} color="#fff" /></label>
-          <input id="avatarUpload" type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
+          <label style={{ position: 'absolute', bottom: -2, right: -2, background: '#1d4be3', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '2px solid #121212' }}><Camera size={14} color="#fff" /></label>
         </div>
 
         <div className="profile-info">
-          <h2>{name} {uploading && <span style={{ fontSize: 12, color: '#1d4be3' }}>(uploading...)</span>}</h2>
+          <h2>{name}</h2>
           <p>{email}</p>
           <div className="badge-row">
             <span className="subscription-badge">{subscription}</span>
@@ -138,12 +102,12 @@ export default function Account({ setActivePage }: Props) {
       </div>
 
       <div className="upgrade-card">
-        <div className="upgrade-left"><div className="crown-icon"><Crown size={20}/></div><div><h3>Upgrade to Pro</h3><p>Unlock all questions + offline + no ads</p></div></div>
+        <div className="upgrade-left"><div className="crown-icon"><Crown size={20}/></div><div><h3>Upgrade to Pro</h3><p>Unlock all questions • Flask DB • No ads</p></div></div>
         <button className="btn-upgrade" onClick={() => alert('Pro coming soon - ₦2000/year')}>UPGRADE</button>
       </div>
 
       <button className="btn-logout" onClick={handleLogout}><LogOut size={16}/> Logout</button>
-      <p className="footer-text">Made with ❤️ for Nigerian Students</p>
+      <p className="footer-text">Flask + React • Made for Nigerian Students • {email}</p>
     </div>
   )
 }

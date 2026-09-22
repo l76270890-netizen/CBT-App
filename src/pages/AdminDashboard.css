@@ -1,6 +1,6 @@
 .admin-wrap {
   min-height: 100vh;
-  background: #0a0a0f;
+  background: #11111a;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -33,9 +33,9 @@
 .admin-header h2 { color: #fff; margin: 8px 0 2px; }
 .admin-header p { color: #8b8ba7; font-size: 12px; }
 
-.admin-field { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.admin-field { display: flex; flex-direction: column; gap: 6px; flex: 1; margin-bottom: 6px; }
 .admin-field label { font-size: 12px; font-weight: 600; color: #a1a1b5; text-transform: uppercase; letter-spacing: 0.5px; }
-.admin-field input,.admin-field select,.admin-field textarea {
+.admin-field input,.admin-field select,.admin-field textarea { margin-top: 4px;
   background: #0e0e16; border: 1px solid #252538; color: #fff;
   padding: 13px 14px; border-radius: 12px; outline: none; font-size: 14px; transition: 0.2s;
 }
@@ -47,7 +47,7 @@
 
 .option-field.is-correct input { border-color: #10b981; background: #0f1f1a; }
 
-.admin-btn { width: 100%; padding: 13px; border-radius: 12px; border: none; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 14px; }
+.admin-btn { width: 100%; padding: 13px; border-radius: 12px; border: none; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 14px; margin-top: 12px; }
 .admin-btn.primary { background: #6c5cff; color: #fff; }
 .admin-btn.primary:hover { background: #5b4af0; transform: translateY(-1px); }
 .admin-btn.primary.lg { padding: 15px; font-size: 15px; margin-top: 8px; }
