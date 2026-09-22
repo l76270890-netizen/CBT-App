@@ -18,4 +18,8 @@ export type TestConfigType = {
   difficulty: string
   showAnswers: boolean
   topic: string
+  // ADD THESE TO FIX BUILD
+  title?: string
+  examTitle?: string
+  subject?: string // for backwards compat
 }
