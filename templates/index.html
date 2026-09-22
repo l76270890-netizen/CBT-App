@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block body %}
+<div class="auth-wrapper">
+    <div class="auth-card">
+        <h1>Welcome Back</h1>
+        <p class="subtitle">Login to your account</p>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        {% for msg in messages %}
+        <p style="color:red; text-align:center;">{{ msg }}</p>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <form action="/login" method="post">
+            <div class="input-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" placeholder="Enter username" required>
+            </div>
+            <div class="input-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="Enter password" required>
+            </div>
+            <button type="submit" class="btn-primary">Login</button>
+        </form>
+        <p class="footer-text">Don't have account? <a href="/register">Register</a></p>
+    </div>
+</div>
+{% endblock %}

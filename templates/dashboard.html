@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block body %}
+<div class="dashboard">
+    <nav class="navbar">
+        <h2>Auth App</h2>
+        <div>
+            <span>Hi, {{ username }}</span>
+            <p>Your email: {{ email }}</p>
+            <a href="/logout" class="btn-logout">Logout</a>
+        </div>
+    </nav>
+
+    <div class="dash-content">
+        <h1>Dashboard</h1>
+        <p>You are successfully logged in!</p>
+
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Users</h3>
+                <p>1,240</p>
+            </div>
+            <div class="stat-card">
+                <h3>Projects</h3>
+                <p>12</p>
+            </div>
+            <div class="stat-card">
+                <h3>Status</h3>
+                <p>Active</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
