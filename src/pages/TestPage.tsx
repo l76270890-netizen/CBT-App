@@ -19,7 +19,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
   const getSubjectName = (s: any) => typeof s === 'string'? s : s?.subject || s?.name || 'General'
   const subjectsList: string[] = (testConfig.subjects || []).map(getSubjectName)
   const examType = testConfig.examType || 'JAMB'
-  const examTitle = testConfig.examTitle || testConfig.title || examType
+  const titleVal = testConfig.examTitle || testConfig.title || examType
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -50,7 +50,6 @@ export default function Test({ setActivePage, testConfig }: Props) {
           }))
         }
       } catch (e) { console.log(e) }
-
       if (fetched.length === 0) {
         const count = testConfig.totalQuestions || 10
         fetched = Array.from({ length: count }).map((_, i) => {
@@ -58,14 +57,12 @@ export default function Test({ setActivePage, testConfig }: Props) {
           return { id: `mock-${i}`, subject: sub, question: `${sub}: Question ${i + 1} (Add real questions in Flask Admin)`, options: ['Option A','Option B','Option C','Option D'], answer: i % 4, explanation: 'Add in admin' }
         })
       }
-
       const shuffled = fetched.sort(() => 0.5 - Math.random()).slice(0, testConfig.totalQuestions || fetched.length)
       setQuestions(shuffled)
       setAnswers(Array(shuffled.length).fill(null))
       setLoading(false)
     }
     fetchQuestions()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const calculateDuration = useCallback(() => { const d = Date.now() - startTime; return `${Math.floor(d/60000)}m ${Math.floor((d%60000)/1000)}s` }, [startTime])
@@ -76,13 +73,13 @@ export default function Test({ setActivePage, testConfig }: Props) {
     const result = {
       id: Date.now(),
       title: `${examType} - ${subjectsList.join(', ')}`,
-      examTitle: examTitle,
+      examTitle: titleVal,
       subject: subjectsList[0],
       date: new Date().toISOString(),
       score,
       total: questions.length,
       duration: calculateDuration(),
-      status: score >= questions.length*0.5? 'Passed':'Failed',
+      status: score >= questions.length*0.5? 'Passed' : 'Failed',
       mode: testConfig.mode,
       examType: examType,
       answers,
@@ -91,17 +88,13 @@ export default function Test({ setActivePage, testConfig }: Props) {
     }
     localStorage.setItem('lastTestResult', JSON.stringify(result))
     setActivePage('result')
-  }, [answers, questions, setActivePage, calculateDuration, examType, subjectsList, examTitle, testConfig.mode])
+  }, [answers, questions, setActivePage, calculateDuration, examType, subjectsList, titleVal, testConfig.mode])
 
   useEffect(() => { if(timeLeft<=0){handleSubmit(); return} const t=setInterval(()=>setTimeLeft(x=>x-1),1000); return()=>clearInterval(t)}, [timeLeft, handleSubmit])
-
   const formatTime = (s:number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`
-
   if (loading) return <div className="test-page1" style={{color:'#fff',padding:20}}>Loading {examType} questions from Flask...</div>
-
   const q = questions[current]
   const answeredCount = answers.filter(a=>a!==null).length
-
   return (
     <div className="test-page1">
       <div className="test-header">

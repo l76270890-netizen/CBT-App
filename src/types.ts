@@ -18,8 +18,33 @@ export type TestConfigType = {
   difficulty: string
   showAnswers: boolean
   topic: string
-  // ADD THESE TO FIX BUILD
   title?: string
   examTitle?: string
-  subject?: string // for backwards compat
+  subject?: string
+}
+
+export type Question = {
+  id: string
+  subject: string
+  question: string
+  options: string[]
+  answer: number
+  explanation?: string
+}
+
+export type TestResult = {
+  id: number
+  title: string
+  examTitle: string
+  subject: string
+  date: string
+  score: number
+  total: number
+  duration: string
+  status: 'Passed' | 'Failed'
+  mode: TestMode
+  examType: string
+  answers: (number | null)[]
+  correctAnswers: number[]
+  questions: Question[]
 }
