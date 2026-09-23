@@ -77,8 +77,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }
 
+  // NEW: Update avatar - saves to backend permanently
+  const updateAvatar = async (file: File) => {
+    if (!user?.user_id) return { success: false }
+    try {
+      const form = new FormData()
+      form.append('avatar', file)
+      const res = await fetch(`${API}/api/user/upload-avatar/${user.user_id}`, {
+        method: 'POST',
+        body: form
+      })
+      const data = await res.json()
+      if(!res.ok) throw new Error(data.message || 'Upload failed')
+      // data.profile_image is URL from backend
+      const updated = {...user, profile_image: data.profile_image }
+      localStorage.setItem('cbt_user', JSON.stringify(updated))
+      setUser(updated)
+      return { success: true, url: data.profile_image }
+    } catch (err: any) {
+      return { success: false, message: err.message }
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, setUserData, updateUser, loginDirect: setUserData }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, setUserData, updateUser, updateAvatar, loginDirect: setUserData }}>
       {children}
     </AuthContext.Provider>
   )

@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import "./AdminDashboard.css";
-import { API_URL as API } from "../config"; // <-- FIXED, uses your live link
+import { API_URL as API } from "../config";
 
 const defaultSubjects = ["Mathematics","English","Physics","Chemistry","Biology","Government","Economics","Literature","CRS","Geography"];
 const defaultExamTypes = ["JAMB","WAEC","NECO","POSTUTME"];
+
+// CHANGE THIS TO YOUR REAL ADMIN PASSWORD
+const ADMIN_PASSWORD = "admin123";
 
 type Exam = { id: string; title: string; examType: string; year: number; duration: number; subjects: string[] }
 
@@ -12,8 +15,14 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     const s = localStorage.getItem('cbt_user');
     return s? JSON.parse(s) : null;
   });
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(() => {
+    return localStorage.getItem('admin_unlocked') === 'true';
+  });
   const [email, setEmail] = useState("Lawrenceifeanyi0001@gmail.com");
   const [password, setPassword] = useState("");
+  const [adminPassInput, setAdminPassInput] = useState("");
+  const [adminPassError, setAdminPassError] = useState("");
+
   const [tab, setTab] = useState<"exams"|"questions">("exams");
   const [exams, setExams] = useState<Exam[]>([]);
   const [examTypes] = useState<string[]>(defaultExamTypes);
@@ -59,13 +68,24 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     }
   };
 
-  useEffect(()=>{ if(user) fetchExams(); }, [user]);
+  useEffect(()=>{ if(user && isAdminUnlocked) fetchExams(); }, [user, isAdminUnlocked]);
   useEffect(()=>{
     const ex = exams.find(x=>x.id===selectedExam);
     if(ex && ex.subjects.length>0 &&!ex.subjects.includes(selectedSubject)){
       setSelectedSubject(ex.subjects[0]);
     }
   }, [selectedExam, exams]);
+
+  const handleAdminUnlock = () => {
+    if(adminPassInput === ADMIN_PASSWORD){
+      setIsAdminUnlocked(true);
+      localStorage.setItem('admin_unlocked', 'true');
+      setAdminPassError("");
+      setAdminPassInput("");
+    } else {
+      setAdminPassError("❌ Wrong admin password!");
+    }
+  };
 
   const handleLogin = async () => {
     try{
@@ -181,6 +201,33 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setLoading(false);
   };
 
+  // STEP 1: ADMIN PASSWORD GATE - shows when user clicks admin
+  if(!isAdminUnlocked){
+    return (
+      <div className="admin-wrap"><div className="admin-login-card" style={{border:'1px solid #f59e0b'}}>
+        <div className="admin-logo">EXAMCORE<span>ADMIN</span></div>
+        <h2>🔒 Admin Locked</h2>
+        <p className="admin-sub">Enter admin password to continue</p>
+        <div className="admin-field">
+          <label>Admin Password</label>
+          <input
+            type="password"
+            value={adminPassInput}
+            onChange={e=>setAdminPassInput(e.target.value)}
+            placeholder="Enter admin password"
+            onKeyDown={e=> e.key==='Enter' && handleAdminUnlock()}
+            style={{border: adminPassError? '1px solid #ef4444' : ''}}
+          />
+          {adminPassError && <span style={{color:'#ef4444', fontSize:12, marginTop:4, display:'block'}}>{adminPassError}</span>}
+        </div>
+        <button className="admin-btn primary" onClick={handleAdminUnlock}>Unlock Admin 🔓</button>
+        <button className="admin-btn ghost" onClick={()=>setActivePage('home')}>← Back to Home</button>
+        <p style={{fontSize:11, color:'#888', marginTop:10, textAlign:'center'}}>Default: admin123 (change in code)</p>
+      </div></div>
+    )
+  }
+
+  // STEP 2: Normal login if not logged in
   if(!user) return (
     <div className="admin-wrap"><div className="admin-login-card">
       <div className="admin-logo">EXAMCORE<span>ADMIN</span></div>
@@ -189,6 +236,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
       <div className="admin-field"><label>Password</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="admin123"/></div>
       <button className="admin-btn primary" onClick={handleLogin}>Sign In to Flask</button>
       <button className="admin-btn ghost" onClick={()=>setActivePage('home')}>← Home</button>
+      <button className="admin-btn ghost" onClick={()=>{localStorage.removeItem('admin_unlocked'); setIsAdminUnlocked(false)}} style={{marginTop:8, color:'#ef4444'}}>Lock Admin Again</button>
     </div></div>
   );
 
@@ -196,7 +244,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     <div className="admin-wrap"><div className="admin-panel">
       <div className="admin-header">
         <div><div className="admin-logo small">EXAMCORE<span>ADMIN</span></div><p>{user.email}</p></div>
-        <div style={{display:"flex",gap:8}}><span className="admin-pill">{exams.length} Exams Flask</span><button className="admin-btn danger-sm" onClick={()=>{localStorage.clear(); setUser(null);}}>Logout</button></div>
+        <div style={{display:"flex",gap:8}}><span className="admin-pill">{exams.length} Exams Flask</span><button className="admin-btn danger-sm" onClick={()=>{localStorage.clear(); setUser(null); setIsAdminUnlocked(false)}}>Logout</button></div>
       </div>
 
       <div className="admin-tabs">

@@ -1,17 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { User, Download, Settings, HelpCircle, Info, ChevronRight, Crown, LogOut, Edit3, Camera } from 'lucide-react'
+import { User, Download, Settings, HelpCircle, Info, ChevronRight, Crown, LogOut, Edit3, Camera, Loader2 } from 'lucide-react'
 import './Account.css'
 import { API_URL } from '../config'
 
 type Props = { setActivePage: (page: string) => void }
 
 export default function Account({ setActivePage }: Props) {
-  const { user, logout } = useAuth()
+  const { user, logout, updateAvatar } = useAuth()
   const [name, setName] = useState(user?.username || 'User')
   const [email, setEmail] = useState(user?.email || '')
-  const [photoURL, setPhotoURL] = useState('')
+  const [photoURL, setPhotoURL] = useState(user?.profile_image || '')
   const [practiced, setPracticed] = useState(0)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
   const subscription = 'Free Plan'
 
   useEffect(() => {
@@ -21,11 +23,14 @@ export default function Account({ setActivePage }: Props) {
     }
     setName(user.username || 'User')
     setEmail(user.email || '')
+    setPhotoURL(user.profile_image || '')
 
-    // Flask history count - FIXED URL
     fetch(`${API_URL}/api/history/${user.user_id}`)
      .then(r => r.json())
-     .then(data => setPracticed(data.length))
+     .then(data => {
+       const onlyExams = Array.isArray(data) ? data.filter((h:any)=>h.mode!=='study') : []
+       setPracticed(onlyExams.length)
+     })
      .catch(() => setPracticed(0))
   }, [user])
 
@@ -44,6 +49,28 @@ export default function Account({ setActivePage }: Props) {
     } catch {}
   }
 
+  // NEW: Real avatar upload to backend
+  const handleAvatarClick = () => {
+    fileRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if(!file) return
+    if(file.size > 2*1024*1024){
+      alert("Image too large, max 2MB")
+      return
+    }
+    setUploading(true)
+    const result = await updateAvatar(file)
+    setUploading(false)
+    if(result.success){
+      setPhotoURL(result.url)
+    } else {
+      alert(result.message || "Upload failed")
+    }
+  }
+
   const handleLogout = async () => {
     if (confirm("Logout?")) {
       logout()
@@ -51,9 +78,13 @@ export default function Account({ setActivePage }: Props) {
     }
   }
 
+  const displayAvatar = photoURL 
+    ? photoURL.startsWith('http') ? photoURL : `${API_URL}/${photoURL}`
+    : ''
+
   const menuItems = [
     { id: 'profile', label: 'Edit Profile', icon: User, desc: 'Update your name', action: handleEditName },
-    { id: 'download', label: 'Practice History', icon: Download, desc: `${practiced} tests from Flask DB`, action: () => setActivePage('practiceHistory') },
+    { id: 'download', label: 'Practice History', icon: Download, desc: `${practiced} exams from Flask DB`, action: () => setActivePage('practiceHistory') },
     { id: 'settings', label: 'Settings', icon: Settings, desc: 'Theme, notifications', action: () => alert('Settings coming soon') },
     { id: 'help', label: 'Help & Support', icon: HelpCircle, desc: 'Chat with us', action: () => window.open('https://wa.me/2340000000000', '_blank') },
     { id: 'about', label: 'About Us', icon: Info, desc: 'Version 2.0 Flask • EXAMCORE', action: () => alert('EXAMCORE v2 - Flask + React 🇳🇬') },
@@ -69,13 +100,16 @@ export default function Account({ setActivePage }: Props) {
       </div>
 
       <div className="profile-card">
-        <div className="profile-avatar" style={{ position: 'relative', padding: 0, overflow: 'hidden', width: 70, height: 70 }}>
-          {photoURL? (
-            <img src={photoURL} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+        <div className="profile-avatar" style={{ position: 'relative', padding: 0, overflow: 'hidden', width: 70, height: 70, cursor:'pointer' }} onClick={handleAvatarClick}>
+          {displayAvatar? (
+            <img src={displayAvatar} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
           ) : (
             <span style={{ fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#1d4be3', color: '#fff', borderRadius: '50%' }}>{name.charAt(0).toUpperCase()}</span>
           )}
-          <label style={{ position: 'absolute', bottom: -2, right: -2, background: '#1d4be3', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '2px solid #121212' }}><Camera size={14} color="#fff" /></label>
+          <label style={{ position: 'absolute', bottom: -2, right: -2, background: '#1d4be3', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '2px solid #121212' }}>
+            {uploading ? <Loader2 size={14} color="#fff" className="spin" /> : <Camera size={14} color="#fff" />}
+          </label>
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleFileChange} />
         </div>
 
         <div className="profile-info">

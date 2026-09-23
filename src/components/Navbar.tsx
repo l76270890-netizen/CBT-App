@@ -106,7 +106,11 @@ export default function Navbar({ activePage, setActivePage }: any) {
     { id: 'logout', label: 'Log out', icon: LogOut, danger: true },
   ]
 
-  const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.username || user?.email || 'User')}&background=1d4be3&color=fff&bold=true`
+  // REPLACE this line only:
+const avatarUrl = user?.profile_image 
+  ? user.profile_image.startsWith('http') ? user.profile_image : `${API_URL}/${user.profile_image}`
+  : `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.username || user?.email || 'User')}&background=1d4be3&color=fff&bold=true`
+
   const unreadCount = useMemo(() => notifications.filter(n =>!n.read).length, [notifications])
 
   const handleNavClick = async (id: string) => {
