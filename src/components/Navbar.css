@@ -39,7 +39,8 @@ body {
   font-size: 20px;
   letter-spacing: -0.5px;
   color: #fff;
-  margin-left: 8px;
+  position: relative;
+  right: 80px;
 }
 
 .navbar-right {
@@ -610,7 +611,7 @@ body {
   }
 
   .span {
-    right: 8px;
+    right: -10px;
     position: relative;
   }
 }

@@ -13,10 +13,18 @@ export default function PracticeHistory({ setActivePage }: any) {
 
   useEffect(() => {
     if(!user?.user_id) return
-    fetch(`${API_URL}/api/history/${user.user_id}`).then(r=>r.json()).then(setHistory).catch(()=>{})
+    fetch(`${API_URL}/api/history/${user.user_id}`)
+     .then(r=>r.json())
+     .then((data: HistoryItem[]) => {
+        // HIDE STUDY MODE FROM HISTORY
+        const onlyExams = data.filter(h => h.mode!== 'study')
+        setHistory(onlyExams)
+      })
+     .catch(()=>{})
   }, [user])
 
   const filtered = useMemo(() => filter==='all'? history : history.filter(h=>h.status===filter), [history, filter])
+
   const summary = useMemo(() => {
     if(!history.length) return {avg:0,best:0,passed:0,total:0}
     const percents = history.map(h=>Math.round((h.score/h.total)*100))
@@ -28,19 +36,25 @@ export default function PracticeHistory({ setActivePage }: any) {
     await fetch(`${API_URL}/api/history/${id}`, { method: 'DELETE' })
     setHistory(prev=>prev.filter(h=>h.id!==id))
   }
+
   const handleClear = async () => {
-    if(!confirm("Clear all?")) return
+    if(!confirm("Clear all history? Only exams will be cleared. Study is never saved.")) return
     await fetch(`${API_URL}/api/history/clear/${user.user_id}`, { method: 'DELETE' })
     setHistory([])
   }
 
   if(history.length===0) return (
-    <section className="history-section"><div className="history-container"><div className="history-header"><h1>History</h1><p>Flask DB - No tests yet</p></div><div className="empty-state"><BarChart3 size={32}/><h3>No tests yet</h3><button onClick={()=>setActivePage('exams')} className="start-btn">Start Practice</button></div></div></section>
+    <section className="history-section">
+      <div className="history-container">
+        <div className="history-header"><h1>History</h1><p>Only exam tests are saved • Study practice is not saved</p></div>
+        <div className="empty-state"><BarChart3 size={32}/><h3>No exam history yet</h3><p style={{fontSize:13, color:'#888'}}>Study mode is practice and does not count</p><button onClick={()=>setActivePage('exams')} className="start-btn">Start Exam</button></div>
+      </div>
+    </section>
   )
 
   return (
     <section className="history-section"><div className="history-container">
-      <div className="history-header"><div><h1>History</h1><p>{summary.total} tests • {summary.passed} passed • Flask</p></div><button className="clear-all-btn" onClick={handleClear}><Trash2 size={14}/> Clear</button></div>
+      <div className="history-header"><div><h1>History</h1><p>{summary.total} exams • {summary.passed} passed • Study hidden</p></div><button className="clear-all-btn" onClick={handleClear}><Trash2 size={14}/> Clear Exams</button></div>
       <div className="summary-grid">
         <div className="summary-card"><Target size={18} className="s-blue"/><div><h3>{summary.avg}%</h3><span>Avg</span></div></div>
         <div className="summary-card"><Trophy size={18} className="s-gold"/><div><h3>{summary.best}%</h3><span>Best</span></div></div>

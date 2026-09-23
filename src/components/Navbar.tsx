@@ -1,20 +1,98 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Home, FileText, BookOpen, History, User, LogOut, Settings, Bell, Menu, X, ChevronRight, Edit2 } from 'lucide-react'
+import { Home, FileText, BookOpen, History, User, LogOut, Settings, Bell, Menu, X, ChevronRight, Edit2, CheckCheck, Trash2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import './Navbar.css'
+import { API_URL } from '../config'
+
+type Notif = { id: string; title: string; message: string; time: string; read: boolean; type: 'success'|'info'|'warning' }
 
 export default function Navbar({ activePage, setActivePage }: any) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [showNotif, setShowNotif] = useState(false)
-  const [notifications] = useState<any[]>([])
+  const [notifications, setNotifications] = useState<Notif[]>([])
   const [historyCount, setHistoryCount] = useState(0)
   const { user, logout } = useAuth()
 
+  // Load history count
   useEffect(() => {
     if(!user?.user_id) return
-    fetch(`http://localhost:5000/api/history/${user.user_id}`)
-   .then(r=>r.json()).then(data=> setHistoryCount(data.length)).catch(()=>{})
+    fetch(`${API_URL}/api/history/${user.user_id}`)
+  .then(r=>r.json()).then(data=> {
+      const onlyExams = data.filter((h:any)=>h.mode!=='study')
+      setHistoryCount(onlyExams.length)
+
+      // Auto generate notifications from history if empty
+      const saved = localStorage.getItem(`notifs_${user.user_id}`)
+      if(!saved && onlyExams.length>0){
+        const last = onlyExams[0]
+        const autoNotif: Notif = {
+          id: Date.now().toString(),
+          title: last.status==='Passed'? '🎉 You Passed!' : '📝 Test Completed',
+          message: `You scored ${last.score}/${last.total} in ${last.title}`,
+          time: new Date().toISOString(),
+          read: false,
+          type: last.status==='Passed'? 'success' : 'info'
+        }
+        setNotifications([autoNotif])
+      }
+   }).catch(()=>{})
   }, [user])
+
+  // Load notifications from localStorage
+  useEffect(() => {
+    if(!user?.user_id) return
+    const saved = localStorage.getItem(`notifs_${user.user_id}`)
+    if(saved){
+      try{ setNotifications(JSON.parse(saved)) }catch{}
+    } else {
+      // Welcome notif
+      const welcome: Notif[] = [{
+        id: 'welcome',
+        title: 'Welcome to EXAMCORE',
+        message: 'Start your first exam to see results here. Study mode will not notify.',
+        time: new Date().toISOString(),
+        read: false,
+        type: 'info'
+      }]
+      setNotifications(welcome)
+    }
+  }, [user?.user_id])
+
+  // Save to localStorage when changes
+  useEffect(() => {
+    if(!user?.user_id) return
+    localStorage.setItem(`notifs_${user.user_id}`, JSON.stringify(notifications))
+  }, [notifications, user?.user_id])
+
+  // Listen for new test result
+  useEffect(() => {
+    const handleNewResult = () => {
+      const lastResult = localStorage.getItem('lastTestResult')
+      if(!lastResult) return
+      try{
+        const res = JSON.parse(lastResult)
+        if(res.mode==='study') return // DONT NOTIFY FOR STUDY
+
+        const newNotif: Notif = {
+          id: res.id.toString(),
+          title: res.status==='Passed'? `🎉 Passed ${res.subject}` : `📚 Exam Finished`,
+          message: `Score: ${res.score}/${res.total} • ${res.duration} • ${res.status}`,
+          time: new Date().toISOString(),
+          read: false,
+          type: res.status==='Passed'? 'success' : 'warning'
+        }
+        setNotifications(prev=>{
+          if(prev.find(n=>n.id===newNotif.id)) return prev
+          return [newNotif,...prev].slice(0,20)
+        })
+      }catch{}
+    }
+
+    window.addEventListener('storage', handleNewResult)
+    // Also check every 2 sec for same tab
+    const interval = setInterval(handleNewResult, 2000)
+    return ()=>{ window.removeEventListener('storage', handleNewResult); clearInterval(interval)}
+  }, [])
 
   const navItems = [
     { id: 'home', label: 'Home', icon: Home, mobileLabel: 'Home' },
@@ -39,6 +117,17 @@ export default function Navbar({ activePage, setActivePage }: any) {
     setActivePage(id); setMenuOpen(false); setShowNotif(false)
   }
 
+  const markAllRead = () => {
+    setNotifications(prev=> prev.map(n=>({...n, read:true})))
+  }
+  const clearNotifs = () => {
+    if(!confirm("Clear all notifications?")) return
+    setNotifications([])
+  }
+  const markOneRead = (id:string) => {
+    setNotifications(prev=> prev.map(n=> n.id===id? {...n, read:true}: n))
+  }
+
   return (
     <>
       <header className="navbar">
@@ -60,10 +149,54 @@ export default function Navbar({ activePage, setActivePage }: any) {
                 </div>
               </div>
             )}
-            <button className="bell-btn" onClick={() => setShowNotif(!showNotif)}><Bell size={20} />{unreadCount>0 && <span className="bell-dot">{unreadCount}</span>}</button>
+            <div style={{position:'relative'}}>
+              <button className="bell-btn" onClick={() => setShowNotif(!showNotif)}><Bell size={20} />{unreadCount>0 && <span className="bell-dot">{unreadCount>9? '9+': unreadCount}</span>}</button>
+
+              {showNotif && (
+                <div className="notif-dropdown" style={{
+                  position:'absolute', right:0, top:'45px', width:'360px', maxWidth:'90vw',
+                  background:'#111827', color:'#f9fafb', borderRadius:'16px', boxShadow:'0 20px 60px rgba(0,0,0,0.15)',
+                  border:'1px solid #e5e7eb', zIndex:100, overflow:'hidden'
+                }}>
+                  <div style={{padding:'14px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #f3f4f6'}}>
+                    <h4 style={{margin:0, fontSize:14, fontWeight:700}}>Notifications {unreadCount>0 && `(${unreadCount})`}</h4>
+                    <div style={{display:'flex', gap:8}}>
+                      <button onClick={markAllRead} style={{border:'none', background:'#f3f4f6', padding:'6px 10px', borderRadius:8, fontSize:11, fontWeight:600, cursor:'pointer'}}><CheckCheck size={12}/> Read</button>
+                      <button onClick={clearNotifs} style={{border:'none', background:'#fef2f2', color:'#dc2626', padding:'6px 10px', borderRadius:8, fontSize:11, fontWeight:600, cursor:'pointer'}}><Trash2 size={12}/> Clear</button>
+                    </div>
+                  </div>
+                  <div style={{maxHeight:'380px', overflowY:'auto'}}>
+                    {notifications.length===0? (
+                      <div style={{padding:'30px', textAlign:'center', color:'#9ca3af'}}>
+                        <Bell size={24} style={{margin:'0 auto 8px', display:'block', opacity:0.5}}/>
+                        <p style={{fontSize:13}}>No notifications yet</p>
+                        <p style={{fontSize:11}}>Exam results will appear here. Study mode is hidden.</p>
+                      </div>
+                    ) : notifications.map(n=>(
+                      <div key={n.id} onClick={()=>markOneRead(n.id)} style={{
+                        padding:'12px 16px', borderBottom:'1px solid #f9fafb', cursor:'pointer',
+                        background: n.read? '#fff' : '#f8fafc', display:'flex', gap:12
+                      }}>
+                        <div style={{width:32, height:32, borderRadius:'50%', background: n.type==='success'? '#dcfce7' : n.type==='warning'? '#fef3c7' : '#dbeafe', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0}}>
+                          {n.type==='success'? '🎉' : n.type==='warning'? '⚠️' : '📢'}
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:13, fontWeight: n.read? 500 : 700, color:'#111827'}}>{n.title}</div>
+                          <div style={{fontSize:12, color:'#6b7280', marginTop:2}}>{n.message}</div>
+                          <div style={{fontSize:10, color:'#9ca3af', marginTop:4}}>{new Date(n.time).toLocaleString()}</div>
+                        </div>
+                        {!n.read && <div style={{width:8, height:8, borderRadius:'50%', background:'#3b82f6', marginTop:6}}></div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
+
+      {showNotif && <div style={{position:'fixed', inset:0, zIndex:90}} onClick={()=>setShowNotif(false)}></div>}
 
       <div className={`sidebar-overlay ${menuOpen? 'show' : ''}`} onClick={() => setMenuOpen(false)}></div>
       <aside className={`sidebar ${menuOpen? 'open' : ''}`}>
@@ -73,7 +206,7 @@ export default function Navbar({ activePage, setActivePage }: any) {
             <div className="profile-text">
               <h3>{user?.username || 'User'}</h3>
               <span style={{ fontSize: 12, opacity: 0.7, wordBreak:'break-all' }}>{user?.email || 'Not logged in'}</span>
-              <span>Free Plan • {historyCount} Tests</span>
+              <span>Free Plan • {historyCount} Exams • {unreadCount} new</span>
             </div>
             <button className="edit-profile" onClick={() => handleNavClick('account')}><Edit2 size={12} /> Edit</button>
           </div>
@@ -88,7 +221,7 @@ export default function Navbar({ activePage, setActivePage }: any) {
       </aside>
 
       <nav className="bottom-nav">
-        {navItems.map(item => { const Icon = item.icon; return <button key={item.id} className={`nav-item ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><span className="nav-icon-wrap"><Icon size={22} /></span><span className="nav-label">{item.mobileLabel}</span></button> })}
+        {navItems.map(item => { const Icon = item.icon; return <button key={item.id} className={`nav-item ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><span className="nav-icon-wrap"><Icon size={22} />{item.id==='practiceHistory' && unreadCount>0 && <span style={{position:'absolute', top:-4, right:-4, width:8, height:8, background:'transparent', borderRadius:'50%'}}></span>}</span><span className="nav-label">{item.mobileLabel}</span></button> })}
       </nav>
     </>
   )
