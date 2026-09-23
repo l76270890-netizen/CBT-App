@@ -13,15 +13,12 @@ export default function Navbar({ activePage, setActivePage }: any) {
   const [historyCount, setHistoryCount] = useState(0)
   const { user, logout } = useAuth()
 
-  // Load history count
   useEffect(() => {
     if(!user?.user_id) return
     fetch(`${API_URL}/api/history/${user.user_id}`)
-  .then(r=>r.json()).then(data=> {
+ .then(r=>r.json()).then(data=> {
       const onlyExams = data.filter((h:any)=>h.mode!=='study')
       setHistoryCount(onlyExams.length)
-
-      // Auto generate notifications from history if empty
       const saved = localStorage.getItem(`notifs_${user.user_id}`)
       if(!saved && onlyExams.length>0){
         const last = onlyExams[0]
@@ -38,14 +35,12 @@ export default function Navbar({ activePage, setActivePage }: any) {
    }).catch(()=>{})
   }, [user])
 
-  // Load notifications from localStorage
   useEffect(() => {
     if(!user?.user_id) return
     const saved = localStorage.getItem(`notifs_${user.user_id}`)
     if(saved){
       try{ setNotifications(JSON.parse(saved)) }catch{}
     } else {
-      // Welcome notif
       const welcome: Notif[] = [{
         id: 'welcome',
         title: 'Welcome to EXAMCORE',
@@ -58,21 +53,18 @@ export default function Navbar({ activePage, setActivePage }: any) {
     }
   }, [user?.user_id])
 
-  // Save to localStorage when changes
   useEffect(() => {
     if(!user?.user_id) return
     localStorage.setItem(`notifs_${user.user_id}`, JSON.stringify(notifications))
   }, [notifications, user?.user_id])
 
-  // Listen for new test result
   useEffect(() => {
     const handleNewResult = () => {
       const lastResult = localStorage.getItem('lastTestResult')
       if(!lastResult) return
       try{
         const res = JSON.parse(lastResult)
-        if(res.mode==='study') return // DONT NOTIFY FOR STUDY
-
+        if(res.mode==='study') return
         const newNotif: Notif = {
           id: res.id.toString(),
           title: res.status==='Passed'? `🎉 Passed ${res.subject}` : `📚 Exam Finished`,
@@ -87,9 +79,7 @@ export default function Navbar({ activePage, setActivePage }: any) {
         })
       }catch{}
     }
-
     window.addEventListener('storage', handleNewResult)
-    // Also check every 2 sec for same tab
     const interval = setInterval(handleNewResult, 2000)
     return ()=>{ window.removeEventListener('storage', handleNewResult); clearInterval(interval)}
   }, [])
@@ -106,10 +96,15 @@ export default function Navbar({ activePage, setActivePage }: any) {
     { id: 'logout', label: 'Log out', icon: LogOut, danger: true },
   ]
 
-  // REPLACE this line only:
-const avatarUrl = user?.profile_image 
-  ? user.profile_image.startsWith('http') ? user.profile_image : `${API_URL}/${user.profile_image}`
-  : `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.username || user?.email || 'User')}&background=1d4be3&color=fff&bold=true`
+  // === FIXED PERMANENT AVATAR URL ===
+  const avatarUrl = useMemo(() => {
+    const img = user?.profile_image
+    if (!img) return `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.username || user?.email || 'User')}&background=1d4be3&color=fff&bold=true`
+    if (img.startsWith('http')) return img
+    if (img.startsWith('/uploads')) return `${API_URL}${img}`
+    if (img.startsWith('avatars/') || img.startsWith('questions/')) return `${API_URL}/uploads/${img}`
+    return `${API_URL}/uploads/avatars/${img}`
+  }, [user?.profile_image, user?.username, user?.email])
 
   const unreadCount = useMemo(() => notifications.filter(n =>!n.read).length, [notifications])
 
@@ -121,16 +116,9 @@ const avatarUrl = user?.profile_image
     setActivePage(id); setMenuOpen(false); setShowNotif(false)
   }
 
-  const markAllRead = () => {
-    setNotifications(prev=> prev.map(n=>({...n, read:true})))
-  }
-  const clearNotifs = () => {
-    if(!confirm("Clear all notifications?")) return
-    setNotifications([])
-  }
-  const markOneRead = (id:string) => {
-    setNotifications(prev=> prev.map(n=> n.id===id? {...n, read:true}: n))
-  }
+  const markAllRead = () => setNotifications(prev=> prev.map(n=>({...n, read:true})))
+  const clearNotifs = () => { if(!confirm("Clear all notifications?")) return; setNotifications([]) }
+  const markOneRead = (id:string) => setNotifications(prev=> prev.map(n=> n.id===id? {...n, read:true}: n))
 
   return (
     <>
@@ -138,11 +126,9 @@ const avatarUrl = user?.profile_image
         <div className="navbar-container">
           <button className="hamburger" onClick={() => setMenuOpen(true)}><Menu size={20} /></button>
           <div className="home-logo-box">E</div><span className='span'>EXAMCORE</span>
-
           <nav className="nav-links">
             {navItems.map(item => { const Icon = item.icon; return <button key={item.id} className={`nav-link ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><Icon size={18} /> {item.label}</button> })}
           </nav>
-
           <div className="navbar-right">
             {user && (
               <div className="navbar-user">
@@ -155,13 +141,8 @@ const avatarUrl = user?.profile_image
             )}
             <div style={{position:'relative'}}>
               <button className="bell-btn" onClick={() => setShowNotif(!showNotif)}><Bell size={20} />{unreadCount>0 && <span className="bell-dot">{unreadCount>9? '9+': unreadCount}</span>}</button>
-
               {showNotif && (
-                <div className="notif-dropdown" style={{
-                  position:'absolute', right:0, top:'45px', width:'360px', maxWidth:'90vw',
-                  background:'#111827', color:'#f9fafb', borderRadius:'16px', boxShadow:'0 20px 60px rgba(0,0,0,0.15)',
-                  border:'1px solid #e5e7eb', zIndex:100, overflow:'hidden'
-                }}>
+                <div className="notif-dropdown" style={{position:'absolute', right:0, top:'45px', width:'360px', maxWidth:'90vw', background:'#111827', color:'#f9fafb', borderRadius:'16px', boxShadow:'0 20px 60px rgba(0,0,0,0.15)', border:'1px solid #e5e7eb', zIndex:100, overflow:'hidden'}}>
                   <div style={{padding:'14px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #f3f4f6'}}>
                     <h4 style={{margin:0, fontSize:14, fontWeight:700}}>Notifications {unreadCount>0 && `(${unreadCount})`}</h4>
                     <div style={{display:'flex', gap:8}}>
@@ -177,10 +158,7 @@ const avatarUrl = user?.profile_image
                         <p style={{fontSize:11}}>Exam results will appear here. Study mode is hidden.</p>
                       </div>
                     ) : notifications.map(n=>(
-                      <div key={n.id} onClick={()=>markOneRead(n.id)} style={{
-                        padding:'12px 16px', borderBottom:'1px solid #f9fafb', cursor:'pointer',
-                        background: n.read? '#fff' : '#f8fafc', display:'flex', gap:12
-                      }}>
+                      <div key={n.id} onClick={()=>markOneRead(n.id)} style={{padding:'12px 16px', borderBottom:'1px solid #f9fafb', cursor:'pointer', background: n.read? '#fff' : '#f8fafc', display:'flex', gap:12}}>
                         <div style={{width:32, height:32, borderRadius:'50%', background: n.type==='success'? '#dcfce7' : n.type==='warning'? '#fef3c7' : '#dbeafe', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0}}>
                           {n.type==='success'? '🎉' : n.type==='warning'? '⚠️' : '📢'}
                         </div>
@@ -199,9 +177,7 @@ const avatarUrl = user?.profile_image
           </div>
         </div>
       </header>
-
       {showNotif && <div style={{position:'fixed', inset:0, zIndex:90}} onClick={()=>setShowNotif(false)}></div>}
-
       <div className={`sidebar-overlay ${menuOpen? 'show' : ''}`} onClick={() => setMenuOpen(false)}></div>
       <aside className={`sidebar ${menuOpen? 'open' : ''}`}>
         <div className="sidebar-header">
@@ -223,9 +199,8 @@ const avatarUrl = user?.profile_image
         </nav>
         <div className="sidebar-footer">EXAMCORE v1.0 • {user?.email} • {historyCount} Tests 🇳🇬</div>
       </aside>
-
       <nav className="bottom-nav">
-        {navItems.map(item => { const Icon = item.icon; return <button key={item.id} className={`nav-item ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><span className="nav-icon-wrap"><Icon size={22} />{item.id==='practiceHistory' && unreadCount>0 && <span style={{position:'absolute', top:-4, right:-4, width:8, height:8, background:'transparent', borderRadius:'50%'}}></span>}</span><span className="nav-label">{item.mobileLabel}</span></button> })}
+        {navItems.map(item => { const Icon = item.icon; return <button key={item.id} className={`nav-item ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><span className="nav-icon-wrap"><Icon size={22} /></span><span className="nav-label">{item.mobileLabel}</span></button> })}
       </nav>
     </>
   )

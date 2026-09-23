@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { User, Download, Settings, HelpCircle, Info, ChevronRight, Crown, LogOut, Edit3, Camera, Loader2 } from 'lucide-react'
 import './Account.css'
@@ -17,21 +17,17 @@ export default function Account({ setActivePage }: Props) {
   const subscription = 'Free Plan'
 
   useEffect(() => {
-    if (!user) {
-      setActivePage('landing')
-      return
-    }
+    if (!user) { setActivePage('landing'); return }
     setName(user.username || 'User')
     setEmail(user.email || '')
     setPhotoURL(user.profile_image || '')
-
     fetch(`${API_URL}/api/history/${user.user_id}`)
-     .then(r => r.json())
-     .then(data => {
-       const onlyExams = Array.isArray(data) ? data.filter((h:any)=>h.mode!=='study') : []
+    .then(r => r.json())
+    .then(data => {
+       const onlyExams = Array.isArray(data)? data.filter((h:any)=>h.mode!=='study') : []
        setPracticed(onlyExams.length)
      })
-     .catch(() => setPracticed(0))
+    .catch(() => setPracticed(0))
   }, [user])
 
   const handleEditName = async () => {
@@ -49,38 +45,35 @@ export default function Account({ setActivePage }: Props) {
     } catch {}
   }
 
-  // NEW: Real avatar upload to backend
-  const handleAvatarClick = () => {
-    fileRef.current?.click()
-  }
+  const handleAvatarClick = () => fileRef.current?.click()
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if(!file) return
-    if(file.size > 2*1024*1024){
-      alert("Image too large, max 2MB")
-      return
-    }
+    if(file.size > 2*1024*1024){ alert("Image too large, max 2MB"); return }
     setUploading(true)
     const result = await updateAvatar(file)
     setUploading(false)
     if(result.success){
-      setPhotoURL(result.url)
+      setPhotoURL(result.url) // result.url is already full permanent URL
     } else {
       alert(result.message || "Upload failed")
     }
   }
 
   const handleLogout = async () => {
-    if (confirm("Logout?")) {
-      logout()
-      setActivePage('landing')
-    }
+    if (confirm("Logout?")) { logout(); setActivePage('landing') }
   }
 
-  const displayAvatar = photoURL 
-    ? photoURL.startsWith('http') ? photoURL : `${API_URL}/${photoURL}`
-    : ''
+  // === FIXED PERMANENT AVATAR URL ===
+  const displayAvatar = useMemo(() => {
+    const img = photoURL
+    if (!img) return ''
+    if (img.startsWith('http')) return img
+    if (img.startsWith('/uploads')) return `${API_URL}${img}`
+    if (img.startsWith('avatars/') || img.startsWith('questions/')) return `${API_URL}/uploads/${img}`
+    return `${API_URL}/uploads/avatars/${img}`
+  }, [photoURL])
 
   const menuItems = [
     { id: 'profile', label: 'Edit Profile', icon: User, desc: 'Update your name', action: handleEditName },
@@ -98,7 +91,6 @@ export default function Account({ setActivePage }: Props) {
         <h1>Account</h1>
         <button className="edit-btn" onClick={handleEditName}><Edit3 size={16}/> Edit</button>
       </div>
-
       <div className="profile-card">
         <div className="profile-avatar" style={{ position: 'relative', padding: 0, overflow: 'hidden', width: 70, height: 70, cursor:'pointer' }} onClick={handleAvatarClick}>
           {displayAvatar? (
@@ -107,11 +99,10 @@ export default function Account({ setActivePage }: Props) {
             <span style={{ fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#1d4be3', color: '#fff', borderRadius: '50%' }}>{name.charAt(0).toUpperCase()}</span>
           )}
           <label style={{ position: 'absolute', bottom: -2, right: -2, background: '#1d4be3', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '2px solid #121212' }}>
-            {uploading ? <Loader2 size={14} color="#fff" className="spin" /> : <Camera size={14} color="#fff" />}
+            {uploading? <Loader2 size={14} color="#fff" className="spin" /> : <Camera size={14} color="#fff" />}
           </label>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleFileChange} />
         </div>
-
         <div className="profile-info">
           <h2>{name}</h2>
           <p>{email}</p>
@@ -121,7 +112,6 @@ export default function Account({ setActivePage }: Props) {
           </div>
         </div>
       </div>
-
       <div className="account-menu">
         {menuItems.map(item => {
           const Icon = item.icon
@@ -133,12 +123,10 @@ export default function Account({ setActivePage }: Props) {
           )
         })}
       </div>
-
       <div className="upgrade-card">
         <div className="upgrade-left"><div className="crown-icon"><Crown size={20}/></div><div><h3>Upgrade to Pro</h3><p>Unlock all questions • Flask DB • No ads</p></div></div>
         <button className="btn-upgrade" onClick={() => alert('Pro coming soon - ₦2000/year')}>UPGRADE</button>
       </div>
-
       <button className="btn-logout" onClick={handleLogout}><LogOut size={16}/> Logout</button>
       <p className="footer-text">Flask + React • Made for Nigerian Students • {email}</p>
     </div>

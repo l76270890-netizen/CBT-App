@@ -77,24 +77,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }
 
-  // NEW: Update avatar - saves to backend permanently
+  // FIXED: Update avatar - permanent + returns full URL correctly
   const updateAvatar = async (file: File) => {
-    if (!user?.user_id) return { success: false }
+    if (!user?.user_id) return { success: false, message: "Not logged in" }
     try {
       const form = new FormData()
       form.append('avatar', file)
+      
       const res = await fetch(`${API}/api/user/upload-avatar/${user.user_id}`, {
         method: 'POST',
         body: form
       })
-      const data = await res.json()
-      if(!res.ok) throw new Error(data.message || 'Upload failed')
-      // data.profile_image is URL from backend
+
+      // IMPORTANT: Check text first to avoid <!doctype error
+      const text = await res.text()
+      let data
+      try {
+        data = JSON.parse(text)
+      } catch {
+        console.error("Backend returned HTML:", text.slice(0,300))
+        throw new Error("Backend error - is Flask running on 5000? Got HTML not JSON")
+      }
+
+      if(!res.ok || !data.success) throw new Error(data.message || 'Upload failed')
+
+      // data.profile_image = "avatars/avatar_1_123.jpg"
+      // data.url = "/uploads/avatars/avatar_1_123.jpg"
+      const fullUrl = `${API}${data.url}` // Permanent full URL
+      
       const updated = {...user, profile_image: data.profile_image }
       localStorage.setItem('cbt_user', JSON.stringify(updated))
       setUser(updated)
-      return { success: true, url: data.profile_image }
+
+      return { success: true, url: fullUrl, profile_image: data.profile_image }
     } catch (err: any) {
+      console.error(err)
       return { success: false, message: err.message }
     }
   }
