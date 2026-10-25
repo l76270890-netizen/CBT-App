@@ -254,6 +254,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
 
     Papa.parse<Record<string, string>>(file, {
       header: true,
+      delimiter: ",",
       skipEmptyLines: "greedy",
       transformHeader: header => header.trim().toLowerCase().replace(/[^a-z0-9]/g, ""),
       complete: results => {
