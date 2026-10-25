@@ -26,6 +26,7 @@ type CsvQuestionRow = {
 }
 
 const csvHeaders = ["question", "optionA", "optionB", "optionC", "optionD", "correctAnswer", "explanation"];
+const normalizedCsvHeaders = csvHeaders.map(header => header.toLowerCase());
 const maxCsvFileBytes = 5 * 1024 * 1024;
 const maxCsvRows = 500;
 
@@ -235,7 +236,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     URL.revokeObjectURL(url);
   };
 
-  const handleCsvFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleCsvFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     setCsvRows([]);
@@ -252,68 +253,83 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
       return;
     }
 
-    Papa.parse<Record<string, string>>(file, {
-      header: true,
-      delimiter: ",",
-      skipEmptyLines: "greedy",
-      transformHeader: header => header.trim().toLowerCase().replace(/[^a-z0-9]/g, ""),
-      complete: results => {
-        if (results.errors.length > 0) {
-          setCsvError(`Could not read this CSV: ${results.errors[0].message}`);
-          return;
-        }
-        if (results.data.length === 0) {
-          setCsvError("The CSV has no question rows yet.");
-          return;
-        }
-        if (results.data.length > maxCsvRows) {
-          setCsvError(`This file has ${results.data.length} rows. Import up to ${maxCsvRows} questions at a time.`);
-          return;
-        }
+    try {
+      const contents = await file.text();
+      const parseWithDelimiter = (delimiter: string) => Papa.parse<Record<string, string>>(contents, {
+        header: true,
+        delimiter,
+        skipEmptyLines: "greedy",
+        transformHeader: header => header.trim().toLowerCase().replace(/[^a-z0-9]/g, ""),
+      });
+      const candidates = [",", ";", "\t"].map(parseWithDelimiter);
+      const scoreHeaders = (fields: string[] | undefined) =>
+        normalizedCsvHeaders.filter(header => fields?.includes(header)).length;
+      const results = candidates.reduce((best, candidate) =>
+        scoreHeaders(candidate.meta.fields) > scoreHeaders(best.meta.fields) ? candidate : best,
+      );
 
-        const availableHeaders = results.meta.fields || [];
-        const missingHeaders = csvHeaders.filter(header => !availableHeaders.includes(header.toLowerCase()));
-        if (missingHeaders.length > 0) {
+      const parseErrors = results.errors.filter(error => error.code !== "UndetectableDelimiter");
+      if (parseErrors.length > 0) {
+        setCsvError(`Could not read this CSV: ${parseErrors[0].message}`);
+        return;
+      }
+      if (results.data.length === 0) {
+        setCsvError("The CSV has no question rows yet.");
+        return;
+      }
+      if (results.data.length > maxCsvRows) {
+        setCsvError(`This file has ${results.data.length} rows. Import up to ${maxCsvRows} questions at a time.`);
+        return;
+      }
+
+      const availableHeaders = results.meta.fields || [];
+      const missingHeaders = csvHeaders.filter((_, index) => !availableHeaders.includes(normalizedCsvHeaders[index]));
+      if (missingHeaders.length > 0) {
+        if (missingHeaders.length === csvHeaders.length) {
+          setCsvError("Could not find the template columns. Use the downloaded CSV template; do not rename an Excel .xlsx file to .csv.");
+        } else {
           setCsvError(`Missing required columns: ${missingHeaders.join(", ")}. Download the template for the correct format.`);
-          return;
         }
+        return;
+      }
 
-        const seenQuestions = new Set<string>();
-        const parsedRows = results.data.map((row, index): CsvQuestionRow => {
-          const questionText = String(row.question ?? "").trim();
-          const optionA = String(row.optiona ?? "").trim();
-          const optionB = String(row.optionb ?? "").trim();
-          const optionC = String(row.optionc ?? "").trim();
-          const optionD = String(row.optiond ?? "").trim();
-          const correctAnswer = String(row.correctanswer ?? "").trim().toUpperCase();
-          const explanationText = String(row.explanation ?? "").trim();
-          const errors: string[] = [];
+      const seenQuestions = new Set<string>();
+      const parsedRows = results.data.map((row, index): CsvQuestionRow => {
+        const questionText = String(row.question ?? "").trim();
+        const optionA = String(row.optiona ?? "").trim();
+        const optionB = String(row.optionb ?? "").trim();
+        const optionC = String(row.optionc ?? "").trim();
+        const optionD = String(row.optiond ?? "").trim();
+        const correctAnswer = String(row.correctanswer ?? "").trim().toUpperCase();
+        const explanationText = String(row.explanation ?? "").trim();
+        const errors: string[] = [];
 
-          if (!questionText) errors.push("Question is required");
-          if (!optionA || !optionB || !optionC || !optionD) errors.push("All four options are required");
-          if (!["A", "B", "C", "D"].includes(correctAnswer)) errors.push("Correct answer must be A, B, C, or D");
+        if (!questionText) errors.push("Question is required");
+        if (!optionA || !optionB || !optionC || !optionD) errors.push("All four options are required");
+        if (!["A", "B", "C", "D"].includes(correctAnswer)) errors.push("Correct answer must be A, B, C, or D");
 
-          const questionKey = questionText.toLowerCase().replace(/\s+/g, " ");
-          if (questionKey && seenQuestions.has(questionKey)) errors.push("Duplicate question in this file");
-          if (questionKey) seenQuestions.add(questionKey);
+        const questionKey = questionText.toLowerCase().replace(/\s+/g, " ");
+        if (questionKey && seenQuestions.has(questionKey)) errors.push("Duplicate question in this file");
+        if (questionKey) seenQuestions.add(questionKey);
 
-          return {
-            rowNumber: index + 2,
-            question: questionText,
-            optionA,
-            optionB,
-            optionC,
-            optionD,
-            correctAnswer,
-            explanation: explanationText,
-            errors,
-          };
-        });
+        return {
+          rowNumber: index + 2,
+          question: questionText,
+          optionA,
+          optionB,
+          optionC,
+          optionD,
+          correctAnswer,
+          explanation: explanationText,
+          errors,
+        };
+      });
 
-        setCsvFileName(file.name);
-        setCsvRows(parsedRows);
-      },
-    });
+      setCsvFileName(file.name);
+      setCsvRows(parsedRows);
+    } catch {
+      setCsvError("Could not read this file. Try saving it again as a CSV and re-uploading it.");
+    }
   };
 
   const importCsvQuestions = async () => {
