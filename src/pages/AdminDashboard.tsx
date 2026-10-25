@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent } from "react";
+import Papa from "papaparse";
+import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import "./AdminDashboard.css";
 import { API_URL as API } from "../config";
 
@@ -9,6 +11,23 @@ const defaultExamTypes = ["JAMB","WAEC","NECO","POSTUTME"];
 const ADMIN_PASSWORD = "admin123";
 
 type Exam = { id: string; title: string; examType: string; year: number; duration: number; subjects: string[] }
+type CsvQuestionRow = {
+  rowNumber: number;
+  question: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  correctAnswer: string;
+  explanation: string;
+  errors: string[];
+  status?: "imported" | "failed";
+  importError?: string;
+}
+
+const csvHeaders = ["question", "optionA", "optionB", "optionC", "optionD", "correctAnswer", "explanation"];
+const maxCsvFileBytes = 5 * 1024 * 1024;
+const maxCsvRows = 500;
 
 export default function AdminDashboard({ setActivePage }: { setActivePage: (p:string)=>void }) {
   const [user, setUser] = useState<any>(() => {
@@ -46,6 +65,11 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [options, setOptions] = useState(["","","",""]);
   const [correct, setCorrect] = useState("A");
   const [explanation, setExplanation] = useState("");
+  const [csvRows, setCsvRows] = useState<CsvQuestionRow[]>([]);
+  const [csvFileName, setCsvFileName] = useState("");
+  const [csvError, setCsvError] = useState("");
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvProgress, setCsvProgress] = useState({ completed: 0, total: 0 });
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -201,6 +225,144 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setLoading(false);
   };
 
+  const downloadCsvTemplate = () => {
+    const blob = new Blob([`${csvHeaders.join(",")}\n`], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "exam-questions-template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCsvFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    setCsvRows([]);
+    setCsvFileName("");
+    setCsvError("");
+    setCsvProgress({ completed: 0, total: 0 });
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setCsvError("Choose a .csv file.");
+      return;
+    }
+    if (file.size > maxCsvFileBytes) {
+      setCsvError("This file is larger than 5 MB. Split it into smaller files and try again.");
+      return;
+    }
+
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: "greedy",
+      transformHeader: header => header.trim().toLowerCase().replace(/[^a-z0-9]/g, ""),
+      complete: results => {
+        if (results.errors.length > 0) {
+          setCsvError(`Could not read this CSV: ${results.errors[0].message}`);
+          return;
+        }
+        if (results.data.length === 0) {
+          setCsvError("The CSV has no question rows yet.");
+          return;
+        }
+        if (results.data.length > maxCsvRows) {
+          setCsvError(`This file has ${results.data.length} rows. Import up to ${maxCsvRows} questions at a time.`);
+          return;
+        }
+
+        const availableHeaders = results.meta.fields || [];
+        const missingHeaders = csvHeaders.filter(header => !availableHeaders.includes(header.toLowerCase()));
+        if (missingHeaders.length > 0) {
+          setCsvError(`Missing required columns: ${missingHeaders.join(", ")}. Download the template for the correct format.`);
+          return;
+        }
+
+        const seenQuestions = new Set<string>();
+        const parsedRows = results.data.map((row, index): CsvQuestionRow => {
+          const questionText = String(row.question ?? "").trim();
+          const optionA = String(row.optiona ?? "").trim();
+          const optionB = String(row.optionb ?? "").trim();
+          const optionC = String(row.optionc ?? "").trim();
+          const optionD = String(row.optiond ?? "").trim();
+          const correctAnswer = String(row.correctanswer ?? "").trim().toUpperCase();
+          const explanationText = String(row.explanation ?? "").trim();
+          const errors: string[] = [];
+
+          if (!questionText) errors.push("Question is required");
+          if (!optionA || !optionB || !optionC || !optionD) errors.push("All four options are required");
+          if (!["A", "B", "C", "D"].includes(correctAnswer)) errors.push("Correct answer must be A, B, C, or D");
+
+          const questionKey = questionText.toLowerCase().replace(/\s+/g, " ");
+          if (questionKey && seenQuestions.has(questionKey)) errors.push("Duplicate question in this file");
+          if (questionKey) seenQuestions.add(questionKey);
+
+          return {
+            rowNumber: index + 2,
+            question: questionText,
+            optionA,
+            optionB,
+            optionC,
+            optionD,
+            correctAnswer,
+            explanation: explanationText,
+            errors,
+          };
+        });
+
+        setCsvFileName(file.name);
+        setCsvRows(parsedRows);
+      },
+    });
+  };
+
+  const importCsvQuestions = async () => {
+    if (!selectedExam || !selectedSubject) {
+      setCsvError("Select an exam and subject before importing.");
+      return;
+    }
+    const rowsToImport = csvRows.filter(row => row.errors.length === 0 && row.status !== "imported");
+    if (rowsToImport.length === 0) {
+      setCsvError("There are no valid questions ready to import.");
+      return;
+    }
+
+    setCsvError("");
+    setCsvImporting(true);
+    setCsvProgress({ completed: 0, total: rowsToImport.length });
+    let imported = 0;
+    let failed = 0;
+
+    for (const [index, row] of rowsToImport.entries()) {
+      try {
+        const response = await fetch(`${API}/api/admin/add-question`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            examId: selectedExam,
+            subject: selectedSubject,
+            question: row.question,
+            options: { A: row.optionA, B: row.optionB, C: row.optionC, D: row.optionD },
+            correctAnswer: row.correctAnswer,
+            explanation: row.explanation,
+          }),
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(data?.message || `Request failed (${response.status})`);
+        imported++;
+        setCsvRows(current => current.map(item => item.rowNumber === row.rowNumber ? { ...item, status: "imported", importError: undefined } : item));
+      } catch (error) {
+        failed++;
+        const message = error instanceof Error ? error.message : "Could not import this question";
+        setCsvRows(current => current.map(item => item.rowNumber === row.rowNumber ? { ...item, status: "failed", importError: message } : item));
+      }
+      setCsvProgress({ completed: index + 1, total: rowsToImport.length });
+    }
+
+    setCsvImporting(false);
+    setMsg(`CSV import finished: ${imported} added, ${failed} failed.`);
+    setTimeout(() => setMsg(""), 5000);
+  };
+
   // STEP 1: ADMIN PASSWORD GATE - shows when user clicks admin
   if(!isAdminUnlocked){
     return (
@@ -322,6 +484,68 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         </div>
         </>
       ): (
+        <>
+        <section className="csv-import-panel" aria-labelledby="csv-import-title">
+          <div className="csv-import-heading">
+            <div>
+              <h3 id="csv-import-title"><FileSpreadsheet size={18} /> Bulk import questions</h3>
+              <p>Choose an exam and subject below, then upload up to 500 questions from a CSV file.</p>
+            </div>
+            <button type="button" className="csv-template-btn" onClick={downloadCsvTemplate}>
+              <Download size={16} /> Download template
+            </button>
+          </div>
+
+          <label className="csv-upload-btn">
+            <Upload size={16} /> Choose CSV file
+            <input type="file" accept=".csv,text/csv" onChange={handleCsvFileChange} disabled={csvImporting} />
+          </label>
+          {csvFileName && <span className="csv-file-name">{csvFileName}</span>}
+          {csvError && <p className="csv-error" role="alert">{csvError}</p>}
+
+          {csvRows.length > 0 && (
+            <div className="csv-preview">
+              <div className="csv-preview-summary">
+                <span>{csvRows.filter(row => row.errors.length === 0 && row.status !== "imported").length} ready</span>
+                <span>{csvRows.filter(row => row.errors.length > 0).length} need attention</span>
+                <span>{csvRows.filter(row => row.status === "imported").length} imported</span>
+              </div>
+              {csvImporting && <p className="csv-progress" aria-live="polite">Importing {csvProgress.completed} of {csvProgress.total} questions...</p>}
+              <div className="csv-preview-table-wrap">
+                <table className="csv-preview-table">
+                  <thead>
+                    <tr><th>Row</th><th>Question</th><th>Options</th><th>Answer</th><th>Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {csvRows.slice(0, 8).map(row => {
+                      const rowError = row.errors[0] || row.importError;
+                      const status = row.status === "imported" ? "Imported" : rowError ? rowError : "Ready";
+                      return (
+                        <tr key={row.rowNumber} className={rowError ? "has-error" : row.status === "imported" ? "is-imported" : ""}>
+                          <td>{row.rowNumber}</td>
+                          <td className="csv-question-cell">{row.question || "(empty question)"}</td>
+                          <td>A: {row.optionA} · B: {row.optionB} · C: {row.optionC} · D: {row.optionD}</td>
+                          <td>{row.correctAnswer || "—"}</td>
+                          <td>{status}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {csvRows.length > 8 && <p className="csv-more-rows">Showing 8 of {csvRows.length} rows.</p>}
+              <button
+                type="button"
+                className="admin-btn primary csv-import-btn"
+                onClick={importCsvQuestions}
+                disabled={csvImporting || loading || !csvRows.some(row => row.errors.length === 0 && row.status !== "imported")}
+              >
+                {csvImporting ? "Importing..." : `Import ${csvRows.filter(row => row.errors.length === 0 && row.status !== "imported").length} valid questions`}
+              </button>
+            </div>
+          )}
+        </section>
+
         <form onSubmit={addQuestion} className="admin-form">
           <div className="admin-row">
             <div className="admin-field" style={{flex:2}}><label>Select Exam *</label>
@@ -349,8 +573,9 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
             <div className="admin-field"><label>Correct</label><select value={correct} onChange={e=>setCorrect(e.target.value)}><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
             <div className="admin-field" style={{flex:2}}><label>Explanation</label><input value={explanation} onChange={e=>setExplanation(e.target.value)} placeholder="Optional" style={{background:'#1a1a1a', color:'#fff'}}/></div>
           </div>
-          <button className="admin-btn primary lg" disabled={loading}>{loading?"Adding...":`Add to ${selectedSubject || 'Exam'}`}</button>
+          <button className="admin-btn primary lg" disabled={loading || csvImporting}>{loading?"Adding...":`Add to ${selectedSubject || 'Exam'}`}</button>
         </form>
+        </>
       )}
     </div></div>
   );
