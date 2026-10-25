@@ -3,18 +3,18 @@
   "short_name": "ExamCore",
   "icons": [
     {
-      "src": "/icons/examcore-brand-icon-192.png",
+      "src": "/icons/examcore-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/icons/examcore-brand-icon-512.png",
+      "src": "/icons/examcore-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
   ],
   "start_url": "/",
   "display": "standalone",
-  "theme_color": "#2B5EF4",
-  "background_color": "#1439C4"
+  "theme_color": "#071126",
+  "background_color": "#071126"
 }
