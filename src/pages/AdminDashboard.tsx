@@ -231,10 +231,10 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   if(!user) return (
     <div className="admin-wrap"><div className="admin-login-card">
       <div className="admin-logo"><img src="/icons/examcore-192.png" alt="ExamCore" />EXAMCORE<span>ADMIN</span></div>
-      <h2>Admin Login - Flask</h2><p className="admin-sub">Email auth • No Firebase</p>
+      <h2>Admin Login</h2><p className="admin-sub">Email authentication</p>
       <div className="admin-field"><label>Email</label><input value={email} onChange={e=>setEmail(e.target.value)}/></div>
       <div className="admin-field"><label>Password</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="admin123"/></div>
-      <button className="admin-btn primary" onClick={handleLogin}>Sign In to Flask</button>
+      <button className="admin-btn primary" onClick={handleLogin}>Sign In</button>
       <button className="admin-btn ghost" onClick={()=>setActivePage('home')}>← Home</button>
       <button className="admin-btn ghost" onClick={()=>{localStorage.removeItem('admin_unlocked'); setIsAdminUnlocked(false)}} style={{marginTop:8, color:'#ef4444'}}>Lock Admin Again</button>
     </div></div>
@@ -244,7 +244,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     <div className="admin-wrap"><div className="admin-panel">
       <div className="admin-header">
         <div><div className="admin-logo small"><img src="/icons/examcore-192.png" alt="ExamCore" />EXAMCORE<span>ADMIN</span></div><p>{user.email}</p></div>
-        <div style={{display:"flex",gap:8}}><span className="admin-pill">{exams.length} Exams Flask</span><button className="admin-btn danger-sm" onClick={()=>{localStorage.clear(); setUser(null); setIsAdminUnlocked(false)}}>Logout</button></div>
+        <div style={{display:"flex",gap:8}}><span className="admin-pill">{exams.length} Exams</span><button className="admin-btn danger-sm" onClick={()=>{localStorage.clear(); setUser(null); setIsAdminUnlocked(false)}}>Logout</button></div>
       </div>
 
       <div className="admin-tabs">
@@ -288,7 +288,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           </div>
 
           <div style={{display:'flex', gap:8}}>
-            <button className="admin-btn primary lg" disabled={loading} style={{flex:1}}>{loading? (editingExam?"Updating...":"Creating...") : (editingExam?"Update Exam":"Create Exam in Flask")}</button>
+            <button className="admin-btn primary lg" disabled={loading} style={{flex:1}}>{loading? (editingExam?"Updating...":"Creating...") : (editingExam?"Update Exam":"Create Exam")}</button>
             {editingExam && <button type="button" className="admin-btn ghost" onClick={()=>{setEditingExam(null); setETitle(""); setESubjects(["Mathematics","English"]);}}>Cancel</button>}
           </div>
         </form>
@@ -349,7 +349,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
             <div className="admin-field"><label>Correct</label><select value={correct} onChange={e=>setCorrect(e.target.value)}><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
             <div className="admin-field" style={{flex:2}}><label>Explanation</label><input value={explanation} onChange={e=>setExplanation(e.target.value)} placeholder="Optional" style={{background:'#1a1a1a', color:'#fff'}}/></div>
           </div>
-          <button className="admin-btn primary lg" disabled={loading}>{loading?"Adding to Flask...":`Add to ${selectedSubject || 'Exam'}`}</button>
+          <button className="admin-btn primary lg" disabled={loading}>{loading?"Adding...":`Add to ${selectedSubject || 'Exam'}`}</button>
         </form>
       )}
     </div></div>

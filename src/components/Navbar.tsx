@@ -199,8 +199,8 @@ export default function Navbar({ activePage, setActivePage }: any) {
         </nav>
         <div className="sidebar-footer">EXAMCORE v1.0 • {user?.email} • {historyCount} Tests 🇳🇬</div>
       </aside>
-      <nav className="bottom-nav">
-        {navItems.map(item => { const Icon = item.icon; return <button key={item.id} className={`nav-item ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><span className="nav-icon-wrap"><Icon size={22} /></span><span className="nav-label">{item.mobileLabel}</span></button> })}
+      <nav className="bottom-nav" aria-label="Primary navigation">
+        {navItems.map(item => { const Icon = item.icon; return <button key={item.id} type="button" aria-current={activePage === item.id ? 'page' : undefined} className={`nav-item ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><span className="nav-icon-wrap"><Icon size={22} strokeWidth={activePage === item.id ? 2.5 : 1.9} /></span><span className="nav-label">{item.mobileLabel}</span></button> })}
       </nav>
     </>
   )

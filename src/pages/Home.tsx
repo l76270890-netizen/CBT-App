@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { BookOpen, Search, X, Funnel, Flame, Trophy, Target, BarChart3 } from 'lucide-react'
+import { BookOpen, Search, X, Funnel, Flame, Trophy, Target, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react'
 import './Home.css'
 import { API_URL } from '../config'
 
@@ -15,9 +15,17 @@ type ExamData = {
   totalQuestions?: number
 }
 
+const heroSlides = [
+  { src: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=1200', alt: 'Students studying together' },
+  { src: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=1200', alt: 'Student writing study notes' },
+  { src: 'https://images.unsplash.com/photo-1513258496099-48168024aec0?w=1200', alt: 'Students learning in a classroom' },
+]
+
 export default function Home({ setActivePage, setSelectedExam, setTestConfig }: any) {
   const { user } = useAuth()
   const [searchQuery, setSearchQuery] = useState("")
+  const [activeHeroSlide, setActiveHeroSlide] = useState(0)
+  const [heroPaused, setHeroPaused] = useState(false)
   const [examsFromDb, setExamsFromDb] = useState<ExamData[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ practiced: 0, avgScore: 0, bestScore: 0, streak: 3 })
@@ -47,6 +55,14 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
         setExamsFromDb(mapped)
       }).finally(()=> setLoading(false))
   }, [user])
+
+  useEffect(() => {
+    if (heroPaused) return
+    const intervalId = window.setInterval(() => {
+      setActiveHeroSlide(current => (current + 1) % heroSlides.length)
+    }, 3200)
+    return () => window.clearInterval(intervalId)
+  }, [heroPaused])
 
   const filteredExams = useMemo(() => {
     const clean = searchQuery.toLowerCase().trim()
@@ -78,20 +94,43 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
           {searchQuery? (<button className="clear-btn" onClick={() => setSearchQuery("")}><X size={16} /></button>) : (<Funnel size={16} className="funnel-icon" />)}
         </div>
       </div>
-       <div className="home-header">
-          <div className="slider-track">
-            <img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=800" alt="" />
-            <img src="https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800" alt="" />
-            <img src="https://images.unsplash.com/photo-1513258496099-48168024aec0?w=800" alt="" />
-            <img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=800" alt="" />
+       <section className="home-header" aria-label="Featured study images" onMouseEnter={() => setHeroPaused(true)} onMouseLeave={() => setHeroPaused(false)}>
+          <div className="hero-slides" aria-live="off">
+            {heroSlides.map((slide, index) => (
+              <img
+                key={slide.src}
+                className={`hero-slide ${index === activeHeroSlide ? 'is-active' : ''}`}
+                src={slide.src}
+                alt={slide.alt}
+                aria-hidden={index !== activeHeroSlide}
+                loading={index === 0 ? 'eager' : 'lazy'}
+                decoding="async"
+              />
+            ))}
           </div>
           <div className="header-overlay"></div>
           <div className="header-content-exam">
            <h1 className="home-title">Hello, <span>{user?.username || 'User'}</span></h1>
-            <p className="home-subtitle">Pick exam and practice - Flask DB</p>
+            <p className="home-subtitle">Pick an exam and practice</p>
              <button onClick={() => setActivePage('practiceHistory')} className='hero-btn'>View history</button>
           </div>
-        </div>
+          <div className="hero-slide-controls">
+            <button type="button" aria-label="Previous image" onClick={() => setActiveHeroSlide(current => (current - 1 + heroSlides.length) % heroSlides.length)}><ChevronLeft size={18} /></button>
+            <button type="button" aria-label="Next image" onClick={() => setActiveHeroSlide(current => (current + 1) % heroSlides.length)}><ChevronRight size={18} /></button>
+          </div>
+          <div className="hero-slide-dots" role="group" aria-label="Choose hero image">
+            {heroSlides.map((slide, index) => (
+              <button
+                key={slide.src}
+                type="button"
+                className={index === activeHeroSlide ? 'active' : ''}
+                aria-label={`Show image ${index + 1}`}
+                aria-pressed={index === activeHeroSlide}
+                onClick={() => setActiveHeroSlide(index)}
+              />
+            ))}
+          </div>
+        </section>
       <div className="stats-grid1">
         <div className="stats-card"><div className="stat-icon blue"><Target size={18} /></div><h2>{stats.practiced}</h2><span>Exams Practiced</span></div>
         <div className="stats-card"><div className="stat-icon green"><BarChart3 size={18} /></div><h2>{stats.avgScore}%</h2><span>Avg Score</span></div>
@@ -99,7 +138,7 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
         <div className="stats-card"><div className="stat-icon red"><Flame size={18} /></div><h2>{stats.streak} days</h2><span>Study Streak</span></div>
       </div>
       <div className="section-header"><h3>Featured Exams {examsFromDb.length>0 && `(${examsFromDb.length})`}</h3><p onClick={() => setActivePage('exams')}>see more ›</p></div>
-      {loading? <div className="no-result">Loading exams from Flask...</div> :
+      {loading? <div className="no-result">Loading exams...</div> :
         filteredExams.length>0? (
           <div className="exam-list">
             {filteredExams.map((exam) => (

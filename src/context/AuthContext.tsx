@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data = JSON.parse(text)
       } catch {
         console.error("Backend returned HTML:", text.slice(0,300))
-        throw new Error("Backend error - is Flask running on 5000? Got HTML not JSON")
+        throw new Error("Backend error - the server returned HTML instead of JSON")
       }
 
       if(!res.ok || !data.success) throw new Error(data.message || 'Upload failed')

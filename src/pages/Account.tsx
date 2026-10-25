@@ -77,10 +77,10 @@ export default function Account({ setActivePage }: Props) {
 
   const menuItems = [
     { id: 'profile', label: 'Edit Profile', icon: User, desc: 'Update your name', action: handleEditName },
-    { id: 'download', label: 'Practice History', icon: Download, desc: `${practiced} exams from Flask DB`, action: () => setActivePage('practiceHistory') },
+    { id: 'download', label: 'Practice History', icon: Download, desc: `${practiced} exams completed`, action: () => setActivePage('practiceHistory') },
     { id: 'settings', label: 'Settings', icon: Settings, desc: 'Theme, notifications', action: () => alert('Settings coming soon') },
     { id: 'help', label: 'Help & Support', icon: HelpCircle, desc: 'Chat with us', action: () => window.open('https://wa.me/2340000000000', '_blank') },
-    { id: 'about', label: 'About Us', icon: Info, desc: 'Version 2.0 Flask • EXAMCORE', action: () => alert('EXAMCORE v2 - Flask + React 🇳🇬') },
+    { id: 'about', label: 'About Us', icon: Info, desc: 'Version 2.0 • EXAMCORE', action: () => alert('EXAMCORE v2 • Made for Nigerian students 🇳🇬') },
   ]
 
   if (!user) return null
@@ -124,11 +124,11 @@ export default function Account({ setActivePage }: Props) {
         })}
       </div>
       <div className="upgrade-card">
-        <div className="upgrade-left"><div className="crown-icon"><Crown size={20}/></div><div><h3>Upgrade to Pro</h3><p>Unlock all questions • Flask DB • No ads</p></div></div>
+        <div className="upgrade-left"><div className="crown-icon"><Crown size={20}/></div><div><h3>Upgrade to Pro</h3><p>Unlock all questions • No ads</p></div></div>
         <button className="btn-upgrade" onClick={() => alert('Pro coming soon - ₦2000/year')}>UPGRADE</button>
       </div>
       <button className="btn-logout" onClick={handleLogout}><LogOut size={16}/> Logout</button>
-      <p className="footer-text">Flask + React • Made for Nigerian Students • {email}</p>
+      <p className="footer-text">Made for Nigerian Students • {email}</p>
     </div>
   )
 }

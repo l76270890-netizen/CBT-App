@@ -76,13 +76,13 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam }:
       <div className="exams-topbar">
         <div className="topbar-main">
           <button className="back-btn1" onClick={() => setActivePage('home')}><ArrowLeft size={18} /></button>
-          <div><h1>{selectedExam}</h1><p>Select {maxSubjects} subjects • Flask DB</p></div>
+          <div><h1>{selectedExam}</h1><p>Select {maxSubjects} subjects</p></div>
           <div className="count-badge">{selectedSubjects.length}/{maxSubjects}</div>
         </div>
         <div className="search-wrapper small"><Search size={16} className="search-icon" /><input placeholder="Search subject..." value={search} onChange={e => setSearch(e.target.value)} /></div>
-        <div className="alert-card"><div className="alert-icon">i</div><div className="alert-text">Subjects from Flask • {selectedExam}</div></div>
+        <div className="alert-card"><div className="alert-icon">i</div><div className="alert-text">Subjects for {selectedExam}</div></div>
       </div>
-      {loading? <div className="no-result">Loading subjects for {selectedExam} from Flask...</div> :
+      {loading? <div className="no-result">Loading {selectedExam} subjects...</div> :
         filtered.length === 0? <div className="no-result">No subjects for {selectedExam}. Add in Admin.</div> :
           <div className="subject-list">
             {filtered.map((item) => {

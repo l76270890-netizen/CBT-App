@@ -16,6 +16,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 12px 16px;
   max-width: 1200px;
   margin: 0 auto;
@@ -33,8 +34,7 @@ body {
   font-size: 20px;
   letter-spacing: -0.5px;
   color: #fff;
-  position: relative;
-  right: 80px;
+  white-space: nowrap;
 }
 
 .navbar-right {
@@ -274,29 +274,65 @@ body {
 /* BOTTOM NAV */
 .bottom-nav {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: #1e1e1e;
-  border-top: 1px solid #2a2a2a;
-  display: flex;
-  justify-content: space-around;
-  padding: 6px 0 calc(6px + env(safe-area-inset-bottom));
-  z-index: 40;
-  border-radius: 18px 18px 0 0;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  left: 12px;
+  right: 12px;
+  width: min(520px, calc(100% - 24px));
+  height: 76px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+  padding: 8px;
+  background: #121212;
+  border: 1px solid #2a2a2a;
+  border-radius: 16px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42);
+  z-index: 60;
+  backdrop-filter: blur(16px);
 }
 
 .nav-item {
+  position: relative;
+  min-width: 0;
+  min-height: 58px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  justify-content: center;
+  gap: 4px;
   background: none;
   border: none;
-  color: #6b7280;
+  border-radius: 11px;
+  color: #8f9091;
   cursor: pointer;
-  flex: 1;
-  padding: 4px 0;
+  padding: 5px 2px 4px;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.nav-item::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 14px;
+  right: 14px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: #1d4be3;
+  opacity: 0;
+  transform: scaleX(0.65);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.nav-item:hover {
+  background: #1e1e1e;
+  color: #fff;
+}
+
+.nav-item:focus-visible {
+  outline: 2px solid #1d4be3;
+  outline-offset: 1px;
 }
 
 .nav-icon-wrap {
@@ -306,21 +342,32 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  transition: 0.2s;
-}
-
-.nav-item.active .nav-icon-wrap {
-  background: #1e1e1e;
-  color: #fff;
+  color: currentColor;
+  transition: transform 160ms ease;
 }
 
 .nav-item.active {
-  color: #fff;
+  background: rgba(29, 75, 227, 0.12);
+  color: #1d4be3;
+}
+
+.nav-item.active::before {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.nav-item.active .nav-icon-wrap {
+  transform: translateY(-1px);
 }
 
 .nav-label {
-  font-size: 10px;
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 11px;
   font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-links {
@@ -554,7 +601,7 @@ body {
   z-index: 998;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 960px) {
 
   .hamburger,
   .bottom-nav,
@@ -565,15 +612,47 @@ body {
 
   .nav-links {
     display: flex;
+    flex: 1;
+    justify-content: center;
   }
 
   .navbar-container {
+    gap: 16px;
     padding: 14px 24px;
+  }
+
+  .navbar-right {
+    margin-left: auto;
   }
 }
 
 /* MOBILE */
-@media (max-width: 767px) {
+@media (max-width: 959px) {
+  .navbar-container {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .home-logo-box {
+    width: 30px;
+    height: 30px;
+  }
+
+  .span {
+    position: static;
+    margin-right: auto;
+    font-size: 18px;
+  }
+
+  .navbar-right {
+    gap: 6px;
+  }
+
+  .hamburger {
+    width: 36px;
+    height: 36px;
+  }
+
   .navbar-user {
     padding: 4px 8px;
     gap: 6px;
@@ -585,8 +664,12 @@ body {
   }
 
   .navbar-user img {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
+  }
+
+  #root:has(.bottom-nav) :is(.home-container, .exams-container, .study-page, .history-section, .account-page) {
+    padding-bottom: calc(104px + env(safe-area-inset-bottom));
   }
 }
 
@@ -599,13 +682,7 @@ body {
     width: auto;
   }
 
-  .home-logo-box {
-    left: 17px;
-    position: relative;
-  }
-
   .span {
-    right: -10px;
-    position: relative;
+    font-size: 17px;
   }
 }

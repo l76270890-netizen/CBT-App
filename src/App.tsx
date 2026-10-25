@@ -38,7 +38,7 @@ export default function App() {
     topic: 'All Topics'
   } as any)
 
-  // CHECK FLASK LOGIN FROM localStorage
+  // CHECK LOGIN FROM localStorage
   useEffect(() => {
     const saved = localStorage.getItem('cbt_user')
     if (saved) {

@@ -15,7 +15,7 @@ export default function Login({ setActivePage }: { setActivePage: (p: string) =>
     
     setIsLoading(true)
     try {
-      // Use AuthContext login which calls Flask and saves email
+      // Use AuthContext login and save the user session
       const result = await login(email, password)
       
       if (result.success) {
@@ -25,7 +25,7 @@ export default function Login({ setActivePage }: { setActivePage: (p: string) =>
         setError(result.message || 'Login failed')
       }
     } catch (e: any) {
-      setError(e.message || 'Login failed - is Flask running on 5000?')
+      setError(e.message || 'Login failed - check your connection and try again')
     }
     setIsLoading(false)
   }
