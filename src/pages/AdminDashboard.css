@@ -104,6 +104,13 @@
   border-radius: 14px;
   background: #0e0e16;
 }
+.csv-exam-field {
+  margin: 18px 0 10px;
+}
+.csv-exam-field small {
+  color: #a1a1b5;
+  font-size: 11px;
+}
 .csv-import-heading {
   display: flex;
   align-items: flex-start;
@@ -147,6 +154,17 @@
 .csv-template-btn:hover,
 .csv-upload-btn:hover { border-color: #6c5cff; }
 .csv-upload-btn input { display: none; }
+.csv-clear-btn {
+  margin: 8px 0 0 10px;
+  padding: 6px 9px;
+  border: 1px solid #2a2a3d;
+  border-radius: 8px;
+  background: transparent;
+  color: #c3c3d0;
+  font-size: 11px;
+  cursor: pointer;
+}
+.csv-clear-btn:disabled { cursor: not-allowed; opacity: 0.55; }
 .csv-file-name {
   display: inline-block;
   margin: 0 0 0 10px;
@@ -187,7 +205,7 @@
 }
 .csv-preview-table {
   width: 100%;
-  min-width: 640px;
+  min-width: 720px;
   border-collapse: collapse;
   color: #d4d4df;
   font-size: 11px;

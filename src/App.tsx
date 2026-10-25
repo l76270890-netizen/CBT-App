@@ -80,7 +80,7 @@ export default function App() {
 
         {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
         {page === 'exams' && <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
-        {page === 'subjects' && <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
+        {page === 'subjects' && <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} selectedExamId={testConfig.examId || testConfig.customExamId} />}
         {page === 'testConfig' && <TestConfig setActivePage={setPage} testConfig={testConfig} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
         {page === 'testInstructions' && <TestInstructions setActivePage={setPage} testConfig={testConfig} />}
         {page === 'test' && <Test setActivePage={setPage} testConfig={testConfig} />}

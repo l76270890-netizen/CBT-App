@@ -4,8 +4,14 @@ import './Subjects.css'
 import { API_URL } from '../config'
 
 type SubjectItem = { subject: string; questions: number; years: string; required?: boolean }
+type Props = {
+  setActivePage: (page: string) => void
+  setTestConfig: (updater: (previous: any) => any) => void
+  selectedExam: string
+  selectedExamId?: string
+}
 
-export default function Subjects({ setActivePage, setTestConfig, selectedExam }: any) {
+export default function Subjects({ setActivePage, setTestConfig, selectedExam, selectedExamId }: Props) {
   const [selectedSubjects, setSelectedSubjects] = useState<SubjectItem[]>([])
   const [search, setSearch] = useState("")
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
@@ -21,10 +27,18 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam }:
   useEffect(() => {
     const fetchSubjects = async () => {
       setLoading(true)
+      setSubjects([])
+      setSelectedSubjects([])
+      setSearch("")
       try {
-        const res = await fetch(`${API_URL}/api/questions?examType=${selectedExam}`)
+        const query = selectedExamId
+          ? `examId=${encodeURIComponent(selectedExamId)}`
+          : `examType=${encodeURIComponent(selectedExam)}`
+        const res = await fetch(`${API_URL}/api/questions?${query}`)
+        if (!res.ok) throw new Error("Could not load subjects")
         const data = await res.json()
         const map: Record<string, { count: number; years: Set<string> }> = {}
+        if (!Array.isArray(data)) throw new Error("Unexpected subject response")
         data.forEach((d: any) => {
           const subj = d.subject || "General"
           const year = d.year? String(d.year) : ""
@@ -38,7 +52,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam }:
           years: Array.from(info.years).join(', ') || '2024',
           required: subject.toLowerCase().includes('english')
         }))
-        if (grouped.length === 0) {
+        if (grouped.length === 0 && !selectedExamId) {
           const fallback = selectedExam === 'JAMB'
           ? [{subject:'Use of English',questions:40,years:'2024',required:true},{subject:'Mathematics',questions:40,years:'2024'},{subject:'Biology',questions:40,years:'2024'},{subject:'Chemistry',questions:40,years:'2024'}]
             : [{subject:'Mathematics',questions:20,years:'2024'}]
@@ -49,7 +63,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam }:
       } catch (e) { console.log(e) } finally { setLoading(false) }
     }
     fetchSubjects()
-  }, [selectedExam])
+  }, [selectedExam, selectedExamId])
 
   const maxSubjects = selectedExam === 'JAMB'? 4 : 6
   useEffect(() => {

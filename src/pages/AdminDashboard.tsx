@@ -13,6 +13,7 @@ const ADMIN_PASSWORD = "admin123";
 type Exam = { id: string; title: string; examType: string; year: number; duration: number; subjects: string[] }
 type CsvQuestionRow = {
   rowNumber: number;
+  subject: string;
   question: string;
   optionA: string;
   optionB: string;
@@ -25,7 +26,7 @@ type CsvQuestionRow = {
   importError?: string;
 }
 
-const csvHeaders = ["question", "optionA", "optionB", "optionC", "optionD", "correctAnswer", "explanation"];
+const csvHeaders = ["subject", "question", "optionA", "optionB", "optionC", "optionD", "correctAnswer", "explanation"];
 const normalizedCsvHeaders = csvHeaders.map(header => header.toLowerCase());
 const maxCsvFileBytes = 5 * 1024 * 1024;
 const maxCsvRows = 500;
@@ -68,6 +69,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [explanation, setExplanation] = useState("");
   const [csvRows, setCsvRows] = useState<CsvQuestionRow[]>([]);
   const [csvFileName, setCsvFileName] = useState("");
+  const [csvExamId, setCsvExamId] = useState("");
   const [csvError, setCsvError] = useState("");
   const [csvImporting, setCsvImporting] = useState(false);
   const [csvProgress, setCsvProgress] = useState({ completed: 0, total: 0 });
@@ -241,6 +243,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     event.target.value = "";
     setCsvRows([]);
     setCsvFileName("");
+    setCsvExamId("");
     setCsvError("");
     setCsvProgress({ completed: 0, total: 0 });
     if (!file) return;
@@ -250,6 +253,15 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     }
     if (file.size > maxCsvFileBytes) {
       setCsvError("This file is larger than 5 MB. Split it into smaller files and try again.");
+      return;
+    }
+    const exam = exams.find(item => item.id === selectedExam);
+    if (!exam) {
+      setCsvError("Select an exam before uploading the CSV.");
+      return;
+    }
+    if (exam.subjects.length === 0) {
+      setCsvError("Add subjects to this exam before importing questions.");
       return;
     }
 
@@ -293,8 +305,10 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         return;
       }
 
+      const subjectByNormalizedName = new Map(exam.subjects.map(subject => [subject.trim().toLowerCase().replace(/\s+/g, " "), subject]));
       const seenQuestions = new Set<string>();
       const parsedRows = results.data.map((row, index): CsvQuestionRow => {
+        const rawSubject = String(row.subject ?? "").trim();
         const questionText = String(row.question ?? "").trim();
         const optionA = String(row.optiona ?? "").trim();
         const optionB = String(row.optionb ?? "").trim();
@@ -303,17 +317,21 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         const correctAnswer = String(row.correctanswer ?? "").trim().toUpperCase();
         const explanationText = String(row.explanation ?? "").trim();
         const errors: string[] = [];
+        const subject = subjectByNormalizedName.get(rawSubject.toLowerCase().replace(/\s+/g, " "));
 
+        if (!rawSubject) errors.push("Subject is required");
+        else if (!subject) errors.push(`Subject "${rawSubject}" is not listed on this exam`);
         if (!questionText) errors.push("Question is required");
         if (!optionA || !optionB || !optionC || !optionD) errors.push("All four options are required");
         if (!["A", "B", "C", "D"].includes(correctAnswer)) errors.push("Correct answer must be A, B, C, or D");
 
-        const questionKey = questionText.toLowerCase().replace(/\s+/g, " ");
+        const questionKey = `${subject?.toLowerCase() || rawSubject.toLowerCase()}:${questionText.toLowerCase().replace(/\s+/g, " ")}`;
         if (questionKey && seenQuestions.has(questionKey)) errors.push("Duplicate question in this file");
         if (questionKey) seenQuestions.add(questionKey);
 
         return {
           rowNumber: index + 2,
+          subject: subject || rawSubject,
           question: questionText,
           optionA,
           optionB,
@@ -326,6 +344,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
       });
 
       setCsvFileName(file.name);
+      setCsvExamId(selectedExam);
       setCsvRows(parsedRows);
     } catch {
       setCsvError("Could not read this file. Try saving it again as a CSV and re-uploading it.");
@@ -333,8 +352,12 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   };
 
   const importCsvQuestions = async () => {
-    if (!selectedExam || !selectedSubject) {
-      setCsvError("Select an exam and subject before importing.");
+    if (!selectedExam || !csvExamId) {
+      setCsvError("Select an exam before importing.");
+      return;
+    }
+    if (selectedExam !== csvExamId) {
+      setCsvError("The selected exam changed. Clear this preview and upload the CSV again.");
       return;
     }
     const rowsToImport = csvRows.filter(row => row.errors.length === 0 && row.status !== "imported");
@@ -356,7 +379,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             examId: selectedExam,
-            subject: selectedSubject,
+            subject: row.subject,
             question: row.question,
             options: { A: row.optionA, B: row.optionB, C: row.optionC, D: row.optionD },
             correctAnswer: row.correctAnswer,
@@ -502,11 +525,20 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         </>
       ): (
         <>
+        <div className="admin-field csv-exam-field">
+          <label>Select Exam *</label>
+          <select value={selectedExam} onChange={e=>{setSelectedExam(e.target.value); setSelectedSubject("");}} required disabled={csvRows.length > 0 || csvImporting}>
+            <option value="">-- Choose Exam --</option>
+            {exams.map(ex=><option key={ex.id} value={ex.id}>{ex.title} ({ex.examType}) - {ex.subjects?.length} subjects</option>)}
+          </select>
+          {csvRows.length > 0 && <small>Clear the CSV preview before changing exams.</small>}
+        </div>
+
         <section className="csv-import-panel" aria-labelledby="csv-import-title">
           <div className="csv-import-heading">
             <div>
               <h3 id="csv-import-title"><FileSpreadsheet size={18} /> Bulk import questions</h3>
-              <p>Choose an exam and subject below, then upload up to 500 questions from a CSV file.</p>
+              <p>Choose an exam above. Add a subject column to the CSV to route each question separately. Up to 500 rows per file.</p>
             </div>
             <button type="button" className="csv-template-btn" onClick={downloadCsvTemplate}>
               <Download size={16} /> Download template
@@ -518,6 +550,11 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
             <input type="file" accept=".csv,text/csv" onChange={handleCsvFileChange} disabled={csvImporting} />
           </label>
           {csvFileName && <span className="csv-file-name">{csvFileName}</span>}
+          {csvRows.length > 0 && (
+            <button type="button" className="csv-clear-btn" onClick={() => { setCsvRows([]); setCsvFileName(""); setCsvExamId(""); setCsvError(""); setCsvProgress({ completed: 0, total: 0 }); }} disabled={csvImporting}>
+              Clear file
+            </button>
+          )}
           {csvError && <p className="csv-error" role="alert">{csvError}</p>}
 
           {csvRows.length > 0 && (
@@ -531,7 +568,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
               <div className="csv-preview-table-wrap">
                 <table className="csv-preview-table">
                   <thead>
-                    <tr><th>Row</th><th>Question</th><th>Options</th><th>Answer</th><th>Status</th></tr>
+                    <tr><th>Row</th><th>Subject</th><th>Question</th><th>Options</th><th>Answer</th><th>Status</th></tr>
                   </thead>
                   <tbody>
                     {csvRows.slice(0, 8).map(row => {
@@ -540,6 +577,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
                       return (
                         <tr key={row.rowNumber} className={rowError ? "has-error" : row.status === "imported" ? "is-imported" : ""}>
                           <td>{row.rowNumber}</td>
+                          <td>{row.subject || "—"}</td>
                           <td className="csv-question-cell">{row.question || "(empty question)"}</td>
                           <td>A: {row.optionA} · B: {row.optionB} · C: {row.optionC} · D: {row.optionD}</td>
                           <td>{row.correctAnswer || "—"}</td>
@@ -565,13 +603,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
 
         <form onSubmit={addQuestion} className="admin-form">
           <div className="admin-row">
-            <div className="admin-field" style={{flex:2}}><label>Select Exam *</label>
-              <select value={selectedExam} onChange={e=>setSelectedExam(e.target.value)} required>
-                <option value="">-- Choose Exam --</option>
-                {exams.map(ex=><option key={ex.id} value={ex.id}>{ex.title} ({ex.examType}) - {ex.subjects?.length} subjects</option>)}
-              </select>
-            </div>
-            <div className="admin-field" style={{flex:1}}><label>Subject *</label>
+            <div className="admin-field" style={{flex:1}}><label>Manual question subject *</label>
               <select value={selectedSubject} onChange={e=>setSelectedSubject(e.target.value)} required>
                 <option value="">-- Subject --</option>
                 {exams.find(x=>x.id===selectedExam)?.subjects?.map((s:string)=><option key={s} value={s}>{s}</option>)}
