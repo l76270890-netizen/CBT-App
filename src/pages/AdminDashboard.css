@@ -24,9 +24,11 @@
   border-radius: 20px;
   padding: 28px;
 }
-.admin-logo { font-weight: 800; font-size: 22px; letter-spacing: -0.5px; color: #fff; }
+.admin-logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 22px; letter-spacing: -0.5px; color: #fff; }
+.admin-logo img { width: 38px; height: 38px; object-fit: contain; }
 .admin-logo span { color: #6c5cff; margin-left: 6px; font-weight: 600; }
 .admin-logo.small { font-size: 14px; }
+.admin-logo.small img { width: 26px; height: 26px; }
 .admin-login-card h2 { color: #fff; margin: 16px 0 4px; font-size: 24px; }
 .admin-sub { color: #8b8ba7; font-size: 14px; margin-bottom: 20px; }
 .admin-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid #1e1e2d; padding-bottom: 16px; }

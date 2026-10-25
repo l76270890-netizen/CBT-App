@@ -33,7 +33,7 @@ export default function Login({ setActivePage }: { setActivePage: (p: string) =>
   return (
     <div className="auth-page">
       <div className="auth-header">
-        <div className="auth-logo">E</div>
+        <img className="auth-logo" src="/icons/examcore-192.png" alt="ExamCore" />
         <div className="auth-brand">EXAMCORE</div>
       </div>
       <div className="login-card">

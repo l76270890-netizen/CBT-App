@@ -25,7 +25,7 @@ export default function Register({ setActivePage }: any) {
 
   return (
     <div className="auth-page">
-      <div className="auth-header"><div className="auth-logo">E</div><div className="auth-brand">EXAMCORE</div></div>
+      <div className="auth-header"><img className="auth-logo" src="/icons/examcore-192.png" alt="ExamCore" /><div className="auth-brand">EXAMCORE</div></div>
       <div className="login-card">
         <h1 className="auth-title">Create Account</h1>
         {error && <div className="auth-error">{error}</div>}

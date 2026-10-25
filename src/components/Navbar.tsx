@@ -125,7 +125,7 @@ export default function Navbar({ activePage, setActivePage }: any) {
       <header className="navbar">
         <div className="navbar-container">
           <button className="hamburger" onClick={() => setMenuOpen(true)}><Menu size={20} /></button>
-          <div className="home-logo-box">E</div><span className='span'>EXAMCORE</span>
+          <img className="home-logo-box" src="/icons/examcore-192.png" alt="ExamCore" /><span className='span'>EXAMCORE</span>
           <nav className="nav-links">
             {navItems.map(item => { const Icon = item.icon; return <button key={item.id} className={`nav-link ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><Icon size={18} /> {item.label}</button> })}
           </nav>

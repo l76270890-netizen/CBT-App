@@ -9,7 +9,7 @@ export default function LandingMobile({ setActivePage }: { setActivePage: (p: st
     <div className="landing">
       <header className="landing-header">
         <div className="landing-logo">
-          <div className="landing-logo-box">E</div>
+          <img className="landing-logo-box" src="/icons/examcore-192.png" alt="ExamCore" />
           <span>EXAMCORE</span>
         </div>
         <button className="landing-menu-btn" onClick={() => setMenu(!menu)}>

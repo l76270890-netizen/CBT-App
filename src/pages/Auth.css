@@ -27,15 +27,8 @@ body { background: #121212; }
 .auth-logo {
   width: 38px;
   height: 38px;
-  background: linear-gradient(135deg, #1d4be3 0%, #0f2bb8 100%);
-  border-radius: 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 900;
-  font-size: 18px;
-  box-shadow: 0 6px 16px rgba(29, 75, 227, 0.35);
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .auth-brand {

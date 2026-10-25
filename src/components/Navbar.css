@@ -24,14 +24,8 @@ body {
 .home-logo-box {
   width: 32px;
   height: 32px;
-  background: #1d4be3;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 900;
-  box-shadow: 0 4px 12px rgba(29, 75, 227, 0.3);
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .span {

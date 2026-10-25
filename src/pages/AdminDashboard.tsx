@@ -205,7 +205,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   if(!isAdminUnlocked){
     return (
       <div className="admin-wrap"><div className="admin-login-card" style={{border:'1px solid #f59e0b'}}>
-        <div className="admin-logo">EXAMCORE<span>ADMIN</span></div>
+        <div className="admin-logo"><img src="/icons/examcore-192.png" alt="ExamCore" />EXAMCORE<span>ADMIN</span></div>
         <h2>🔒 Admin Locked</h2>
         <p className="admin-sub">Enter admin password to continue</p>
         <div className="admin-field">
@@ -230,7 +230,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   // STEP 2: Normal login if not logged in
   if(!user) return (
     <div className="admin-wrap"><div className="admin-login-card">
-      <div className="admin-logo">EXAMCORE<span>ADMIN</span></div>
+      <div className="admin-logo"><img src="/icons/examcore-192.png" alt="ExamCore" />EXAMCORE<span>ADMIN</span></div>
       <h2>Admin Login - Flask</h2><p className="admin-sub">Email auth • No Firebase</p>
       <div className="admin-field"><label>Email</label><input value={email} onChange={e=>setEmail(e.target.value)}/></div>
       <div className="admin-field"><label>Password</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="admin123"/></div>
@@ -243,7 +243,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   return (
     <div className="admin-wrap"><div className="admin-panel">
       <div className="admin-header">
-        <div><div className="admin-logo small">EXAMCORE<span>ADMIN</span></div><p>{user.email}</p></div>
+        <div><div className="admin-logo small"><img src="/icons/examcore-192.png" alt="ExamCore" />EXAMCORE<span>ADMIN</span></div><p>{user.email}</p></div>
         <div style={{display:"flex",gap:8}}><span className="admin-pill">{exams.length} Exams Flask</span><button className="admin-btn danger-sm" onClick={()=>{localStorage.clear(); setUser(null); setIsAdminUnlocked(false)}}>Logout</button></div>
       </div>
 

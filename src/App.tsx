@@ -62,7 +62,7 @@ export default function App() {
     return (
       <div style={{ minHeight: '100vh', background: '#121212', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 40, height: 40, background: '#1d4be3', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontWeight: 900 }}>E</div>
+          <img src="/icons/examcore-192.png" alt="ExamCore" style={{ width: 40, height: 40, objectFit: 'contain', margin: '0 auto 12px' }} />
           Loading...
         </div>
       </div>
