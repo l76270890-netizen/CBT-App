@@ -18,11 +18,11 @@
 }
 .admin-panel {
   width: 100%;
-  max-width: 860px;
+  max-width: 1120px;
   background: #11111a;
   border: 1px solid #222230;
   border-radius: 20px;
-  padding: 28px;
+  padding: 28px clamp(18px, 3vw, 36px);
 }
 .admin-logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 22px; letter-spacing: -0.5px; color: #fff; }
 .admin-logo img { width: 38px; height: 38px; object-fit: contain; }
@@ -67,6 +67,104 @@
 .admin-tabs { display: flex; gap: 8px; margin: 16px 0; background: #0e0e16; padding: 6px; border-radius: 12px; width: fit-content; }
 .admin-tabs button { background: transparent; border: none; color: #8b8ba7; padding: 8px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
 .admin-tabs button.active { background: #1e1e2d; color: #fff; }
+.admin-primary-nav {
+  display: flex;
+  gap: 6px;
+  margin: 18px 0 24px;
+  padding: 5px;
+  border: 1px solid #222230;
+  border-radius: 12px;
+  background: #0e0e16;
+}
+.admin-primary-nav button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 118px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #a1a1b5;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.admin-primary-nav button:hover { color: #fff; background: #171722; }
+.admin-primary-nav button.active { color: #fff; background: #1d4be3; }
+.admin-view-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 4px 0 20px;
+}
+.admin-view-heading h2 { margin: 0; color: #fff; font-size: 24px; }
+.admin-view-heading p:not(.admin-eyebrow) { margin: 6px 0 0; color: #8b8ba7; font-size: 13px; }
+.admin-eyebrow { margin: 0 0 6px; color: #8b8ba7; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+.admin-overview-action,
+.admin-section-heading button,
+.admin-data-unavailable button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border: 1px solid #2a2a3d;
+  border-radius: 9px;
+  background: #1e1e2d;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.admin-overview-action:hover,
+.admin-section-heading button:hover,
+.admin-data-unavailable button:hover { border-color: #6c5cff; }
+.admin-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.admin-metric-card,
+.admin-overview-card,
+.admin-students-empty {
+  min-width: 0;
+  border: 1px solid #222230;
+  border-radius: 12px;
+  background: #13131d;
+}
+.admin-metric-card { display: flex; flex-direction: column; gap: 9px; padding: 16px; }
+.admin-metric-card > span { display: flex; align-items: center; gap: 7px; color: #a1a1b5; font-size: 12px; }
+.admin-metric-card strong { color: #fff; font-size: 26px; line-height: 1; }
+.admin-metric-card small { color: #77778f; font-size: 10px; line-height: 1.45; }
+.admin-metric-card.is-unavailable strong { color: #8b8ba7; }
+.admin-overview-columns { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr); gap: 16px; }
+.admin-overview-card { padding: 16px; }
+.admin-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.admin-section-heading h3 { margin: 0; color: #fff; font-size: 14px; }
+.admin-section-heading p { margin: 5px 0 0; color: #77778f; font-size: 11px; }
+.admin-section-heading button { padding: 6px 9px; font-size: 11px; }
+.admin-recent-exams { display: flex; flex-direction: column; }
+.admin-recent-exam { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid #222230; }
+.admin-recent-exam > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.admin-recent-exam strong { overflow: hidden; color: #e6e6ed; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-recent-exam span,
+.admin-recent-exam small { color: #77778f; font-size: 10px; }
+.admin-empty-note { padding: 16px 0; color: #8b8ba7; font-size: 12px; }
+.admin-student-notice .admin-section-heading > svg { color: #8b8ba7; }
+.admin-data-unavailable { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 20px 0 4px; color: #8b8ba7; }
+.admin-data-unavailable > svg { color: #6c5cff; }
+.admin-data-unavailable p { max-width: 360px; margin: 0; font-size: 12px; line-height: 1.6; }
+.admin-data-unavailable button { padding: 7px 10px; }
+.admin-students-empty { display: flex; flex-direction: column; align-items: center; max-width: 620px; margin: 36px auto; padding: 40px 24px; text-align: center; }
+.admin-empty-icon { display: grid; place-items: center; width: 52px; height: 52px; border: 1px solid #302d52; border-radius: 14px; background: #19182a; color: #9388ff; }
+.admin-students-empty h3 { margin: 16px 0 6px; color: #fff; font-size: 16px; }
+.admin-students-empty p { max-width: 470px; margin: 0; color: #8b8ba7; font-size: 12px; line-height: 1.65; }
+.admin-exams-heading { margin-bottom: 12px; }
 .admin-tab { background: #1e1e2d; color: #fff; border: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; }
 .exam-list { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
 .exam-card { display: flex; justify-content: space-between; align-items: center; background: #0e0e16; border: 1px solid #252538; padding: 14px 16px; border-radius: 12px; }
@@ -243,4 +341,20 @@
   .csv-template-btn { align-self: flex-start; }
   .csv-file-name { display: block; margin: 8px 0 0; }
   .csv-import-btn { width: 100%; }
+}
+
+@media(max-width:900px) {
+  .admin-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-overview-columns { grid-template-columns: 1fr; }
+}
+
+@media(max-width:600px) {
+  .admin-panel { padding: 18px 14px; border-radius: 14px; }
+  .admin-primary-nav { width: 100%; box-sizing: border-box; }
+  .admin-primary-nav button { flex: 1; min-width: 0; padding: 10px 6px; font-size: 12px; }
+  .admin-view-heading { align-items: flex-start; flex-direction: column; }
+  .admin-view-heading h2 { font-size: 21px; }
+  .admin-metric-card { padding: 13px; }
+  .admin-metric-card strong { font-size: 23px; }
+  .admin-overview-card { padding: 14px; }
 }

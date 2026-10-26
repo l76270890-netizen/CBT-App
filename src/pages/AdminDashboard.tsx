@@ -1,6 +1,6 @@
 import { useState, useEffect, type ChangeEvent } from "react";
 import Papa from "papaparse";
-import { Download, FileSpreadsheet, Upload } from "lucide-react";
+import { Activity, ArrowRight, BookOpen, Download, FileSpreadsheet, LayoutDashboard, Upload, UsersRound } from "lucide-react";
 import "./AdminDashboard.css";
 import { API_URL as API } from "../config";
 
@@ -10,7 +10,7 @@ const defaultExamTypes = ["JAMB","WAEC","NECO","POSTUTME"];
 // CHANGE THIS TO YOUR REAL ADMIN PASSWORD
 const ADMIN_PASSWORD = "admin123";
 
-type Exam = { id: string; title: string; examType: string; year: number; duration: number; subjects: string[] }
+type Exam = { id: string; title: string; examType: string; year: number; duration: number; subjects: string[]; totalQuestions?: number }
 type CsvQuestionRow = {
   rowNumber: number;
   subject: string;
@@ -44,7 +44,8 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [adminPassInput, setAdminPassInput] = useState("");
   const [adminPassError, setAdminPassError] = useState("");
 
-  const [tab, setTab] = useState<"exams"|"questions">("exams");
+  const [adminView, setAdminView] = useState<"overview"|"students"|"exams">("overview");
+  const [examTab, setExamTab] = useState<"exams"|"questions">("exams");
   const [exams, setExams] = useState<Exam[]>([]);
   const [examTypes] = useState<string[]>(defaultExamTypes);
   const [allSubjects] = useState(defaultSubjects);
@@ -86,7 +87,8 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
       examType: e.examType,
       year: e.year,
       duration: e.duration,
-      subjects: e.subject? e.subject.split(',').map((s:string)=>s.trim()) : []
+      subjects: e.subject? e.subject.split(',').map((s:string)=>s.trim()) : [],
+      totalQuestions: typeof e.totalQuestions === "number" ? e.totalQuestions : undefined
     }));
     setExams(list);
     if(list[0] &&!selectedExam){
@@ -173,7 +175,8 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setETitle(ex.title); setEType(ex.examType);
     setEYear(String(ex.year)); setEDuration(String(ex.duration));
     setESubjects(ex.subjects);
-    setTab("exams");
+    setAdminView("exams");
+    setExamTab("exams");
     window.scrollTo({top:0, behavior:'smooth'});
   };
 
@@ -403,6 +406,11 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setTimeout(() => setMsg(""), 5000);
   };
 
+  const subjectCount = new Set(exams.flatMap(exam => exam.subjects)).size;
+  const questionCount = exams.length > 0 && exams.every(exam => typeof exam.totalQuestions === "number")
+    ? exams.reduce((total, exam) => total + (exam.totalQuestions || 0), 0)
+    : null;
+
   // STEP 1: ADMIN PASSWORD GATE - shows when user clicks admin
   if(!isAdminUnlocked){
     return (
@@ -449,14 +457,63 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         <div style={{display:"flex",gap:8}}><span className="admin-pill">{exams.length} Exams</span><button className="admin-btn danger-sm" onClick={()=>{localStorage.clear(); setUser(null); setIsAdminUnlocked(false)}}>Logout</button></div>
       </div>
 
-      <div className="admin-tabs">
-        <button className={tab==="exams"?"active":""} onClick={()=>setTab("exams")}>📚 Exams</button>
-        <button className={tab==="questions"?"active":""} onClick={()=>setTab("questions")}>❓ Questions</button>
-      </div>
+      <nav className="admin-primary-nav" aria-label="Admin sections">
+        <button className={adminView === "overview" ? "active" : ""} onClick={() => setAdminView("overview")}><LayoutDashboard size={16} /> Overview</button>
+        <button className={adminView === "students" ? "active" : ""} onClick={() => setAdminView("students")}><UsersRound size={16} /> Students</button>
+        <button className={adminView === "exams" ? "active" : ""} onClick={() => setAdminView("exams")}><BookOpen size={16} /> Exams</button>
+      </nav>
 
       {msg && <div className="admin-toast success">{msg}</div>}
 
-      {tab==="exams"? (
+      {adminView === "overview" ? (
+        <section className="admin-overview">
+          <div className="admin-view-heading">
+            <div><p className="admin-eyebrow">SCHOOL WORKSPACE</p><h2>Overview</h2><p>Exam activity and school performance at a glance.</p></div>
+            <button className="admin-overview-action" onClick={() => setAdminView("exams")}>Manage exams <ArrowRight size={16} /></button>
+          </div>
+          <div className="admin-metrics-grid">
+            <article className="admin-metric-card"><span>Exams</span><strong>{exams.length}</strong><small>In the exam library</small></article>
+            <article className="admin-metric-card"><span>Subjects</span><strong>{subjectCount}</strong><small>Across configured exams</small></article>
+            <article className="admin-metric-card"><span>Questions</span><strong>{questionCount ?? "—"}</strong><small>{questionCount === null ? "Question totals are not provided by the API" : "Across configured exams"}</small></article>
+            <article className="admin-metric-card is-unavailable"><span><Activity size={15} /> Students active now</span><strong>—</strong><small>School-wide student activity is not connected</small></article>
+          </div>
+          <div className="admin-overview-columns">
+            <section className="admin-overview-card">
+              <div className="admin-section-heading"><div><h3>Exam library</h3><p>Recently configured exams</p></div><button onClick={() => setAdminView("exams")}>View all</button></div>
+              {exams.length > 0 ? (
+                <div className="admin-recent-exams">
+                  {exams.slice(0, 5).map(exam => (
+                    <div className="admin-recent-exam" key={exam.id}>
+                      <div><strong>{exam.title}</strong><span>{exam.examType} · {exam.year}</span></div>
+                      <small>{exam.subjects.length} subjects</small>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="admin-empty-note">No exams are available yet.</p>}
+            </section>
+            <section className="admin-overview-card admin-student-notice">
+              <div className="admin-section-heading"><div><h3>Student performance</h3><p>School-wide student records</p></div><UsersRound size={18} /></div>
+              <div className="admin-data-unavailable"><UsersRound size={22} /><p>Student roster and performance data are not available to this frontend yet.</p><button onClick={() => setAdminView("students")}>Open Students <ArrowRight size={15} /></button></div>
+            </section>
+          </div>
+        </section>
+      ) : adminView === "students" ? (
+        <section className="admin-students-view">
+          <div className="admin-view-heading"><div><p className="admin-eyebrow">SCHOOL WORKSPACE</p><h2>Students</h2><p>Student accounts, activity, and performance.</p></div></div>
+          <div className="admin-students-empty">
+            <span className="admin-empty-icon"><UsersRound size={24} /></span>
+            <h3>Student data is not connected yet</h3>
+            <p>The current API exposes individual user history but no school-wide student roster or online-activity endpoint. Connect those data sources to show real students here.</p>
+          </div>
+        </section>
+      ) : (
+        <>
+        <div className="admin-view-heading admin-exams-heading"><div><p className="admin-eyebrow">SCHOOL WORKSPACE</p><h2>Exams</h2><p>Create exams, manage subjects, and add questions.</p></div></div>
+        <div className="admin-tabs">
+          <button className={examTab==="exams"?"active":""} onClick={()=>setExamTab("exams")}>📚 Exam setup</button>
+          <button className={examTab==="questions"?"active":""} onClick={()=>setExamTab("questions")}>❓ Questions</button>
+        </div>
+      {examTab==="exams"? (
         <>
         <form onSubmit={saveExam} className="admin-form">
           <div className="admin-field">
@@ -624,6 +681,8 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           </div>
           <button className="admin-btn primary lg" disabled={loading || csvImporting}>{loading?"Adding...":`Add to ${selectedSubject || 'Exam'}`}</button>
         </form>
+        </>
+      )}
         </>
       )}
     </div></div>
