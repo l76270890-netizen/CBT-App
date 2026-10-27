@@ -1,5 +1,6 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { API_URL as API } from '../config'
+import { apiRequest } from '../api'
 
 const AuthContext = createContext<any>(null)
 
@@ -12,11 +13,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   })
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    if (!user) return
+    const heartbeat = () => {
+      void apiRequest('/api/students/me/heartbeat', { method: 'POST', body: JSON.stringify({}) }).catch(() => {})
+    }
+    heartbeat()
+    const interval = window.setInterval(heartbeat, 5 * 60 * 1000)
+    return () => window.clearInterval(interval)
+  }, [user?.user_id])
+
   const login = async (email: string, password: string) => {
     setLoading(true)
     try {
       const res = await fetch(`${API}/api/login`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
       })
@@ -37,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch(`${API}/api/register`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password })
       })
@@ -68,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await fetch(`${API}/api/update-user/${user.user_id}`, {
         method: "PUT",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: newUsername })
       })
@@ -86,6 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       const res = await fetch(`${API}/api/user/upload-avatar/${user.user_id}`, {
         method: 'POST',
+        credentials: 'include',
         body: form
       })
 

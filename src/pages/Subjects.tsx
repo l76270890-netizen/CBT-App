@@ -34,7 +34,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
         const query = selectedExamId
           ? `examId=${encodeURIComponent(selectedExamId)}`
           : `examType=${encodeURIComponent(selectedExam)}`
-        const res = await fetch(`${API_URL}/api/questions?${query}`)
+        const res = await fetch(`${API_URL}/api/questions?${query}`, { credentials: 'include' })
         if (!res.ok) throw new Error("Could not load subjects")
         const data = await res.json()
         const map: Record<string, { count: number; years: Set<string> }> = {}

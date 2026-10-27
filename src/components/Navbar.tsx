@@ -15,7 +15,7 @@ export default function Navbar({ activePage, setActivePage }: any) {
 
   useEffect(() => {
     if(!user?.user_id) return
-    fetch(`${API_URL}/api/history/${user.user_id}`)
+    fetch(`${API_URL}/api/history/${user.user_id}`, { credentials: 'include' })
  .then(r=>r.json()).then(data=> {
       const onlyExams = data.filter((h:any)=>h.mode!=='study')
       setHistoryCount(onlyExams.length)

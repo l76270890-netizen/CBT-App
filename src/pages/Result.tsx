@@ -37,6 +37,7 @@ export default function Result({ setActivePage }: Props) {
     try {
       await fetch(`${API_URL}/api/save-result`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: savedUser.user_id,

@@ -21,7 +21,7 @@ export default function Account({ setActivePage }: Props) {
     setName(user.username || 'User')
     setEmail(user.email || '')
     setPhotoURL(user.profile_image || '')
-    fetch(`${API_URL}/api/history/${user.user_id}`)
+    fetch(`${API_URL}/api/history/${user.user_id}`, { credentials: 'include' })
     .then(r => r.json())
     .then(data => {
        const onlyExams = Array.isArray(data)? data.filter((h:any)=>h.mode!=='study') : []
@@ -39,6 +39,7 @@ export default function Account({ setActivePage }: Props) {
     try {
       await fetch(`${API_URL}/api/update-user/${user.user_id}`, {
         method: 'PUT',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: n })
       })

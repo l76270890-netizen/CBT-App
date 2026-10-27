@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import type { TestConfigType } from '../types'
 import './TestPage.css'
 import { API_URL } from '../config'
+import { apiRequest } from '../api'
 import { questionsBank } from '../data/questionsBank'
 
 type Props = { setActivePage: (page: string) => void; testConfig: TestConfigType }
@@ -58,7 +59,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
           if (examId) {
             for (const sub of subjectsList) {
               try {
-                const res = await fetch(`${API_URL}/api/questions?examId=${examId}&subject=${encodeURIComponent(sub)}`)
+                const res = await fetch(`${API_URL}/api/questions?examId=${encodeURIComponent(examId)}&subject=${encodeURIComponent(sub)}`, { credentials: 'include' })
                 if (res.ok) {
                   const data = await res.json()
                   if (Array.isArray(data) && data.length > 0) {
@@ -81,7 +82,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
             for (const sub of subjectsList) {
               try {
                 const url = `${API_URL}/api/questions?examType=${encodeURIComponent(examType)}&subjects=${encodeURIComponent(sub)}&topic=${filterTopic || ''}`
-                const res = await fetch(url)
+                const res = await fetch(url, { credentials: 'include' })
                 if (res.ok) {
                   const data = await res.json()
                   if (Array.isArray(data) && data.length > 0) {
@@ -104,7 +105,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
           // If backend returned comma-separated subjects in one call, try that too
           if (allFetched.length === 0 && subjectsList.length > 0) {
             try {
-              const res = await fetch(`${API_URL}/api/questions?examType=${examType}&subjects=${encodeURIComponent(subjectsList.join(','))}`)
+              const res = await fetch(`${API_URL}/api/questions?examType=${encodeURIComponent(examType)}&subjects=${encodeURIComponent(subjectsList.join(','))}`, { credentials: 'include' })
               if (res.ok) {
                 const data = await res.json()
                 if (Array.isArray(data) && data.length > 0) {
@@ -216,6 +217,20 @@ export default function Test({ setActivePage, testConfig }: Props) {
       questions
     }
     localStorage.setItem('lastTestResult', JSON.stringify(result))
+    if (examId && testConfig.mode === 'exam') {
+      const subjectsToRecord = [...new Set(questions.map(question => question.subject).filter(Boolean))]
+      void Promise.all(subjectsToRecord.map(subject => {
+        const subjectQuestions = questions.filter(question => question.subject === subject)
+        const subjectScore = subjectQuestions.reduce((count, question) => {
+          const index = questions.indexOf(question)
+          return count + (answers[index] === question.answer ? 1 : 0)
+        }, 0)
+        return apiRequest('/api/attempts', {
+          method: 'POST',
+          body: JSON.stringify({ examId, subject, score: subjectScore, total: subjectQuestions.length })
+        })
+      })).catch(error => console.error('Could not save exam attempt:', error))
+    }
     setActivePage('result')
   }, [answers, questions, setActivePage, calculateDuration, examType, subjectsList, titleVal, testConfig.mode, filterTopic, singleSubject])
 

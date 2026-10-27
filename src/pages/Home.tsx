@@ -32,7 +32,7 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
 
   useEffect(() => {
     if (user?.user_id) {
-      fetch(`${API_URL}/api/history/${user.user_id}`)
+      fetch(`${API_URL}/api/history/${user.user_id}`, { credentials: 'include' })
        .then(r => r.json()).then((history: any[]) => {
           if (history.length > 0) {
             const percents = history.map(h => Math.round((h.score / h.total) * 100))
@@ -45,11 +45,11 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
           }
         }).catch(()=>{})
     }
-    fetch(`${API_URL}/api/exams`)
+    fetch(`${API_URL}/api/exams`, { credentials: 'include' })
      .then(r => r.json()).then(data => {
         const mapped = data.map((e:any) => ({
           id: e.id, title: e.title, examType: e.examType,
-          subjects: e.subject? e.subject.split(',') : [],
+          subjects: Array.isArray(e.subjects) ? e.subjects : (typeof e.subject === 'string' ? e.subject.split(',').map((s:string)=>s.trim()).filter(Boolean) : []),
           year: e.year, duration: e.duration, totalQuestions: e.totalQuestions
         }))
         setExamsFromDb(mapped)
@@ -144,7 +144,7 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
             {filteredExams.map((exam) => (
               <div key={exam.id} className="exam-card1" onClick={() => handleExamClick(exam)} style={{cursor:'pointer'}}>
                 <div className="exam-icon-wrap1"><span><BookOpen size={22} /></span></div>
-                <div className="exam-info"><h4>{exam.title}</h4><p>{exam.examType} • {exam.subjects?.join(', ')} • {exam.year}</p><p style={{fontSize:11,color:'#888',marginTop:4}}>{exam.totalQuestions||0} Qs • {exam.duration}min</p></div><span className="chevron">›</span>
+                <div className="exam-info"><h4>{exam.title}</h4><p>{exam.examType} • {exam.subjects?.join(', ')} • {exam.year}</p><p style={{fontSize:11,color:'#888',marginTop:4}}>{exam.totalQuestions ?? '—'} Qs • {exam.duration}min</p></div><span className="chevron">›</span>
               </div>
             ))}
           </div>

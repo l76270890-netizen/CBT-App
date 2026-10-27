@@ -13,7 +13,7 @@ export default function PracticeHistory({ setActivePage }: any) {
 
   useEffect(() => {
     if(!user?.user_id) return
-    fetch(`${API_URL}/api/history/${user.user_id}`)
+    fetch(`${API_URL}/api/history/${user.user_id}`, { credentials: 'include' })
      .then(r=>r.json())
      .then((data: HistoryItem[]) => {
         // HIDE STUDY MODE FROM HISTORY
@@ -33,13 +33,13 @@ export default function PracticeHistory({ setActivePage }: any) {
 
   const handleDelete = async (id: string) => {
     if(!confirm("Delete?")) return
-    await fetch(`${API_URL}/api/history/${id}`, { method: 'DELETE' })
+    await fetch(`${API_URL}/api/history/${id}`, { method: 'DELETE', credentials: 'include' })
     setHistory(prev=>prev.filter(h=>h.id!==id))
   }
 
   const handleClear = async () => {
     if(!confirm("Clear all history? Only exams will be cleared. Study is never saved.")) return
-    await fetch(`${API_URL}/api/history/clear/${user.user_id}`, { method: 'DELETE' })
+    await fetch(`${API_URL}/api/history/clear/${user.user_id}`, { method: 'DELETE', credentials: 'include' })
     setHistory([])
   }
 
