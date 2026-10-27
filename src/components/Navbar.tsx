@@ -3,6 +3,7 @@ import { Home, FileText, BookOpen, History, User, LogOut, Settings, Bell, Menu, 
 import { useAuth } from '../context/AuthContext'
 import './Navbar.css'
 import { API_URL } from '../config'
+import { apiRequest, asArray } from '../api'
 
 type Notif = { id: string; title: string; message: string; time: string; read: boolean; type: 'success'|'info'|'warning' }
 
@@ -15,8 +16,8 @@ export default function Navbar({ activePage, setActivePage }: any) {
 
   useEffect(() => {
     if(!user?.user_id) return
-    fetch(`${API_URL}/api/history/${user.user_id}`, { credentials: 'include' })
- .then(r=>r.json()).then(data=> {
+    apiRequest<unknown>(`/api/history/${encodeURIComponent(user.user_id)}`).then(payload=> {
+      const data = asArray<any>(payload);
       const onlyExams = data.filter((h:any)=>h.mode!=='study')
       setHistoryCount(onlyExams.length)
       const saved = localStorage.getItem(`notifs_${user.user_id}`)

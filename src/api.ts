@@ -11,10 +11,18 @@ export async function apiRequest<T = unknown>(path: string, init: RequestInit = 
     headers,
   });
 
-  const body = await response.json().catch(() => null) as Record<string, unknown> | null;
+  const responseText = await response.text();
+  let body: Record<string, unknown> | null = null;
+  if (responseText.trim()) {
+    try { body = JSON.parse(responseText) as Record<string, unknown>; }
+    catch {
+      if (response.ok) throw new Error(`Backend returned a non-JSON response: ${responseText.slice(0, 180)}`);
+    }
+  }
   if (!response.ok) {
     const message = body?.error ?? body?.message;
-    throw Object.assign(new Error(typeof message === "string" ? message : `Request failed (${response.status})`), {
+    const fallbackMessage = responseText.trim() || `Request failed (${response.status})`;
+    throw Object.assign(new Error(typeof message === "string" ? message : fallbackMessage), {
       status: response.status,
     });
   }

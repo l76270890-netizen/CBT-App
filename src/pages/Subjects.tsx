@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { BookOpen, Calculator, Atom, Beaker, Zap, Landmark, DollarSign, Library, ArrowLeft, Search, Check } from 'lucide-react'
 import './Subjects.css'
-import { API_URL } from '../config'
+import { apiRequest, asArray } from '../api'
 
 type SubjectItem = { subject: string; questions: number; years: string; required?: boolean }
 type Props = {
@@ -16,6 +16,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
   const [search, setSearch] = useState("")
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
   const iconMap: any = {
     'Use of English': BookOpen, 'English Language': BookOpen, 'English': BookOpen,
@@ -27,6 +28,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
   useEffect(() => {
     const fetchSubjects = async () => {
       setLoading(true)
+      setLoadError("")
       setSubjects([])
       setSelectedSubjects([])
       setSearch("")
@@ -34,9 +36,8 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
         const query = selectedExamId
           ? `examId=${encodeURIComponent(selectedExamId)}`
           : `examType=${encodeURIComponent(selectedExam)}`
-        const res = await fetch(`${API_URL}/api/questions?${query}`, { credentials: 'include' })
-        if (!res.ok) throw new Error("Could not load subjects")
-        const data = await res.json()
+        const payload = await apiRequest<unknown>(`/api/questions?${query}`)
+        const data = Array.isArray(payload) ? payload : asArray<any>((payload as any)?.questions)
         const map: Record<string, { count: number; years: Set<string> }> = {}
         if (!Array.isArray(data)) throw new Error("Unexpected subject response")
         data.forEach((d: any) => {
@@ -60,7 +61,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
         } else {
           setSubjects(grouped)
         }
-      } catch (e) { console.log(e) } finally { setLoading(false) }
+      } catch (e) { setLoadError(e instanceof Error ? e.message : "Could not load subjects."); setSubjects([]); } finally { setLoading(false) }
     }
     fetchSubjects()
   }, [selectedExam, selectedExamId])
@@ -97,7 +98,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
         <div className="alert-card"><div className="alert-icon">i</div><div className="alert-text">Subjects for {selectedExam}</div></div>
       </div>
       {loading? <div className="no-result">Loading {selectedExam} subjects...</div> :
-        filtered.length === 0? <div className="no-result">No subjects for {selectedExam}. Add in Admin.</div> :
+        loadError ? <div className="no-result" role="alert">{loadError}</div> : filtered.length === 0? <div className="no-result">No subjects for {selectedExam}. Add in Admin.</div> :
           <div className="subject-list">
             {filtered.map((item) => {
               const Icon = iconMap[item.subject] || BookOpen

@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { User, Download, Settings, HelpCircle, Info, ChevronRight, Crown, LogOut, Edit3, Camera, Loader2 } from 'lucide-react'
 import './Account.css'
 import { API_URL } from '../config'
+import { apiRequest, asArray } from '../api'
 
 type Props = { setActivePage: (page: string) => void }
 
@@ -21,9 +22,9 @@ export default function Account({ setActivePage }: Props) {
     setName(user.username || 'User')
     setEmail(user.email || '')
     setPhotoURL(user.profile_image || '')
-    fetch(`${API_URL}/api/history/${user.user_id}`, { credentials: 'include' })
-    .then(r => r.json())
-    .then(data => {
+    apiRequest<unknown>(`/api/history/${encodeURIComponent(user.user_id)}`)
+    .then(payload => {
+       const data = asArray<any>(payload)
        const onlyExams = Array.isArray(data)? data.filter((h:any)=>h.mode!=='study') : []
        setPracticed(onlyExams.length)
      })

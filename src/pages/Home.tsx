@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { BookOpen, Search, X, Funnel, Flame, Trophy, Target, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react'
 import './Home.css'
-import { API_URL } from '../config'
+import { apiRequest, asArray } from '../api'
 
 type ExamData = {
   id: string
@@ -28,12 +28,13 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
   const [heroPaused, setHeroPaused] = useState(false)
   const [examsFromDb, setExamsFromDb] = useState<ExamData[]>([])
   const [loading, setLoading] = useState(true)
+  const [examsError, setExamsError] = useState("")
   const [stats, setStats] = useState({ practiced: 0, avgScore: 0, bestScore: 0, streak: 3 })
 
   useEffect(() => {
     if (user?.user_id) {
-      fetch(`${API_URL}/api/history/${user.user_id}`, { credentials: 'include' })
-       .then(r => r.json()).then((history: any[]) => {
+      apiRequest<unknown>(`/api/history/${encodeURIComponent(user.user_id)}`).then((payload) => {
+          const history = asArray<any>(payload);
           if (history.length > 0) {
             const percents = history.map(h => Math.round((h.score / h.total) * 100))
             setStats({
@@ -45,14 +46,17 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
           }
         }).catch(()=>{})
     }
-    fetch(`${API_URL}/api/exams`, { credentials: 'include' })
-     .then(r => r.json()).then(data => {
-        const mapped = data.map((e:any) => ({
-          id: e.id, title: e.title, examType: e.examType,
-          subjects: Array.isArray(e.subjects) ? e.subjects : (typeof e.subject === 'string' ? e.subject.split(',').map((s:string)=>s.trim()).filter(Boolean) : []),
-          year: e.year, duration: e.duration, totalQuestions: e.totalQuestions
+    apiRequest<unknown>("/api/exams").then(payload => {
+        const data = Array.isArray(payload) ? payload : asArray<any>((payload as any)?.exams);
+        const mapped = data.filter((e:any) => e && typeof e === 'object').map((e:any) => ({
+          id: String(e.id ?? ''), title: String(e.title ?? 'Untitled exam'), examType: String(e.examType ?? ''),
+          subjects: Array.isArray(e.subjects) ? e.subjects.filter((s:unknown): s is string => typeof s === 'string') : (typeof e.subject === 'string' ? e.subject.split(',').map((s:string)=>s.trim()).filter(Boolean) : []),
+          year: Number(e.year) || 0, duration: Number(e.duration) || 0, totalQuestions: typeof e.totalQuestions === 'number' ? e.totalQuestions : undefined
         }))
         setExamsFromDb(mapped)
+      }).catch(loadError => {
+        setExamsError(loadError instanceof Error ? loadError.message : "Could not load exams.");
+        setExamsFromDb([]);
       }).finally(()=> setLoading(false))
   }, [user])
 
@@ -138,6 +142,7 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
         <div className="stats-card"><div className="stat-icon red"><Flame size={18} /></div><h2>{stats.streak} days</h2><span>Study Streak</span></div>
       </div>
       <div className="section-header"><h3>Featured Exams {examsFromDb.length>0 && `(${examsFromDb.length})`}</h3><p onClick={() => setActivePage('exams')}>see more ›</p></div>
+      {examsError && <p role="alert" style={{color:'#fca5a5'}}>{examsError}</p>}
       {loading? <div className="no-result">Loading exams...</div> :
         filteredExams.length>0? (
           <div className="exam-list">

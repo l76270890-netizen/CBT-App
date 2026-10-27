@@ -26,14 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/api/login`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.message || "Login failed")
+      const data = await apiRequest<any>("/api/login", { method: "POST", body: JSON.stringify({ email, password }) })
       localStorage.setItem('cbt_user', JSON.stringify(data))
       setUser(data)
       return { success: true, data }
@@ -47,14 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (name: string, email: string, password: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/api/register`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password })
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.message || "Register failed")
+      const data = await apiRequest<any>("/api/register", { method: "POST", body: JSON.stringify({ name, email, password }) })
       localStorage.setItem('cbt_user', JSON.stringify(data))
       setUser(data)
       return { success: true, data }

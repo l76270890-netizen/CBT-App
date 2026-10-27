@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { BarChart3, Trophy, Clock, Target, Trash2, RotateCcw, Award, Calendar } from 'lucide-react'
 import './PracticeHistory.css'
 import { API_URL } from '../config'
+import { apiRequest, asArray } from '../api'
 
 type HistoryItem = { id: string; title: string; date: string; score: number; total: number; duration: string; status: 'Passed'|'Failed'; mode?: string }
 
@@ -13,9 +14,9 @@ export default function PracticeHistory({ setActivePage }: any) {
 
   useEffect(() => {
     if(!user?.user_id) return
-    fetch(`${API_URL}/api/history/${user.user_id}`, { credentials: 'include' })
-     .then(r=>r.json())
-     .then((data: HistoryItem[]) => {
+    apiRequest<unknown>(`/api/history/${encodeURIComponent(user.user_id)}`)
+     .then(payload => {
+        const data = asArray<HistoryItem>(payload)
         // HIDE STUDY MODE FROM HISTORY
         const onlyExams = data.filter(h => h.mode!== 'study')
         setHistory(onlyExams)

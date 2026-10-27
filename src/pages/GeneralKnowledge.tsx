@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import './GeneralKnowledge.css'
-import { API_URL } from '../config'
+import { apiRequest, asArray } from '../api'
 
 export default function GeneralKnowledge({ setActivePage, setTestConfig }: any) {
   const [questions, setQuestions] = useState<any[]>([])
@@ -9,9 +9,8 @@ export default function GeneralKnowledge({ setActivePage, setTestConfig }: any) 
   useEffect(()=>{
     const load = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/questions?subject=General%20Knowledge`, { credentials: 'include' })
-        const data = await res.json()
-        setQuestions(data)
+        const payload = await apiRequest<unknown>('/api/questions?subject=General%20Knowledge')
+        setQuestions(Array.isArray(payload) ? payload : asArray<any>((payload as any)?.questions))
       } catch(err) {
         console.error(err)
       }
