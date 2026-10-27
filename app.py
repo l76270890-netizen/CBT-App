@@ -11,6 +11,7 @@ import json
 import os
 import secrets
 import time
+import tempfile
 
 from flask import Flask, jsonify, request, send_from_directory, make_response, g
 from flask_cors import CORS
@@ -39,26 +40,34 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URL", f"sqlite:///{os.path.join(os.path.abspath(os.path.dirname(__file__)), 'examcore.db')}"
 ).replace("postgres://", "postgresql://", 1)
-app.config["SESSION_COOKIE_NAME"] = os.environ.get("SESSION_COOKIE_NAME", "school_admin_session")
+app.config["SESSION_COOKIE_NAME"] = os.environ.get(
+    "SESSION_COOKIE_NAME", "school_admin_session")
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get(
-    "COOKIE_SECURE", "true" if os.environ.get("APP_ENV") == "production" else "false"
+    "COOKIE_SECURE", "true" if os.environ.get(
+        "APP_ENV") == "production" else "false"
 ).lower() == "true"
 app.config["SESSION_COOKIE_SAMESITE"] = os.environ.get(
-    "COOKIE_SAMESITE", "None" if os.environ.get("APP_ENV") == "production" else "Lax"
+    "COOKIE_SAMESITE", "None" if os.environ.get(
+        "APP_ENV") == "production" else "Lax"
 )
-app.config["SESSION_TTL_HOURS"] = int(os.environ.get("SESSION_TTL_HOURS", "24"))
+app.config["SESSION_TTL_HOURS"] = int(
+    os.environ.get("SESSION_TTL_HOURS", "24"))
 
 configured_origins = os.environ.get(
-    "FRONTEND_ORIGINS", os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
+    "FRONTEND_ORIGINS", os.environ.get(
+        "FRONTEND_ORIGIN", "http://localhost:3000")
 )
-FRONTEND_ORIGINS = [origin.strip() for origin in configured_origins.split(",") if origin.strip()]
-CORS(app, resources={r"/api/*": {"origins": FRONTEND_ORIGINS}}, supports_credentials=True)
+FRONTEND_ORIGINS = [origin.strip()
+                    for origin in configured_origins.split(",") if origin.strip()]
+CORS(app, resources={r"/api/*": {"origins": FRONTEND_ORIGINS}},
+     supports_credentials=True)
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
 BASEDIR = os.path.abspath(os.path.dirname(__file__))
-UPLOAD_FOLDER = os.path.join(BASEDIR, "uploads")
+# Vercel's deployment directory is read-only; use its temporary writable directory.
+UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), "examcore-uploads")
 AVATAR_FOLDER = os.path.join(UPLOAD_FOLDER, "avatars")
 QUESTION_FOLDER = os.path.join(UPLOAD_FOLDER, "questions")
 os.makedirs(AVATAR_FOLDER, exist_ok=True)
@@ -108,9 +117,11 @@ class School(db.Model):
 class SchoolClass(db.Model):
     __tablename__ = "school_classes"
     id = db.Column(db.Integer, primary_key=True)
-    school_id = db.Column(db.Integer, db.ForeignKey("schools.id"), nullable=False, index=True)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=False, index=True)
     name = db.Column(db.String(120), nullable=False)
-    __table_args__ = (db.UniqueConstraint("school_id", "name", name="uq_school_class_name"),)
+    __table_args__ = (db.UniqueConstraint(
+        "school_id", "name", name="uq_school_class_name"),)
 
 
 class User(db.Model):
@@ -120,10 +131,14 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password = db.Column(db.String(200), nullable=False)
     profile_image = db.Column(db.String(1000), nullable=True)
-    school_id = db.Column(db.Integer, db.ForeignKey("schools.id"), nullable=True, index=True)
-    role = db.Column(db.String(32), nullable=False, default="student", index=True)
-    class_id = db.Column(db.Integer, db.ForeignKey("school_classes.id"), nullable=True, index=True)
-    account_status = db.Column(db.String(20), nullable=False, default="active", index=True)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=True, index=True)
+    role = db.Column(db.String(32), nullable=False,
+                     default="student", index=True)
+    class_id = db.Column(db.Integer, db.ForeignKey(
+        "school_classes.id"), nullable=True, index=True)
+    account_status = db.Column(
+        db.String(20), nullable=False, default="active", index=True)
     last_seen_at = db.Column(db.DateTime, nullable=True, index=True)
 
 
@@ -138,21 +153,25 @@ class Exam(db.Model):
     duration = db.Column(db.Integer)
     totalQuestions = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=utcnow)
-    school_id = db.Column(db.Integer, db.ForeignKey("schools.id"), nullable=True, index=True)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=True, index=True)
 
 
 class ExamSubject(db.Model):
     __tablename__ = "exam_subjects"
     id = db.Column(db.Integer, primary_key=True)
-    exam_id = db.Column(db.Integer, db.ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True)
+    exam_id = db.Column(db.Integer, db.ForeignKey(
+        "exams.id", ondelete="CASCADE"), nullable=False, index=True)
     name = db.Column(db.String(120), nullable=False)
-    __table_args__ = (db.UniqueConstraint("exam_id", "name", name="uq_exam_subject_name"),)
+    __table_args__ = (db.UniqueConstraint(
+        "exam_id", "name", name="uq_exam_subject_name"),)
 
 
 class Question(db.Model):
     __tablename__ = "questions"
     id = db.Column(db.Integer, primary_key=True)
-    examId = db.Column(db.Integer, db.ForeignKey("exams.id"), nullable=True, index=True)
+    examId = db.Column(db.Integer, db.ForeignKey(
+        "exams.id"), nullable=True, index=True)
     examType = db.Column(db.String(80))
     subject = db.Column(db.String(100))
     question = db.Column(db.Text)
@@ -161,14 +180,16 @@ class Question(db.Model):
     explanation = db.Column(db.Text)
     year = db.Column(db.Integer, default=2024)
     image_path = db.Column(db.String(1000), nullable=True)
-    school_id = db.Column(db.Integer, db.ForeignKey("schools.id"), nullable=True, index=True)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=True, index=True)
 
 
 class CBTResult(db.Model):
     """Legacy personal history record; only visible to its authenticated owner."""
     __tablename__ = "results"
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey(
+        "users.id"), nullable=True, index=True)
     email = db.Column(db.String(120))
     title = db.Column(db.String(200), default="Practice Test")
     score = db.Column(db.Integer)
@@ -178,8 +199,10 @@ class CBTResult(db.Model):
     mode = db.Column(db.String(20), default="exam")
     examType = db.Column(db.String(80))
     date = db.Column(db.DateTime, default=utcnow)
-    school_id = db.Column(db.Integer, db.ForeignKey("schools.id"), nullable=True, index=True)
-    exam_id = db.Column(db.Integer, db.ForeignKey("exams.id"), nullable=True, index=True)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=True, index=True)
+    exam_id = db.Column(db.Integer, db.ForeignKey(
+        "exams.id"), nullable=True, index=True)
     subject_name = db.Column(db.String(120), nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True, index=True)
 
@@ -187,13 +210,17 @@ class CBTResult(db.Model):
 class Attempt(db.Model):
     __tablename__ = "attempts"
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
-    school_id = db.Column(db.Integer, db.ForeignKey("schools.id"), nullable=False, index=True)
-    exam_id = db.Column(db.Integer, db.ForeignKey("exams.id"), nullable=False, index=True)
+    student_id = db.Column(db.Integer, db.ForeignKey(
+        "users.id"), nullable=False, index=True)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=False, index=True)
+    exam_id = db.Column(db.Integer, db.ForeignKey(
+        "exams.id"), nullable=False, index=True)
     subject = db.Column(db.String(120), nullable=False, index=True)
     score = db.Column(db.Float, nullable=False)
     total = db.Column(db.Float, nullable=False)
-    completed_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+    completed_at = db.Column(db.DateTime, nullable=False,
+                             default=utcnow, index=True)
 
     @property
     def percentage(self):
@@ -203,8 +230,10 @@ class Attempt(db.Model):
 class AuthToken(db.Model):
     __tablename__ = "auth_tokens"
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey(
+        "users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = db.Column(db.String(64), unique=True,
+                           nullable=False, index=True)
     expires_at = db.Column(db.DateTime, nullable=False, index=True)
     revoked_at = db.Column(db.DateTime, nullable=True)
 
@@ -227,7 +256,8 @@ def require_auth(fn):
         if not raw_token:
             return api_error("Authentication required.", 401, "unauthenticated")
         token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-        session = AuthToken.query.filter_by(token_hash=token_hash, revoked_at=None).first()
+        session = AuthToken.query.filter_by(
+            token_hash=token_hash, revoked_at=None).first()
         if not session or session.expires_at <= utcnow():
             return api_error("Session is invalid or expired. Please sign in again.", 401, "invalid_session")
         user = db.session.get(User, session.user_id)
@@ -273,16 +303,19 @@ def issue_session(user):
 
 
 def student_payload(user):
-    class_row = db.session.get(SchoolClass, user.class_id) if user.class_id else None
+    class_row = db.session.get(
+        SchoolClass, user.class_id) if user.class_id else None
     return {"id": user.id, "displayName": user.username, "email": user.email,
             "class": class_row.name if class_row and class_row.school_id == user.school_id else None,
             "accountStatus": user.account_status, "lastSeenAt": iso_utc(user.last_seen_at)}
 
 
 def subjects_for_exam(exam):
-    names = [row.name for row in ExamSubject.query.filter_by(exam_id=exam.id).order_by(ExamSubject.name).all()]
+    names = [row.name for row in ExamSubject.query.filter_by(
+        exam_id=exam.id).order_by(ExamSubject.name).all()]
     if not names and exam.subject:
-        names = [value.strip() for value in exam.subject.split(",") if value.strip()]
+        names = [value.strip()
+                 for value in exam.subject.split(",") if value.strip()]
     return names
 
 
@@ -353,7 +386,8 @@ def register():
 def authenticate(data, admins_only=False):
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
-    user = User.query.filter(func.lower(User.email) == email).first() if email else None
+    user = User.query.filter(func.lower(User.email) ==
+                             email).first() if email else None
     if not user or not check_password_hash(user.password, password):
         return api_error("Invalid email or password.", 401, "invalid_credentials")
     if user.account_status != "active" or not user.school_id:
@@ -424,10 +458,12 @@ def update_user(user_id):
 @app.route("/api/exams", methods=["GET"])
 @require_auth
 def get_exams():
-    exams = Exam.query.filter_by(school_id=g.current_user.school_id).order_by(Exam.created_at.desc()).all()
+    exams = Exam.query.filter_by(school_id=g.current_user.school_id).order_by(
+        Exam.created_at.desc()).all()
     result = []
     for exam in exams:
-        actual_questions = Question.query.filter_by(examId=exam.id, school_id=g.current_user.school_id).count()
+        actual_questions = Question.query.filter_by(
+            examId=exam.id, school_id=g.current_user.school_id).count()
         result.append({"id": exam.id, "title": exam.title, "examType": exam.examType,
                        "year": exam.year, "duration": exam.duration,
                        "subjects": subjects_for_exam(exam), "totalQuestions": actual_questions})
@@ -441,7 +477,8 @@ def get_questions():
     subject = (request.args.get("subject") or "").strip()
     if not exam_id or not subject:
         return api_error("Both examId and subject are required.")
-    exam = Exam.query.filter_by(id=exam_id, school_id=g.current_user.school_id).first()
+    exam = Exam.query.filter_by(
+        id=exam_id, school_id=g.current_user.school_id).first()
     if not exam:
         return api_error("Exam not found.", 404, "exam_not_found")
     if subject not in subjects_for_exam(exam):
@@ -487,7 +524,8 @@ def create_exam():
     prepared_questions = []
     # Validate the whole payload before writing anything, so a bad CSV-like row
     # cannot leave a half-created exam behind.
-    shell_exam = Exam(id=-1, title=data["title"], examType=data["examType"], subject=",".join(data["subjects"]))
+    shell_exam = Exam(
+        id=-1, title=data["title"], examType=data["examType"], subject=",".join(data["subjects"]))
     for index, question_data in enumerate(initial_questions, start=1):
         if not isinstance(question_data, dict):
             return api_error(f"Question {index} must be an object.")
@@ -495,7 +533,8 @@ def create_exam():
         opts = question_data.get("options")
         if isinstance(opts, list) and len(opts) == 4:
             question_data["options"] = dict(zip("ABCD", opts))
-        validated, question_error = validate_question_payload(question_data, shell_exam)
+        validated, question_error = validate_question_payload(
+            question_data, shell_exam)
         if question_error:
             return api_error(f"Question {index}: {question_error}")
         prepared_questions.append(validated)
@@ -519,12 +558,15 @@ def create_exam():
 @app.route("/api/admin/exam/<int:exam_id>", methods=["PUT", "DELETE"])
 @roles_required("school_admin", "exam_officer")
 def manage_exam(exam_id):
-    exam = Exam.query.filter_by(id=exam_id, school_id=g.current_user.school_id).first()
+    exam = Exam.query.filter_by(
+        id=exam_id, school_id=g.current_user.school_id).first()
     if not exam:
         return api_error("Exam not found.", 404, "exam_not_found")
     if request.method == "DELETE":
-        Question.query.filter_by(examId=exam.id, school_id=g.current_user.school_id).delete(synchronize_session=False)
-        ExamSubject.query.filter_by(exam_id=exam.id).delete(synchronize_session=False)
+        Question.query.filter_by(examId=exam.id, school_id=g.current_user.school_id).delete(
+            synchronize_session=False)
+        ExamSubject.query.filter_by(exam_id=exam.id).delete(
+            synchronize_session=False)
         db.session.delete(exam)
         db.session.commit()
         return jsonify(success=True, message="Exam deleted.")
@@ -549,7 +591,8 @@ def manage_exam(exam_id):
         old_names = set(subjects_for_exam(exam))
         if old_names != set(names) and Question.query.filter_by(examId=exam.id, school_id=exam.school_id).count():
             return api_error("Subjects cannot be changed after questions have been added.")
-        ExamSubject.query.filter_by(exam_id=exam.id).delete(synchronize_session=False)
+        ExamSubject.query.filter_by(exam_id=exam.id).delete(
+            synchronize_session=False)
         for name in names:
             db.session.add(ExamSubject(exam_id=exam.id, name=name))
         exam.subject = ",".join(names)
@@ -591,7 +634,8 @@ def add_question():
         exam_id = int(data.get("examId"))
     except (TypeError, ValueError):
         return api_error("examId must be a valid integer.")
-    exam = Exam.query.filter_by(id=exam_id, school_id=g.current_user.school_id).first()
+    exam = Exam.query.filter_by(
+        id=exam_id, school_id=g.current_user.school_id).first()
     if not exam:
         return api_error("Exam not found in your school.", 404, "exam_not_found")
     file = request.files.get("image") if multipart else None
@@ -615,7 +659,8 @@ def add_question():
                    explanation=validated["explanation"], year=exam.year, image_path=validated["image_path"])
     db.session.add(row)
     db.session.flush()
-    exam.totalQuestions = Question.query.filter_by(examId=exam.id, school_id=exam.school_id).count()
+    exam.totalQuestions = Question.query.filter_by(
+        examId=exam.id, school_id=exam.school_id).count()
     db.session.commit()
     return jsonify(success=True, id=row.id, examId=exam.id, subject=row.subject,
                    image_path=row.image_path, image_url=get_image_url(row.image_path)), 201
@@ -643,13 +688,16 @@ def upload_question_image():
 def admin_overview():
     school_id = g.current_user.school_id
     now = utcnow()
-    exam_ids = db.session.query(Exam.id).filter_by(school_id=school_id).subquery()
+    exam_ids = db.session.query(Exam.id).filter_by(
+        school_id=school_id).subquery()
     exams_count = Exam.query.filter_by(school_id=school_id).count()
-    subjects_count = ExamSubject.query.filter(ExamSubject.exam_id.in_(exam_ids)).count()
+    subjects_count = ExamSubject.query.filter(
+        ExamSubject.exam_id.in_(exam_ids)).count()
     questions_count = Question.query.filter_by(school_id=school_id).count()
     students = User.query.filter_by(school_id=school_id, role="student")
     enrolled = students.count()
-    active = students.filter(User.account_status == "active", User.last_seen_at >= now - timedelta(minutes=5)).count()
+    active = students.filter(User.account_status == "active",
+                             User.last_seen_at >= now - timedelta(minutes=5)).count()
     attempts = Attempt.query.filter_by(school_id=school_id)
     attempt_count = attempts.count()
     average_score = db.session.query(func.avg((Attempt.score * 100.0) / Attempt.total)).filter(
@@ -684,23 +732,27 @@ def admin_students():
         limit = min(200, max(1, int(request.args.get("limit", "50"))))
     except ValueError:
         return api_error("page and limit must be integers.")
-    query = User.query.filter_by(school_id=g.current_user.school_id, role="student")
+    query = User.query.filter_by(
+        school_id=g.current_user.school_id, role="student")
     search = (request.args.get("search") or "").strip()
     if search:
         needle = f"%{search}%"
-        query = query.filter(or_(User.username.ilike(needle), User.email.ilike(needle)))
+        query = query.filter(
+            or_(User.username.ilike(needle), User.email.ilike(needle)))
     class_id = request.args.get("classId")
     if class_id:
         try:
             class_id = int(class_id)
         except ValueError:
             return api_error("classId must be an integer.")
-        school_class = SchoolClass.query.filter_by(id=class_id, school_id=g.current_user.school_id).first()
+        school_class = SchoolClass.query.filter_by(
+            id=class_id, school_id=g.current_user.school_id).first()
         if not school_class:
             return api_error("Class not found.", 404, "class_not_found")
         query = query.filter(User.class_id == class_id)
     total = query.count()
-    rows = query.order_by(User.username.asc(), User.id.asc()).offset((page - 1) * limit).limit(limit).all()
+    rows = query.order_by(User.username.asc(), User.id.asc()).offset(
+        (page - 1) * limit).limit(limit).all()
     return jsonify({"students": [student_payload(row) for row in rows],
                     "pagination": {"page": page, "limit": limit, "total": total,
                                    "pages": (total + limit - 1) // limit}})
@@ -719,7 +771,8 @@ def parse_iso_date(value, field):
 @roles_required("school_admin", "teacher", "exam_officer")
 def student_performance(student_id):
     school_id = g.current_user.school_id
-    student = User.query.filter_by(id=student_id, school_id=school_id, role="student").first()
+    student = User.query.filter_by(
+        id=student_id, school_id=school_id, role="student").first()
     if not student:
         return api_error("Student not found.", 404, "student_not_found")
     start, error = parse_iso_date(request.args.get("from"), "from")
@@ -737,7 +790,8 @@ def student_performance(student_id):
     history = []
     grouped = {}
     for row in rows:
-        exam = Exam.query.filter_by(id=row.exam_id, school_id=school_id).first()
+        exam = Exam.query.filter_by(
+            id=row.exam_id, school_id=school_id).first()
         if not exam:
             continue
         history.append({"attemptId": row.id, "examId": exam.id, "examTitle": exam.title,
@@ -746,7 +800,8 @@ def student_performance(student_id):
         grouped.setdefault(row.subject, []).append(row)
     by_subject = []
     for subject, subject_rows in sorted(grouped.items()):
-        percentages = [row.percentage for row in subject_rows if row.percentage is not None]
+        percentages = [
+            row.percentage for row in subject_rows if row.percentage is not None]
         by_subject.append({"subject": subject, "completedAttempts": len(subject_rows),
                            "averageScore": round(sum(percentages) / len(percentages), 2) if percentages else None,
                            "scoreHistory": [{"score": row.score, "total": row.total,
@@ -777,7 +832,8 @@ def submit_attempt():
     subject = data.get("subject")
     if total <= 0 or score < 0 or score > total:
         return api_error("score must be between zero and a positive total.")
-    exam = Exam.query.filter_by(id=exam_id, school_id=g.current_user.school_id).first()
+    exam = Exam.query.filter_by(
+        id=exam_id, school_id=g.current_user.school_id).first()
     if not exam:
         return api_error("Exam not found.", 404, "exam_not_found")
     if not isinstance(subject, str) or subject.strip() not in subjects_for_exam(exam):
@@ -812,7 +868,8 @@ def save_history_alias():
             exam_id = int(data.get("examId"))
         except (TypeError, ValueError):
             return api_error("examId must be a valid integer when recording an exam attempt.")
-        exam = Exam.query.filter_by(id=exam_id, school_id=g.current_user.school_id).first()
+        exam = Exam.query.filter_by(
+            id=exam_id, school_id=g.current_user.school_id).first()
         if not exam:
             return api_error("Exam not found.", 404, "exam_not_found")
         subject = data.get("subject")
@@ -821,9 +878,12 @@ def save_history_alias():
         attempt = Attempt(student_id=g.current_user.id, school_id=g.current_user.school_id,
                           exam_id=exam.id, subject=subject.strip(), score=score, total=total, completed_at=utcnow())
     row = CBTResult(user_id=g.current_user.id, email=g.current_user.email,
-                    title=str(data.get("title", "Practice Test"))[:200], score=score, total=total,
-                    duration=str(data.get("duration", "0m"))[:20], status=str(data.get("status", "Failed"))[:20],
-                    mode=str(data.get("mode", "exam"))[:20], examType=str(data.get("examType", "JAMB"))[:80],
+                    title=str(data.get("title", "Practice Test"))[
+                        :200], score=score, total=total,
+                    duration=str(data.get("duration", "0m"))[:20], status=str(
+                        data.get("status", "Failed"))[:20],
+                    mode=str(data.get("mode", "exam"))[:20], examType=str(
+                        data.get("examType", "JAMB"))[:80],
                     school_id=g.current_user.school_id, date=utcnow())
     db.session.add(row)
     if attempt:
@@ -837,7 +897,8 @@ def save_history_alias():
 def history(user_id):
     if user_id != g.current_user.id:
         return api_error("You can only read your own history.", 403, "forbidden")
-    rows = CBTResult.query.filter_by(user_id=g.current_user.id, school_id=g.current_user.school_id).order_by(CBTResult.date.desc()).all()
+    rows = CBTResult.query.filter_by(
+        user_id=g.current_user.id, school_id=g.current_user.school_id).order_by(CBTResult.date.desc()).all()
     return jsonify([{"id": row.id, "title": row.title, "score": row.score, "total": row.total,
                      "duration": row.duration, "status": row.status, "mode": row.mode,
                      "examType": row.examType, "date": iso_utc(row.date)} for row in rows])
@@ -860,7 +921,8 @@ def delete_history(result_id):
 def clear_history(user_id):
     if user_id != g.current_user.id:
         return api_error("You can only clear your own history.", 403, "forbidden")
-    CBTResult.query.filter_by(user_id=g.current_user.id, school_id=g.current_user.school_id).delete()
+    CBTResult.query.filter_by(
+        user_id=g.current_user.id, school_id=g.current_user.school_id).delete()
     db.session.commit()
     return jsonify(success=True)
 
@@ -872,9 +934,11 @@ def create_school_admin_command():
     name = click.prompt("School name")
     email = click.prompt("Admin email").strip().lower()
     username = click.prompt("Admin display name")
-    password = click.prompt("Admin password", hide_input=True, confirmation_prompt=True)
+    password = click.prompt(
+        "Admin password", hide_input=True, confirmation_prompt=True)
     if len(password) < 8 or User.query.filter(func.lower(User.email) == email).first():
-        raise click.ClickException("Use a password of at least 8 characters and a new email address.")
+        raise click.ClickException(
+            "Use a password of at least 8 characters and a new email address.")
     school = School(name=name.strip())
     db.session.add(school)
     db.session.flush()
@@ -882,7 +946,8 @@ def create_school_admin_command():
                  school_id=school.id, role="school_admin", account_status="active")
     db.session.add(admin)
     db.session.commit()
-    click.echo(f"Created school {school.id} and school_admin account {admin.id}.")
+    click.echo(
+        f"Created school {school.id} and school_admin account {admin.id}.")
 
 
 @app.cli.command("create-school-user")
@@ -890,14 +955,17 @@ def create_school_user_command():
     """Create a teacher or exam officer in an existing school."""
     import click
     school_id = click.prompt("School ID", type=int)
-    role = click.prompt("Role", type=click.Choice(["teacher", "exam_officer", "student"], case_sensitive=False)).lower()
+    role = click.prompt("Role", type=click.Choice(
+        ["teacher", "exam_officer", "student"], case_sensitive=False)).lower()
     email = click.prompt("Email").strip().lower()
     username = click.prompt("Display name")
-    password = click.prompt("Password", hide_input=True, confirmation_prompt=True)
+    password = click.prompt("Password", hide_input=True,
+                            confirmation_prompt=True)
     if not db.session.get(School, school_id):
         raise click.ClickException("School not found.")
     if len(password) < 8 or User.query.filter(func.lower(User.email) == email).first():
-        raise click.ClickException("Use a password of at least 8 characters and a new email address.")
+        raise click.ClickException(
+            "Use a password of at least 8 characters and a new email address.")
     user = User(username=username.strip(), email=email, password=generate_password_hash(password),
                 school_id=school_id, role=role, account_status="active")
     db.session.add(user)
@@ -914,7 +982,8 @@ def create_school_class_command():
     if not db.session.get(School, school_id):
         raise click.ClickException("School not found.")
     if not name or SchoolClass.query.filter_by(school_id=school_id, name=name).first():
-        raise click.ClickException("Class name is empty or already exists in this school.")
+        raise click.ClickException(
+            "Class name is empty or already exists in this school.")
     row = SchoolClass(school_id=school_id, name=name)
     db.session.add(row)
     db.session.commit()
@@ -926,7 +995,8 @@ def set_school_user_role_command():
     """Assign a provisioned account its school role from the command line."""
     import click
     user_id = click.prompt("User ID", type=int)
-    role = click.prompt("Role", type=click.Choice(sorted(VALID_ROLES), case_sensitive=False)).lower()
+    role = click.prompt("Role", type=click.Choice(
+        sorted(VALID_ROLES), case_sensitive=False)).lower()
     user = db.session.get(User, user_id)
     if not user:
         raise click.ClickException("User not found.")
@@ -945,17 +1015,23 @@ def assign_legacy_data_command():
     if not click.confirm("Assign all currently unscoped users, exams, questions, and results to this school?"):
         click.echo("No records changed.")
         return
-    User.query.filter_by(school_id=None).update({"school_id": school_id}, synchronize_session=False)
-    Exam.query.filter_by(school_id=None).update({"school_id": school_id}, synchronize_session=False)
-    Question.query.filter_by(school_id=None).update({"school_id": school_id}, synchronize_session=False)
-    CBTResult.query.filter_by(school_id=None).update({"school_id": school_id}, synchronize_session=False)
+    User.query.filter_by(school_id=None).update(
+        {"school_id": school_id}, synchronize_session=False)
+    Exam.query.filter_by(school_id=None).update(
+        {"school_id": school_id}, synchronize_session=False)
+    Question.query.filter_by(school_id=None).update(
+        {"school_id": school_id}, synchronize_session=False)
+    CBTResult.query.filter_by(school_id=None).update(
+        {"school_id": school_id}, synchronize_session=False)
     for exam in Exam.query.filter_by(school_id=school_id).all():
         for subject in [s.strip() for s in (exam.subject or "").split(",") if s.strip()]:
             if not ExamSubject.query.filter_by(exam_id=exam.id, name=subject).first():
                 db.session.add(ExamSubject(exam_id=exam.id, name=subject))
-        exam.totalQuestions = Question.query.filter_by(examId=exam.id, school_id=school_id).count()
+        exam.totalQuestions = Question.query.filter_by(
+            examId=exam.id, school_id=school_id).count()
     db.session.commit()
-    click.echo("Legacy records assigned. Review memberships and account roles before enabling sign-in.")
+    click.echo(
+        "Legacy records assigned. Review memberships and account roles before enabling sign-in.")
 
 
 if __name__ == "__main__":
