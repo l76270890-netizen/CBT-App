@@ -357,8 +357,17 @@ def register():
     email = (data.get("email") or "").strip().lower()
     password = data.get("password")
     school_id = data.get("schoolId") or os.environ.get("DEFAULT_SCHOOL_ID")
-    if not email or not isinstance(password, str) or len(password) < 8 or not school_id:
-        return api_error("email, schoolId, and a password of at least 8 characters are required.")
+    if not email or not isinstance(password, str) or len(password) < 8:
+        return api_error("email and a password of at least 8 characters are required.")
+    # The student client has no school picker. In a single-school deployment it
+    # is safe to infer the only available school; multi-school deployments must
+    # set DEFAULT_SCHOOL_ID or pass schoolId explicitly.
+    if not school_id:
+        schools = School.query.order_by(School.id.asc()).limit(2).all()
+        if len(schools) == 1:
+            school_id = schools[0].id
+        else:
+            return api_error("schoolId is required when more than one school is configured.")
     try:
         school_id = int(school_id)
     except (TypeError, ValueError):
@@ -381,7 +390,11 @@ def register():
                 role="student", class_id=class_id, account_status="active")
     db.session.add(user)
     db.session.commit()
-    return jsonify(success=True, user_id=user.id, username=user.username, email=user.email, role=user.role), 201
+    raw_token = issue_session(user)
+    return cookie_response({"success": True, "user_id": user.id,
+                            "username": user.username, "email": user.email,
+                            "role": user.role, "profile_image": user.profile_image},
+                           raw_token=raw_token), 201
 
 
 def authenticate(data, admins_only=False):
@@ -752,11 +765,13 @@ def admin_students():
             return api_error("Class not found.", 404, "class_not_found")
         query = query.filter(User.class_id == class_id)
     total = query.count()
+    pages = max(1, (total + limit - 1) // limit)
+    page = min(page, pages)
     rows = query.order_by(User.username.asc(), User.id.asc()).offset(
         (page - 1) * limit).limit(limit).all()
     return jsonify({"students": [student_payload(row) for row in rows],
                     "pagination": {"page": page, "limit": limit, "total": total,
-                                   "pages": (total + limit - 1) // limit}})
+                                   "pages": pages, "totalPages": pages}})
 
 
 def parse_iso_date(value, field):
@@ -843,17 +858,9 @@ def submit_attempt():
     row = Attempt(student_id=g.current_user.id, school_id=g.current_user.school_id,
                   exam_id=exam.id, subject=subject.strip(), score=score, total=total,
                   completed_at=completed_at)
-    # Keep the school reporting record and the student's existing history record
-    # in the same transaction. The client history page still reads `results`.
-    history_row = CBTResult(
-        user_id=g.current_user.id, email=g.current_user.email,
-        title=exam.title or "Exam", score=score, total=total,
-        duration="0m", status="Completed", mode="exam",
-        examType=exam.examType, date=completed_at,
-        school_id=g.current_user.school_id, exam_id=exam.id,
-        subject_name=subject.strip(), completed_at=completed_at,
-    )
-    db.session.add_all([row, history_row])
+    # Reportable attempts feed the school dashboard. The result screen writes
+    # the single aggregate row to the student's personal history endpoint.
+    db.session.add(row)
     db.session.commit()
     return jsonify(success=True, attempt={"id": row.id, "examId": row.exam_id,
                                           "subject": row.subject, "score": row.score,
