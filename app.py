@@ -43,13 +43,14 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
 ).replace("postgres://", "postgresql://", 1)
 app.config["SESSION_COOKIE_NAME"] = os.environ.get(
     "SESSION_COOKIE_NAME", "school_admin_session")
+is_production = (os.environ.get("APP_ENV") == "production" or
+                 os.environ.get("VERCEL_ENV") == "production")
+is_vercel = os.environ.get("VERCEL") == "1"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get(
-    "COOKIE_SECURE", "true" if os.environ.get(
-        "APP_ENV") == "production" else "false"
+    "COOKIE_SECURE", "true" if is_production or is_vercel else "false"
 ).lower() == "true"
 app.config["SESSION_COOKIE_SAMESITE"] = os.environ.get(
-    "COOKIE_SAMESITE", "None" if os.environ.get(
-        "APP_ENV") == "production" else "Lax"
+    "COOKIE_SAMESITE", "None" if is_production or is_vercel else "Lax"
 )
 app.config["SESSION_TTL_HOURS"] = int(
     os.environ.get("SESSION_TTL_HOURS", "24"))
