@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 import hashlib
 import json
+import math
 import os
 import secrets
 import time
@@ -192,8 +193,8 @@ class CBTResult(db.Model):
         "users.id"), nullable=True, index=True)
     email = db.Column(db.String(120))
     title = db.Column(db.String(200), default="Practice Test")
-    score = db.Column(db.Integer)
-    total = db.Column(db.Integer)
+    score = db.Column(db.Float)
+    total = db.Column(db.Float)
     duration = db.Column(db.String(20), default="0m")
     status = db.Column(db.String(20), default="Failed")
     mode = db.Column(db.String(20), default="exam")
@@ -830,7 +831,7 @@ def submit_attempt():
     except (TypeError, ValueError):
         return api_error("examId, score, and total must be valid numbers.")
     subject = data.get("subject")
-    if total <= 0 or score < 0 or score > total:
+    if not (math.isfinite(score) and math.isfinite(total)) or total <= 0 or score < 0 or score > total:
         return api_error("score must be between zero and a positive total.")
     exam = Exam.query.filter_by(
         id=exam_id, school_id=g.current_user.school_id).first()
@@ -838,9 +839,21 @@ def submit_attempt():
         return api_error("Exam not found.", 404, "exam_not_found")
     if not isinstance(subject, str) or subject.strip() not in subjects_for_exam(exam):
         return api_error("subject must be configured for this exam.")
+    completed_at = utcnow()
     row = Attempt(student_id=g.current_user.id, school_id=g.current_user.school_id,
-                  exam_id=exam.id, subject=subject.strip(), score=score, total=total, completed_at=utcnow())
-    db.session.add(row)
+                  exam_id=exam.id, subject=subject.strip(), score=score, total=total,
+                  completed_at=completed_at)
+    # Keep the school reporting record and the student's existing history record
+    # in the same transaction. The client history page still reads `results`.
+    history_row = CBTResult(
+        user_id=g.current_user.id, email=g.current_user.email,
+        title=exam.title or "Exam", score=score, total=total,
+        duration="0m", status="Completed", mode="exam",
+        examType=exam.examType, date=completed_at,
+        school_id=g.current_user.school_id, exam_id=exam.id,
+        subject_name=subject.strip(), completed_at=completed_at,
+    )
+    db.session.add_all([row, history_row])
     db.session.commit()
     return jsonify(success=True, attempt={"id": row.id, "examId": row.exam_id,
                                           "subject": row.subject, "score": row.score,
@@ -856,13 +869,15 @@ def submit_attempt():
 def save_history_alias():
     data = json_body()
     try:
-        score = int(data.get("score"))
-        total = int(data.get("total"))
-        if score < 0 or total <= 0 or score > total:
+        score = float(data.get("score"))
+        total = float(data.get("total"))
+        if not (math.isfinite(score) and math.isfinite(total) and 0 <= score <= total and total > 0):
             raise ValueError
     except (TypeError, ValueError):
         return api_error("score and positive total must be valid; score cannot exceed total.")
     attempt = None
+    exam = None
+    subject = None
     if data.get("examId") is not None or data.get("subject") is not None:
         try:
             exam_id = int(data.get("examId"))
@@ -875,8 +890,11 @@ def save_history_alias():
         subject = data.get("subject")
         if not isinstance(subject, str) or subject.strip() not in subjects_for_exam(exam):
             return api_error("subject must be configured for this exam.")
+        subject = subject.strip()
         attempt = Attempt(student_id=g.current_user.id, school_id=g.current_user.school_id,
-                          exam_id=exam.id, subject=subject.strip(), score=score, total=total, completed_at=utcnow())
+                          exam_id=exam.id, subject=subject, score=score, total=total,
+                          completed_at=utcnow())
+    completed_at = attempt.completed_at if attempt else utcnow()
     row = CBTResult(user_id=g.current_user.id, email=g.current_user.email,
                     title=str(data.get("title", "Practice Test"))[
                         :200], score=score, total=total,
@@ -884,7 +902,10 @@ def save_history_alias():
                         data.get("status", "Failed"))[:20],
                     mode=str(data.get("mode", "exam"))[:20], examType=str(
                         data.get("examType", "JAMB"))[:80],
-                    school_id=g.current_user.school_id, date=utcnow())
+                    school_id=g.current_user.school_id, date=completed_at,
+                    exam_id=exam.id if exam else None,
+                    subject_name=subject,
+                    completed_at=completed_at if exam else None)
     db.session.add(row)
     if attempt:
         db.session.add(attempt)
@@ -901,7 +922,9 @@ def history(user_id):
         user_id=g.current_user.id, school_id=g.current_user.school_id).order_by(CBTResult.date.desc()).all()
     return jsonify([{"id": row.id, "title": row.title, "score": row.score, "total": row.total,
                      "duration": row.duration, "status": row.status, "mode": row.mode,
-                     "examType": row.examType, "date": iso_utc(row.date)} for row in rows])
+                     "examType": row.examType, "examId": row.exam_id,
+                     "subject": row.subject_name,
+                     "date": iso_utc(row.completed_at or row.date)} for row in rows])
 
 
 @app.route("/api/history/<int:result_id>", methods=["DELETE"])

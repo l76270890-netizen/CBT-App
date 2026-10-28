@@ -29,9 +29,9 @@ All routes below are under `/api`. Except registration and login, they require t
 | `POST /admin/create-exam` | School admin, exam officer | Create an exam with `title`, `examType`, `subjects` (array), optional `year` and `duration`; may include a `questions` array. |
 | `POST /admin/add-question` | School admin, exam officer | Add one question to a school-owned exam. This remains one request per question for CSV imports. Accepts JSON or multipart form with an optional image. |
 | `PUT /admin/exam/:examId`, `DELETE /admin/exam/:examId` | School admin, exam officer | Update or delete a school-owned exam. Subjects cannot be changed after questions exist. |
-| `POST /attempts` | Student | Record a reportable exam attempt with `examId`, `subject`, `score`, and `total`. Completion time, student, and school are assigned by the server. |
-| `POST /save-result` or `/history` | Student | Retained legacy personal history endpoint. For school reports, use `/attempts` so exam and subject are attached. |
-| `GET /history/:userId`, `DELETE /history/:resultId`, `DELETE /history/clear/:userId` | Student | Legacy history operations limited to the signed-in student's own records. |
+| `POST /attempts` | Student | Record a reportable exam attempt with `examId`, `subject`, `score`, and `total`. Completion time, student, and school are assigned by the server. The result is also saved to the student's personal history. |
+| `POST /save-result` or `/history` | Student | Save a personal history result; when `examId` and `subject` are included it is also recorded for school reports. |
+| `GET /history/:userId`, `DELETE /history/:resultId`, `DELETE /history/clear/:userId` | Student | Read or manage the signed-in student's own history. Exam history includes `examId` and `subject`. |
 
 ### Response examples
 
@@ -120,6 +120,6 @@ Python 3.10+ is recommended.
 
 ## Data and reporting notes
 
-`Attempt` stores the authenticated student ID, school ID, exam ID, subject, score, total, and server completion timestamp. The server derives the student/school and validates the exam and configured subject. The overview average is the arithmetic mean of attempt percentages. A heartbeat only updates last-seen time; it does not record study time. Legacy history rows without exam and subject remain personal history and are not included in school performance metrics.
+`Attempt` stores the authenticated student ID, school ID, exam ID, subject, score, total, and server completion timestamp. Completing an exam writes the reportable attempt and personal history row together, so student history and school reports stay in sync. The server derives the student/school and validates the exam and configured subject. The overview average is the arithmetic mean of attempt percentages. A heartbeat only updates last-seen time; it does not record study time. Legacy history rows without exam and subject remain personal history and are not included in school performance metrics.
 
 The student client must call the login endpoint and send the resulting HttpOnly cookie with API requests. A browser-only localStorage admin flag cannot authorize any endpoint.
