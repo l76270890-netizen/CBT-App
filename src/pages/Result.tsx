@@ -1,61 +1,64 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import './Result.css'
-import { API_URL } from '../config'
+import { apiRequest } from '../api'
 
 type Props = { setActivePage: (page: string) => void }
 
 export default function Result({ setActivePage }: Props) {
   const [result, setResult] = useState<any>(null)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const savingKey = useRef<string | null>(null)
   const { user } = useAuth()
 
-  useEffect(() => {
-    const data = localStorage.getItem('lastTestResult')
-    if (data) {
-      const parsed = JSON.parse(data)
-      setResult(parsed)
-      const alreadySaved = sessionStorage.getItem('historySaved')
-      if (!alreadySaved && user?.user_id) {
-        saveToBackend(parsed)
-        sessionStorage.setItem('historySaved', 'true')
-      } else if (!alreadySaved) {
-        try {
-          const savedUser = JSON.parse(localStorage.getItem('cbt_user') || '{}')
-          if (savedUser.user_id) {
-            saveToBackend(parsed, savedUser)
-            sessionStorage.setItem('historySaved', 'true')
-          }
-        } catch {}
-      }
-    }
-  }, [user])
-
-  const saveToBackend = async (res: any, overrideUser?: any) => {
-    const currentUser = overrideUser || user
-    const savedUser = currentUser || JSON.parse(localStorage.getItem('cbt_user') || '{}')
+  const saveToBackend = async (res: any, key: string) => {
+    if (savingKey.current === key) return
+    savingKey.current = key
+    setSaving(true)
+    setSaveError('')
     try {
-      await fetch(`${API_URL}/api/save-result`, {
+      await apiRequest('/api/save-result', {
         method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: savedUser.user_id,
-          email: savedUser.email,
-          title: res.examTitle || res.subject || 'Practice Test',
+          title: res.examTitle || res.title || res.subject || 'Exam',
           score: res.score,
           total: res.total,
           duration: res.duration || '0m',
-          status: (res.score / res.total) >= 0.5? 'Passed' : 'Failed',
+          status: (res.score / res.total) >= 0.5 ? 'Passed' : 'Failed',
           mode: res.mode || 'exam',
           examType: res.examType || 'GENERAL',
         })
       })
+      sessionStorage.setItem(key, 'true')
       setSaved(true)
-    } catch (e: any) {
-      console.log("Save error:", e.message)
+    } catch (error: unknown) {
+      setSaveError(error instanceof Error ? error.message : 'Could not save this exam. Please retry.')
+      savingKey.current = null
+    } finally {
+      setSaving(false)
     }
   }
+
+  useEffect(() => {
+    const data = localStorage.getItem('lastTestResult')
+    if (!data) return
+    try {
+      const parsed = JSON.parse(data)
+      setResult(parsed)
+      if (parsed.mode === 'study') return
+      if (!user?.user_id) {
+        setSaveError('Sign in again to save this exam to your history.')
+        return
+      }
+      const key = `historySaved:${user.user_id}:${parsed.id}`
+      if (sessionStorage.getItem(key)) { setSaved(true); return }
+      void saveToBackend(parsed, key)
+    } catch {
+      setSaveError('This exam result could not be read. Please retake the exam to save it.')
+    }
+  }, [user?.user_id])
 
   if (!result) return <div className="result-page"><div className="loader"></div></div>
   const percentage = Math.round((result.score / result.total) * 100)
@@ -67,7 +70,8 @@ export default function Result({ setActivePage }: Props) {
       <div className="result-card">
         <div className={`result-badge ${passed? 'pass' : 'fail'}`}><span>{passed? '✓ PASSED' : '✗ FAILED'}</span></div>
         <h1>{passed? 'Congratulations!' : 'Keep Trying!'}</h1>
-        <p className="result-subtitle">Here is how you performed {saved && '• Saved to History ✓'}</p>
+        <p className="result-subtitle">Here is how you performed {saved ? '• Saved to History ✓' : saving ? '• Saving to History…' : ''}</p>
+        {saveError && <p role="alert" className="result-subtitle">History save failed: {saveError} <button className="btn-ghost" onClick={() => user?.user_id && result && void saveToBackend(result, `historySaved:${user.user_id}:${result.id}`)}>Retry</button></p>}
         <div className="score-circle-wrap">
           <div className="score-circle">
             <svg viewBox="0 0 100 100">

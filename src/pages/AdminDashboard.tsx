@@ -10,6 +10,7 @@ const defaultExamTypes = ["JAMB","WAEC","NECO","POSTUTME"];
 type Exam = { id: string; title: string; examType: string; year: number; duration: number; subjects: string[]; totalQuestions?: number }
 type Student = { id: string; displayName?: string | null; email?: string | null; class?: string | null; accountStatus?: string | null; lastSeenAt?: string | null }
 type StudentPerformance = { completedAttempts?: number | null; scoreHistory?: unknown[] | null; resultsBySubject?: unknown[] | null }
+type StudentPagination = { page?: number; limit?: number; total?: number; pages?: number; totalPages?: number }
 type OverviewData = { counts?: Record<string, number | null> | null; performance?: Record<string, number | null> | null; recentExamActivity?: unknown[] | null }
 type CsvQuestionRow = {
   rowNumber: number;
@@ -40,7 +41,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [overviewError, setOverviewError] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
-  const [studentPagination, setStudentPagination] = useState<Record<string, unknown> | null>(null);
+  const [studentPagination, setStudentPagination] = useState<StudentPagination | null>(null);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [studentsError, setStudentsError] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
@@ -156,8 +157,10 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setStudentsLoading(true); setStudentsError("");
     const query = new URLSearchParams({ search, classId: selectedClass, page: String(page), limit: "50" });
     try {
-      const data = await apiRequest<{ students?: Student[]; pagination?: Record<string, unknown> }>(`/api/admin/students?${query}`);
-      setStudents(asArray<Student>(data?.students)); setStudentPagination(data?.pagination ?? null);
+      const data = await apiRequest<{ students?: Student[]; pagination?: StudentPagination }>(`/api/admin/students?${query}`);
+      setStudents(asArray<Student>(data?.students));
+      setStudentPagination(data?.pagination ?? null);
+      if (typeof data?.pagination?.page === "number") setStudentPage(data.pagination.page);
     } catch (error) { setStudentsError(error instanceof Error ? error.message : "Could not load students."); setStudents([]); }
     finally { setStudentsLoading(false); }
   };
@@ -487,10 +490,10 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
       ) : adminView === "students" ? (
         <section className="admin-students-view">
           <div className="admin-view-heading"><div><p className="admin-eyebrow">SCHOOL WORKSPACE</p><h2>Students</h2><p>Student accounts, activity, and performance.</p></div></div>
-          <form className="admin-student-filters" onSubmit={e=>{e.preventDefault();setStudentPage(1);void fetchStudents(1,studentSearch,classId);}}><input aria-label="Search students" placeholder="Search name or email" value={studentSearch} onChange={e=>setStudentSearch(e.target.value)} /><input aria-label="Class ID" placeholder="Class ID" value={classId} onChange={e=>setClassId(e.target.value)} /><button className="admin-btn primary" type="submit">Search</button></form>
+          <form className="admin-student-filters" onSubmit={e=>{e.preventDefault();setStudentPage(1);void fetchStudents(1,studentSearch,classId);}}><input aria-label="Search students" placeholder="Search name or email" value={studentSearch} onChange={e=>setStudentSearch(e.target.value)} /><input aria-label="Class ID" placeholder="Class ID" type="number" min="1" step="1" value={classId} onChange={e=>setClassId(e.target.value)} /><button className="admin-btn primary" type="submit">Search</button></form>
           {studentsError && <p className="admin-error" role="alert">{studentsError}</p>}
-          {studentsLoading ? <p className="admin-empty-note">Loading students...</p> : students.length === 0 ? <p className="admin-empty-note">No students found.</p> : <div className="admin-students-table-wrap"><table className="admin-students-table"><thead><tr><th>Name</th><th>Email</th><th>Class</th><th>Status</th><th>Last seen</th></tr></thead><tbody>{students.map(student=><tr key={student.id} onClick={()=>void loadStudentPerformance(student)} aria-selected={selectedStudent?.id===student.id} style={{cursor:"pointer"}}><td>{student.displayName || "—"}</td><td>{student.email || "—"}</td><td>{student.class || "—"}</td><td>{student.accountStatus || "—"}</td><td>{student.lastSeenAt ? new Date(student.lastSeenAt).toLocaleString() : "—"}</td></tr>)}</tbody></table></div>}
-          {studentPagination && <div className="admin-pagination"><span>{String(studentPagination.total ?? studentPagination.totalItems ?? "")}{studentPagination.total != null || studentPagination.totalItems != null ? " students" : ""}</span><button className="admin-btn ghost" disabled={studentPage<=1 || studentsLoading} onClick={()=>setStudentPage(page=>Math.max(1,page-1))}>Previous</button><span>Page {studentPage}{studentPagination.totalPages ? ` of ${String(studentPagination.totalPages)}` : ""}</span><button className="admin-btn ghost" disabled={studentsLoading || (typeof studentPagination.totalPages === "number" && studentPage>=studentPagination.totalPages)} onClick={()=>setStudentPage(page=>page+1)}>Next</button></div>}
+          {studentsLoading ? <p className="admin-empty-note">Loading students...</p> : students.length === 0 ? <p className="admin-empty-note">{studentSearch || classId ? "No students match these filters." : "No students are registered in this school yet."}</p> : <div className="admin-students-table-wrap"><table className="admin-students-table"><thead><tr><th>Name</th><th>Email</th><th>Class</th><th>Status</th><th>Last seen</th></tr></thead><tbody>{students.map(student=><tr key={student.id} onClick={()=>void loadStudentPerformance(student)} aria-selected={selectedStudent?.id===student.id} style={{cursor:"pointer"}}><td>{student.displayName || "—"}</td><td>{student.email || "—"}</td><td>{student.class || "—"}</td><td>{student.accountStatus || "—"}</td><td>{student.lastSeenAt ? new Date(student.lastSeenAt).toLocaleString() : "—"}</td></tr>)}</tbody></table></div>}
+          {studentPagination && <div className="admin-pagination"><span>{String(studentPagination.total ?? "")}{studentPagination.total != null ? " students" : ""}</span><button className="admin-btn ghost" disabled={studentPage<=1 || studentsLoading} onClick={()=>setStudentPage(page=>Math.max(1,page-1))}>Previous</button><span>Page {studentPage}{(studentPagination.pages ?? studentPagination.totalPages) != null ? ` of ${String(studentPagination.pages ?? studentPagination.totalPages)}` : ""}</span><button className="admin-btn ghost" disabled={studentsLoading || studentPagination.pages === 0 || ((studentPagination.pages ?? studentPagination.totalPages) != null && studentPage >= Number(studentPagination.pages ?? studentPagination.totalPages))} onClick={()=>setStudentPage(page=>page+1)}>Next</button></div>}
           {selectedStudent && <section className="admin-student-performance"><div className="admin-section-heading"><div><h3>{selectedStudent.displayName || selectedStudent.email || "Student performance"}</h3><p>Performance details</p></div><button className="admin-btn ghost" onClick={()=>{setSelectedStudent(null);setStudentPerformance(null);}}>Close</button></div>
             {performanceLoading ? <p className="admin-empty-note">Loading performance...</p> : performanceError ? <p className="admin-error" role="alert">{performanceError}</p> : <><article className="admin-metric-card"><span>Completed attempts</span><strong>{studentPerformance?.completedAttempts ?? "—"}</strong></article><div className="admin-overview-columns"><section className="admin-overview-card"><h3>Score history</h3>{asArray<any>(studentPerformance?.scoreHistory).length ? asArray<any>(studentPerformance?.scoreHistory).map((item,index)=><p key={String(item?.id ?? index)}>{item?.date ?? item?.completedAt ?? ""} {item?.score == null ? "—" : item.score}{item?.total == null ? "" : ` / ${item.total}`}</p>) : <p className="admin-empty-note">No score history yet.</p>}</section><section className="admin-overview-card"><h3>Results by subject</h3>{asArray<any>(studentPerformance?.resultsBySubject).length ? asArray<any>(studentPerformance?.resultsBySubject).map((item,index)=><p key={String(item?.subject ?? index)}>{item?.subject ?? "Subject"}: {item?.averageScore ?? item?.score ?? "—"}</p>) : <p className="admin-empty-note">No subject results yet.</p>}</section></div></>}
           </section>}

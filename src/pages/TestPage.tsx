@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import type { TestConfigType } from '../types'
 import './TestPage.css'
 import { API_URL } from '../config'
@@ -18,6 +18,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
   const [showCalc, setShowCalc] = useState(false)
   const [calcInput, setCalcInput] = useState('0')
   const [loading, setLoading] = useState(true)
+  const submitting = useRef(false)
 
   const getSubjectName = (s: any) => typeof s === 'string'? s : s?.subject || s?.name || 'General'
   const subjectsList: string[] = (testConfig.subjects || []).map(getSubjectName).filter(Boolean)
@@ -153,8 +154,9 @@ export default function Test({ setActivePage, testConfig }: Props) {
 
   const calculateDuration = useCallback(() => { const d = Date.now() - startTime; return `${Math.floor(d/60000)}m ${Math.floor((d%60000)/1000)}s` }, [startTime])
 
-  const handleSubmit = useCallback(() => {
-    if (!questions.length) return
+  const handleSubmit = useCallback(async () => {
+    if (!questions.length || submitting.current) return
+    submitting.current = true
     const score = answers.reduce<number>((a, ans, i) => ans === questions[i]?.answer? a + 1 : a, 0)
     const result = {
       id: Date.now(),
@@ -176,7 +178,8 @@ export default function Test({ setActivePage, testConfig }: Props) {
     localStorage.setItem('lastTestResult', JSON.stringify(result))
     if (examId && testConfig.mode === 'exam') {
       const subjectsToRecord = [...new Set(questions.map(question => question.subject).filter(Boolean))]
-      void Promise.all(subjectsToRecord.map(subject => {
+      try {
+        await Promise.all(subjectsToRecord.map(subject => {
         const subjectQuestions = questions.filter(question => question.subject === subject)
         const subjectScore = subjectQuestions.reduce((count, question) => {
           const index = questions.indexOf(question)
@@ -186,7 +189,10 @@ export default function Test({ setActivePage, testConfig }: Props) {
           method: 'POST',
           body: JSON.stringify({ examId, subject, score: subjectScore, total: subjectQuestions.length })
         })
-      })).catch(error => console.error('Could not save exam attempt:', error))
+        }))
+      } catch (error) {
+        console.error('Could not save school exam attempts:', error)
+      }
     }
     setActivePage('result')
   }, [answers, questions, setActivePage, calculateDuration, examType, subjectsList, titleVal, testConfig.mode, filterTopic, singleSubject])

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { API_URL as API } from '../config'
+import { API_URL as API, SCHOOL_ID } from '../config'
 import { apiRequest } from '../api'
 
 const AuthContext = createContext<any>(null)
@@ -40,7 +40,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (name: string, email: string, password: string) => {
     setLoading(true)
     try {
-      const data = await apiRequest<any>("/api/register", { method: "POST", body: JSON.stringify({ name, email, password }) })
+      const registration: Record<string, string> = { name, email, password }
+      if (SCHOOL_ID) registration.schoolId = SCHOOL_ID
+      const data = await apiRequest<any>("/api/register", { method: "POST", body: JSON.stringify(registration) })
       localStorage.setItem('cbt_user', JSON.stringify(data))
       setUser(data)
       return { success: true, data }
