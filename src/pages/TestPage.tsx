@@ -25,7 +25,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
   const titleVal = testConfig.examTitle || testConfig.title || examType
   const filterTopic = (testConfig as any).topic || null
   const singleSubject = (testConfig as any).subject || subjectsList[0] || 'General'
-  const examId = (testConfig as any).examId || (testConfig as any).id || null
+  const examId = (testConfig as any).examId || (testConfig as any).customExamId || (testConfig as any).id || null
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -50,72 +50,29 @@ export default function Test({ setActivePage, testConfig }: Props) {
         }
       } catch {}
 
-      // 2. FIXED: Try Backend API - COLLECT ALL SUBJECTS
-      if (fetched.length === 0) {
+      // 2. Try the backend only when we have the exam ID and a subject.
+      // The questions endpoint requires both query parameters.
+      if (fetched.length === 0 && examId && subjectsList.length > 0) {
         try {
           let allFetched: Question[] = []
 
-          // If we have examId, fetch per subject for that exam
-          if (examId) {
-            for (const sub of subjectsList) {
-              try {
-                const res = await fetch(`${API_URL}/api/questions?examId=${encodeURIComponent(examId)}&subject=${encodeURIComponent(sub)}`, { credentials: 'include' })
-                if (res.ok) {
-                  const data = await res.json()
-                  if (Array.isArray(data) && data.length > 0) {
-                    const mapped = data.map((d: any) => ({
-                      id: d.id,
-                      subject: d.subject || sub,
-                      question: d.question,
-                      options: Array.isArray(d.options)? d.options : Object.values(d.options),
-                      answer: typeof d.answer === 'string'? ['A','B','C','D'].indexOf(d.answer) : d.answer?? 0,
-                      explanation: d.explanation || '',
-                      topic: d.topic || ''
-                    }))
-                    allFetched = [...allFetched,...mapped]
-                  }
-                }
-              } catch {}
-            }
-          } else {
-            // No examId - fetch by examType + each subject
-            for (const sub of subjectsList) {
-              try {
-                const url = `${API_URL}/api/questions?examType=${encodeURIComponent(examType)}&subjects=${encodeURIComponent(sub)}&topic=${filterTopic || ''}`
-                const res = await fetch(url, { credentials: 'include' })
-                if (res.ok) {
-                  const data = await res.json()
-                  if (Array.isArray(data) && data.length > 0) {
-                    const mapped = data.map((d: any) => ({
-                      id: d.id,
-                      subject: d.subject || sub,
-                      question: d.question,
-                      options: Array.isArray(d.options)? d.options : Object.values(d.options),
-                      answer: typeof d.answer === 'string'? ['A','B','C','D'].indexOf(d.answer) : d.answer?? 0,
-                      explanation: d.explanation || '',
-                      topic: d.topic || ''
-                    }))
-                    allFetched = [...allFetched,...mapped]
-                  }
-                }
-              } catch {}
-            }
-          }
-
-          // If backend returned comma-separated subjects in one call, try that too
-          if (allFetched.length === 0 && subjectsList.length > 0) {
+          for (const sub of subjectsList) {
             try {
-              const res = await fetch(`${API_URL}/api/questions?examType=${encodeURIComponent(examType)}&subjects=${encodeURIComponent(subjectsList.join(','))}`, { credentials: 'include' })
+              const query = new URLSearchParams({ examId: String(examId), subject: sub })
+              const res = await fetch(`${API_URL}/api/questions?${query}`, { credentials: 'include' })
               if (res.ok) {
                 const data = await res.json()
                 if (Array.isArray(data) && data.length > 0) {
-                  allFetched = data.map((d: any) => ({
-                    id: d.id, subject: d.subject, question: d.question,
+                  const mapped = data.map((d: any) => ({
+                    id: d.id,
+                    subject: d.subject || sub,
+                    question: d.question,
                     options: Array.isArray(d.options)? d.options : Object.values(d.options),
                     answer: typeof d.answer === 'string'? ['A','B','C','D'].indexOf(d.answer) : d.answer?? 0,
                     explanation: d.explanation || '',
                     topic: d.topic || ''
                   }))
+                  allFetched = [...allFetched,...mapped]
                 }
               }
             } catch {}

@@ -80,7 +80,7 @@ export default function App() {
 
         {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
         {page === 'exams' && <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
-        {page === 'subjects' && <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} selectedExamId={testConfig.examId || testConfig.customExamId} />}
+        {page === 'subjects' && <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} selectedExamId={testConfig.examId || testConfig.customExamId} configuredSubjects={testConfig.subjects} />}
         {page === 'testConfig' && <TestConfig setActivePage={setPage} testConfig={testConfig} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
         {page === 'testInstructions' && <TestInstructions setActivePage={setPage} testConfig={testConfig} />}
         {page === 'test' && <Test setActivePage={setPage} testConfig={testConfig} />}
@@ -89,7 +89,7 @@ export default function App() {
         {page === 'classroom' && <Study setActivePage={setPage} selectedExam={selectedExam} setTestConfig={setTestConfig} />}
         {page === 'account' && <Account setActivePage={setPage} />}
         {page === 'practiceHistory' && <PracticeHistory setActivePage={setPage} />}
-        {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={setPage} setTestConfig={setTestConfig} />}
+        {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={setPage} setTestConfig={setTestConfig} examId={testConfig.examId || testConfig.customExamId} />}
         {page === 'admin' && <AdminAny setActivePage={setPage} />}
       </div>
     </AuthProvider>

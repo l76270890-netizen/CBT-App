@@ -9,9 +9,10 @@ type Props = {
   setTestConfig: (updater: (previous: any) => any) => void
   selectedExam: string
   selectedExamId?: string
+  configuredSubjects?: Array<string | { subject?: string; name?: string }>
 }
 
-export default function Subjects({ setActivePage, setTestConfig, selectedExam, selectedExamId }: Props) {
+export default function Subjects({ setActivePage, setTestConfig, selectedExam, selectedExamId, configuredSubjects = [] }: Props) {
   const [selectedSubjects, setSelectedSubjects] = useState<SubjectItem[]>([])
   const [search, setSearch] = useState("")
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
@@ -33,27 +34,34 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
       setSelectedSubjects([])
       setSearch("")
       try {
-        const query = selectedExamId
-          ? `examId=${encodeURIComponent(selectedExamId)}`
-          : `examType=${encodeURIComponent(selectedExam)}`
-        const payload = await apiRequest<unknown>(`/api/questions?${query}`)
-        const data = Array.isArray(payload) ? payload : asArray<any>((payload as any)?.questions)
+        const examSubjects = configuredSubjects
+          .map(subject => typeof subject === 'string' ? subject : subject?.subject || subject?.name || '')
+          .filter(Boolean)
         const map: Record<string, { count: number; years: Set<string> }> = {}
-        if (!Array.isArray(data)) throw new Error("Unexpected subject response")
-        data.forEach((d: any) => {
-          const subj = d.subject || "General"
-          const year = d.year? String(d.year) : ""
-          if (!map[subj]) map[subj] = { count: 0, years: new Set() }
-          map[subj].count += 1
-          if (year) map[subj].years.add(year)
-        })
+        examSubjects.forEach(subject => { map[subject] = { count: 0, years: new Set() } })
+
+        if (selectedExamId) {
+          await Promise.all(examSubjects.map(async subject => {
+            const query = new URLSearchParams({ examId: selectedExamId, subject })
+            const payload = await apiRequest<unknown>(`/api/questions?${query}`)
+            const data = Array.isArray(payload) ? payload : asArray<any>((payload as any)?.questions)
+            if (!Array.isArray(data)) throw new Error("Unexpected questions response")
+            data.forEach((question: any) => {
+              const name = question.subject || subject
+              if (!map[name]) map[name] = { count: 0, years: new Set() }
+              map[name].count += 1
+              if (question.year) map[name].years.add(String(question.year))
+            })
+          }))
+        }
+
         const grouped: SubjectItem[] = Object.entries(map).map(([subject, info]) => ({
           subject,
           questions: info.count,
           years: Array.from(info.years).join(', ') || '2024',
           required: subject.toLowerCase().includes('english')
         }))
-        if (grouped.length === 0 && !selectedExamId) {
+        if (grouped.length === 0) {
           const fallback = selectedExam === 'JAMB'
           ? [{subject:'Use of English',questions:40,years:'2024',required:true},{subject:'Mathematics',questions:40,years:'2024'},{subject:'Biology',questions:40,years:'2024'},{subject:'Chemistry',questions:40,years:'2024'}]
             : [{subject:'Mathematics',questions:20,years:'2024'}]
@@ -64,7 +72,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
       } catch (e) { setLoadError(e instanceof Error ? e.message : "Could not load subjects."); setSubjects([]); } finally { setLoading(false) }
     }
     fetchSubjects()
-  }, [selectedExam, selectedExamId])
+  }, [selectedExam, selectedExamId, configuredSubjects])
 
   const maxSubjects = selectedExam === 'JAMB'? 4 : 6
   useEffect(() => {

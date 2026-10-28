@@ -81,7 +81,7 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
     setSelectedExam(exam.examType)
     const subjStr = (exam.subjects?.join(",") || "").toLowerCase()
     if (exam.examType.toLowerCase().includes('general') || subjStr.includes('general')) {
-      setTestConfig((prev: any) => ({...prev, examType: exam.examType, subjects: exam.subjects || [], totalQuestions: exam.totalQuestions || 20, year: String(exam.year), duration: exam.duration, customExamId: exam.id }))
+      setTestConfig((prev: any) => ({...prev, examType: exam.examType, subjects: exam.subjects || [], totalQuestions: exam.totalQuestions || 20, year: String(exam.year), duration: exam.duration, customExamId: exam.id, examId: exam.id, examTitle: exam.title }))
       setActivePage('generalKnowledge')
       return
     }

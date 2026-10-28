@@ -2,14 +2,20 @@ import { useState, useEffect } from 'react'
 import './GeneralKnowledge.css'
 import { apiRequest, asArray } from '../api'
 
-export default function GeneralKnowledge({ setActivePage, setTestConfig }: any) {
+export default function GeneralKnowledge({ setActivePage, setTestConfig, examId }: any) {
   const [questions, setQuestions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(()=>{
     const load = async () => {
       try {
-        const payload = await apiRequest<unknown>('/api/questions?subject=General%20Knowledge')
+        if (!examId) {
+          setQuestions([])
+          setLoading(false)
+          return
+        }
+        const query = new URLSearchParams({ examId: String(examId), subject: 'General Knowledge' })
+        const payload = await apiRequest<unknown>(`/api/questions?${query}`)
         setQuestions(Array.isArray(payload) ? payload : asArray<any>((payload as any)?.questions))
       } catch(err) {
         console.error(err)

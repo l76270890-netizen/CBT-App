@@ -21,7 +21,10 @@ export async function apiRequest<T = unknown>(path: string, init: RequestInit = 
   }
   if (!response.ok) {
     const message = body?.error ?? body?.message;
-    const fallbackMessage = responseText.trim() || `Request failed (${response.status})`;
+    const isHtml = response.headers.get("content-type")?.includes("text/html") || responseText.trimStart().startsWith("<!doctype html");
+    const fallbackMessage = response.status === 404 && isHtml
+      ? `Backend route not found: ${path}. Check that VITE_API_URL points to the School Admin backend and that its API routes are deployed.`
+      : responseText.trim() || `Request failed (${response.status})`;
     throw Object.assign(new Error(typeof message === "string" ? message : fallbackMessage), {
       status: response.status,
     });
