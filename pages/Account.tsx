@@ -1,10 +1,10 @@
-
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import {
   User,
   Download,
   Settings,
+  Shield,
   HelpCircle,
   Info,
   ChevronRight,
@@ -243,6 +243,11 @@ export default function Account({ setActivePage }: Props) {
     return `${API_URL}/uploads/avatars/${img}`
   }, [photoURL])
 
+  const isAdmin =
+    !!user &&
+    (user.email || '').trim().toLowerCase() ===
+    'emmanuellilypondu33@gmail.com'
+
   const menuItems = [
     {
       id: 'profile',
@@ -265,6 +270,17 @@ export default function Account({ setActivePage }: Props) {
       desc: 'Theme, notifications',
       action: () => alert('Settings coming soon'),
     },
+    ...(isAdmin
+      ? [
+          {
+            id: 'admin',
+            label: 'Admin Dashboard',
+            icon: Shield,
+            desc: 'Manage exams and students',
+            action: () => setActivePage('admin'),
+          },
+        ]
+      : []),
     {
       id: 'help',
       label: 'Help & Support',
