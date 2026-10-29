@@ -484,26 +484,64 @@ def get_exams():
                        "subjects": subjects_for_exam(exam), "totalQuestions": actual_questions})
     return jsonify(result)
 
-
 @app.route("/api/questions", methods=["GET"])
 @require_auth
 def get_questions():
     exam_id = request.args.get("examId", type=int)
     subject = (request.args.get("subject") or "").strip()
+
     if not exam_id or not subject:
         return api_error("Both examId and subject are required.")
+
     exam = Exam.query.filter_by(
-        id=exam_id, school_id=g.current_user.school_id).first()
+        id=exam_id,
+        school_id=g.current_user.school_id
+    ).first()
+
     if not exam:
         return api_error("Exam not found.", 404, "exam_not_found")
+
     if subject not in subjects_for_exam(exam):
-        return api_error("Subject does not belong to this exam.", 404, "subject_not_found")
-    questions = Question.query.filter_by(examId=exam.id, school_id=g.current_user.school_id,
-                                         subject=subject).order_by(Question.id).all()
-    return jsonify([{"id": q.id, "examId": q.examId, "examType": q.examType, "subject": q.subject,
-                     "question": q.question, "options": q.options, "answer": q.answer,
-                     "explanation": q.explanation, "year": q.year, "image_path": q.image_path,
-                     "image_url": get_image_url(q.image_path)} for q in questions])
+        return api_error(
+            "Subject does not belong to this exam.",
+            404,
+            "subject_not_found"
+        )
+
+    questions = (
+        Question.query
+        .filter_by(
+            examId=exam.id,
+            school_id=g.current_user.school_id,
+            subject=subject
+        )
+        .order_by(Question.id)
+        .all()
+    )
+
+    is_admin = g.current_user.role in ADMIN_ROLES
+    result = []
+
+    for q in questions:
+        item = {
+            "id": q.id,
+            "examId": q.examId,
+            "examType": q.examType,
+            "subject": q.subject,
+            "question": q.question,
+            "options": q.options,
+            "year": q.year,
+            "image_path": q.image_path,
+            "image_url": get_image_url(q.image_path),
+        }
+
+        if is_admin:
+            item["answer"] = q.answer
+            item["explanation"] = q.explanation
+
+        result.append(item)
+
+    return jsonify(result)
 
 
 def validate_exam_payload(data):
