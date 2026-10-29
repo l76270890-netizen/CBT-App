@@ -435,6 +435,68 @@ def logout():
     return cookie_response({"success": True}, clear=True)
 
 
+
+@app.route("/api/user/delete-account", methods=["DELETE"])
+@require_auth
+def delete_account():
+    user = g.current_user
+    data = json_body()
+
+    # Require the current password to confirm deletion.
+    password = data.get("password")
+    if not isinstance(password, str) or not check_password_hash(
+        user.password, password
+    ):
+        return api_error(
+            "Incorrect password. Account was not deleted.",
+            401,
+            "invalid_credentials",
+        )
+
+    user_id = user.id
+
+    try:
+        # Delete the user's personal history.
+        CBTResult.query.filter_by(user_id=user_id).delete(
+            synchronize_session=False
+        )
+
+        # Delete the user's exam attempts.
+        Attempt.query.filter_by(student_id=user_id).delete(
+            synchronize_session=False
+        )
+
+        # Delete all sessions belonging to this account.
+        AuthToken.query.filter_by(user_id=user_id).delete(
+            synchronize_session=False
+        )
+
+        # Permanently delete the account itself.
+        db.session.delete(user)
+        db.session.commit()
+
+    except Exception:
+        db.session.rollback()
+        app.logger.exception(
+            "Account deletion failed for user %s", user_id
+        )
+        return api_error(
+            "Failed to delete account. Please try again.",
+            500,
+            "deletion_failed",
+        )
+
+    # Clear the browser's authentication cookie.
+    return cookie_response(
+        {
+            "success": True,
+            "message": "Account deleted successfully."
+        },
+        clear=True,
+    )
+
+
+
 @app.route("/api/user/upload-avatar/<int:user_id>", methods=["POST"])
 @require_auth
 def upload_avatar(user_id):

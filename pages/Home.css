@@ -1,0 +1,211 @@
+.home-container {
+  padding: 20px 16px 90px;
+  max-width: 600px;
+  margin: 0 auto;
+  background: #121212;
+  min-height: 10vh;
+  font-family: 'Inter', sans-serif;
+}
+body{ background: #121212; }
+.home-header {
+  position: relative;
+  height: 220px;
+  border-radius: 20px;
+  overflow: hidden;~
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  isolation: isolate;
+}
+
+.hero-slides {
+  position: absolute;
+  inset: 0;
+  background: #1e1e1e;
+}
+
+.hero-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(1.035);
+  transition: opacity 500ms ease, transform 3200ms linear;
+}
+
+.hero-slide.is-active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.header-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.42) 58%, rgba(0,0,0,0.16) 100%);
+  z-index: 1;
+}
+
+.header-content {
+  position: relative;
+  z-index: 2;
+  padding: 24px;
+}
+
+.hero-slide-controls {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+}
+
+.hero-slide-controls button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,0.28);
+  border-radius: 50%;
+  background: rgba(18,18,18,0.62);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.hero-slide-controls button:hover,
+.hero-slide-controls button:focus-visible {
+  background: #1d4be3;
+  border-color: #1d4be3;
+}
+
+.hero-slide-dots {
+  position: absolute;
+  right: 22px;
+  bottom: 18px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-slide-dots button {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 99px;
+  background: rgba(255,255,255,0.6);
+  cursor: pointer;
+  transition: width 180ms ease, background-color 180ms ease;
+}
+
+.hero-slide-dots button.active {
+  width: 22px;
+  background: #1d4be3;
+}
+
+.hero-slide-controls button:focus-visible,
+.hero-slide-dots button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+@media (min-width: 768px) {
+  .home-header {
+    height: 270px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-slide,
+  .hero-slide-controls button,
+  .hero-slide-dots button {
+    transition: none;
+  }
+}
+
+/* keep your text readable on images */
+.home-header .home-title { color: #fff; }
+.home-header .home-title span { color: #ffd700; }
+.home-header .home-subtitle { color: #e5e5e5; }
+.home-title { font-size: 24px; font-weight: 700; color: #fff; margin: 0; }
+.home-title span { color: #a5b4fc; }
+.home-subtitle { color: #cbd5e1; font-size: 13px; margin: 6px 0 12px 0; }
+.hero-btn{
+  padding: 8px 20px; border-radius: 20px; border: none;
+  font-size: 13px; font-weight: 600; color: #1d4be3;
+  background: #fff; cursor: pointer;
+}
+
+/* SEARCH - FIXED */
+.hero-search-bar{ margin-bottom: 16px; width: 100%; }
+.search-wrapper{
+  position: relative; display: flex; align-items: center;
+  background: #1e1e1e; border: 1.5px solid #2c2b2b;
+  border-radius: 14px; padding: 0 14px;
+}
+.search-wrapper:focus-within{ border-color: #1d4be3; }
+.search-icon{ color: #8f9091; }
+.hero-input-box{
+  flex: 1; background: transparent; border: none; outline: none;
+  color: #fff; padding: 14px 10px; font-size: 15px; width: 100%;
+}
+.clear-btn{
+  background: #2a2a2a; border: none; width: 26px; height: 26px;
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  color: #fff; cursor: pointer;
+}
+.funnel-icon{ color: #6b7280; }
+
+/* STATS - 4 CARDS */
+.stats-grid1 { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; margin-bottom: 24px; }
+.stats-card {
+  background: #1e1e1e; padding: 16px; border-radius: 16px;
+  border: 1px solid #2a2a2a; text-align: left;
+}
+.stat-icon{
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; margin-bottom: 10px;
+}
+.stat-icon.blue{ background: #dbeafe; color: #1d4be3; }
+.stat-icon.green{ background: #dcfce7; color: #16a34a; }
+.stat-icon.gold{ background: #fef9c3; color: #ca8a04; }
+.stat-icon.red{ background: #fee2e2; color: #dc2626; }
+.stats-card h2 { font-size: 22px; font-weight: 700; color: #fff; margin: 0; }
+.stats-card span { font-size: 11px; color: #9b9b9b; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* EXAM LIST */
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.section-header h3 { font-size: 16px; font-weight: 600; color: #fff; }
+.section-header p { color: #1d4be3; font-size: 13px; font-weight: 500; cursor: pointer; }
+.exam-list { display: flex; flex-direction: column; gap: 12px; }
+.exam-card1 {
+  display: flex; align-items: center; background: #1e1e1e;
+  padding: 14px 16px; border-radius: 16px; border: 1px solid #2a2a2a;
+  cursor: pointer; transition: 0.15s;
+}
+.exam-card1:active{ transform: scale(0.98); }
+.exam-icon-wrap1 {
+  width: 44px; height: 44px; background: #d6e2fc; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center; margin-right: 12px; color: #1d4be3;
+}
+.exam-info h4 { font-size: 15px; font-weight: 600; color: #fff; margin: 0; }
+.exam-info p { font-size: 12px; color: #919293; margin: 2px 0 0; }
+.chevron{ margin-left: auto; color: #4b5563; font-size: 20px; }
+.no-result{ background: #1e1e1e; padding: 20px; border-radius: 14px; text-align: center; color: #8f9091; font-size: 14px; }
+
+@media (min-width: 768px) {
+ .home-container { max-width: 900px; padding: 32px; }
+ .stats-grid1 { grid-template-columns: repeat(4,1fr); }
+ .exam-list { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+}
+
+/* Add to your existing Home.css - no new file needed */
+.gk-btn {
+  width: 100%; padding: 14px; border-radius: 14px; border: none;
+  background: #1d4be3; color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 16px;
+}
