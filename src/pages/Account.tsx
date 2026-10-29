@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { User, Download, Settings, HelpCircle, Info, ChevronRight, Crown, LogOut, Edit3, Camera, Loader2 } from 'lucide-react'
+import {
+  User, Download, Settings, HelpCircle, Info, ChevronRight,
+  Crown, LogOut, Edit3, Camera, Loader2, Trash2
+} from 'lucide-react'
 import './Account.css'
 import { API_URL } from '../config'
 import { apiRequest, asArray } from '../api'
@@ -65,7 +68,65 @@ export default function Account({ setActivePage }: Props) {
 
   const handleLogout = async () => {
     if (confirm("Logout?")) { logout(); setActivePage('landing') }
+
   }
+
+
+  
+  const handleDeleteAccount = async () => {
+    const confirmed = confirm(
+      'Are you sure you want to permanently delete your account? Your practice history and exam attempts will also be deleted. This action cannot be undone.'
+    )
+
+    if (!confirmed) return
+
+    const password = prompt(
+      'Enter your current password to confirm account deletion:'
+    )
+
+    if (password === null) return
+
+    if (!password.trim()) {
+      alert('Your password is required.')
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/user/delete-account`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ password }),
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Account deletion failed.')
+      }
+
+      // Clear the locally cached user.
+      localStorage.removeItem('cbt_user')
+
+      // Log out and return to the landing page.
+      await logout()
+      setActivePage('landing')
+
+      alert('Your account has been permanently deleted.')
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Could not delete your account. Please try again.'
+      )
+    }
+  }
+
 
   // === FIXED PERMANENT AVATAR URL ===
   const displayAvatar = useMemo(() => {
@@ -130,6 +191,16 @@ export default function Account({ setActivePage }: Props) {
         <button className="btn-upgrade" onClick={() => alert('Pro coming soon - ₦2000/year')}>UPGRADE</button>
       </div>
       <button className="btn-logout" onClick={handleLogout}><LogOut size={16}/> Logout</button>
+      <button className="btn-logout" onClick={handleLogout}><LogOut size={16}/> Logout</button>
+      
+<button
+  className="btn-delete-account"
+  onClick={handleDeleteAccount}
+>
+  <Trash2 size={16} />
+  Delete Account
+</button>
+
       <p className="footer-text">Made for Nigerian Students • {email}</p>
     </div>
   )
