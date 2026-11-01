@@ -19,10 +19,13 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import type { TestConfigType } from './types'
 import { AuthProvider } from './context/AuthContext'
+import './App.css'
 
 export default function App() {
   const [page, setPage] = useState('landing')
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [homeSearchQuery, setHomeSearchQuery] = useState('')
   const [selectedExam, setSelectedExam] = useState<any>(null)
   const [testConfig, setTestConfig] = useState<TestConfigType>({
     examType: 'JAMB',
@@ -71,26 +74,37 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <div style={{ background: '#121212', minHeight: '100vh' }}>
-        {!hideNavbarPages.includes(page) && <Navbar activePage={page} setActivePage={setPage} />}
+      <div className={`app-shell${!hideNavbarPages.includes(page) ? ' app-shell-workspace' : ''}`} style={{ background: '#121212', minHeight: '100vh' }}>
+        {!hideNavbarPages.includes(page) && (
+          <Navbar
+            activePage={page}
+            setActivePage={setPage}
+            sidebarCollapsed={sidebarCollapsed}
+            setSidebarCollapsed={setSidebarCollapsed}
+            searchQuery={homeSearchQuery}
+            setSearchQuery={setHomeSearchQuery}
+          />
+        )}
 
-        {page === 'landing' && <LandingMobile setActivePage={setPage} />}
-        {page === 'login' && <Login setActivePage={setPage} />}
-        {page === 'register' && <Register setActivePage={setPage} />}
+        <main className={`app-main${!hideNavbarPages.includes(page) ? ' app-main-sidebar' : ''}${['testConfig', 'testInstructions'].includes(page) ? ' app-main-setup' : ''}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+          {page === 'landing' && <LandingMobile setActivePage={setPage} />}
+          {page === 'login' && <Login setActivePage={setPage} />}
+          {page === 'register' && <Register setActivePage={setPage} />}
 
-        {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
-        {page === 'exams' && <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
-        {page === 'subjects' && <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} selectedExamId={testConfig.examId || testConfig.customExamId} configuredSubjects={testConfig.subjects} />}
-        {page === 'testConfig' && <TestConfig setActivePage={setPage} testConfig={testConfig} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
-        {page === 'testInstructions' && <TestInstructions setActivePage={setPage} testConfig={testConfig} />}
-        {page === 'test' && <Test setActivePage={setPage} testConfig={testConfig} />}
-        {page === 'result' && <Result setActivePage={setPage} />}
-        {page === 'review' && <Review setActivePage={setPage} />}
-        {page === 'classroom' && <Study setActivePage={setPage} selectedExam={selectedExam} setTestConfig={setTestConfig} />}
-        {page === 'account' && <Account setActivePage={setPage} />}
-        {page === 'practiceHistory' && <PracticeHistory setActivePage={setPage} />}
-        {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={setPage} setTestConfig={setTestConfig} examId={testConfig.examId || testConfig.customExamId} />}
-        {page === 'admin' && <AdminAny setActivePage={setPage} />}
+          {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} searchQuery={homeSearchQuery} setSearchQuery={setHomeSearchQuery} />}
+          {page === 'exams' && <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
+          {page === 'subjects' && <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} selectedExamId={testConfig.examId || testConfig.customExamId} configuredSubjects={testConfig.subjects} />}
+          {page === 'testConfig' && <TestConfig setActivePage={setPage} testConfig={testConfig} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
+          {page === 'testInstructions' && <TestInstructions setActivePage={setPage} testConfig={testConfig} />}
+          {page === 'test' && <Test setActivePage={setPage} testConfig={testConfig} />}
+          {page === 'result' && <Result setActivePage={setPage} />}
+          {page === 'review' && <Review setActivePage={setPage} />}
+          {page === 'classroom' && <Study setActivePage={setPage} selectedExam={selectedExam} setTestConfig={setTestConfig} />}
+          {page === 'account' && <Account setActivePage={setPage} />}
+          {page === 'practiceHistory' && <PracticeHistory setActivePage={setPage} />}
+          {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={setPage} setTestConfig={setTestConfig} examId={testConfig.examId || testConfig.customExamId} />}
+          {page === 'admin' && <AdminAny setActivePage={setPage} />}
+        </main>
       </div>
     </AuthProvider>
   )
