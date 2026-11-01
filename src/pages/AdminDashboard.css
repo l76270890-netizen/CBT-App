@@ -371,3 +371,11 @@
 .admin-question-list{display:grid;gap:8px;max-height:300px;overflow:auto}
 .admin-question-list article{display:grid;gap:5px;padding:10px 12px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px}
 .admin-question-list small{color:#9ca3af}
+.question-image-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.question-image-input { display: none; }
+.question-image-remove { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 10px; border: 1px solid #5a2b36; border-radius: 9px; background: #211218; color: #ff9ca8; font-size: 12px; cursor: pointer; }
+.question-image-remove:disabled { cursor: not-allowed; opacity: .55; }
+.question-image-preview { display: grid; justify-items: start; gap: 8px; width: fit-content; max-width: 100%; padding: 10px; border: 1px solid #252538; border-radius: 10px; background: #0e0e16; }
+.question-image-preview img, .admin-question-image { display: block; max-width: 100%; max-height: 320px; width: auto; height: auto; object-fit: contain; border-radius: 7px; }
+.question-image-preview span { color: #a1a1b5; font-size: 11px; }
+.admin-question-image { margin-top: 6px; }
