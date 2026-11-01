@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" role="img" aria-labelledby="title description">
+  <title id="title">Current app color palette</title>
+  <desc id="description">Near-black and charcoal surfaces, blue accents, white primary text, and gray secondary text.</desc>
+  <rect width="960" height="560" fill="#121212"/>
+  <text x="64" y="78" fill="#ffffff" font-family="Arial, sans-serif" font-size="30" font-weight="700">Current App Colors</text>
+  <text x="64" y="112" fill="#9b9b9b" font-family="Arial, sans-serif" font-size="16">Dark theme · surfaces, accents, and text</text>
+
+  <g font-family="Arial, sans-serif">
+    <rect x="64" y="150" width="832" height="76" rx="8" fill="#121212" stroke="#3a3a3a"/>
+    <text x="88" y="183" fill="#ffffff" font-size="18" font-weight="700">Page background</text>
+    <text x="88" y="207" fill="#bdbdbd" font-size="15">Near-black</text>
+    <text x="860" y="197" fill="#ffffff" font-size="18" font-weight="700" text-anchor="end">#121212</text>
+
+    <rect x="64" y="242" width="832" height="76" rx="8" fill="#1e1e1e" stroke="#3a3a3a"/>
+    <text x="88" y="275" fill="#ffffff" font-size="18" font-weight="700">Cards and panels</text>
+    <text x="88" y="299" fill="#bdbdbd" font-size="15">Charcoal</text>
+    <text x="860" y="289" fill="#ffffff" font-size="18" font-weight="700" text-anchor="end">#1E1E1E</text>
+
+    <rect x="64" y="334" width="832" height="76" rx="8" fill="#1d4be3"/>
+    <text x="88" y="367" fill="#ffffff" font-size="18" font-weight="700">Accent and primary actions</text>
+    <text x="88" y="391" fill="#e4eaff" font-size="15">Blue</text>
+    <text x="860" y="381" fill="#ffffff" font-size="18" font-weight="700" text-anchor="end">#1D4BE3</text>
+
+    <rect x="64" y="426" width="404" height="76" rx="8" fill="#ffffff"/>
+    <text x="88" y="459" fill="#121212" font-size="18" font-weight="700">Primary text</text>
+    <text x="88" y="483" fill="#4a4a4a" font-size="15">White · #FFFFFF</text>
+
+    <rect x="492" y="426" width="404" height="76" rx="8" fill="#8f9091"/>
+    <text x="516" y="459" fill="#121212" font-size="18" font-weight="700">Secondary text</text>
+    <text x="516" y="483" fill="#252525" font-size="15">Gray · #8F9091</text>
+  </g>
+</svg>
