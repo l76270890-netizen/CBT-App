@@ -4,6 +4,16 @@ Set `VITE_API_URL` to the backend origin. Set `VITE_SCHOOL_ID` to the school ID
 to attach public registrations to that school's student roster; if omitted, the
 backend must provide `DEFAULT_SCHOOL_ID`.
 
+## Question image upload API
+
+The admin question form expects the backend to provide
+`POST /api/admin/upload-question-image` as an authenticated multipart upload
+with the file in the `image` field. The endpoint must store the image
+permanently and return JSON containing its URL as `imageUrl` or `url`. The
+admin then sends that URL as `imageUrl` when creating a question. The questions
+API should include `imageUrl` (or `image_url`) when returning question records.
+Relative upload paths are resolved against `VITE_API_URL`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:

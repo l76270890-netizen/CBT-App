@@ -1,8 +1,8 @@
-import { useState, useEffect, type ChangeEvent } from "react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import Papa from "papaparse";
-import { Activity, ArrowRight, BookOpen, Download, FileSpreadsheet, LayoutDashboard, Upload, UsersRound } from "lucide-react";
+import { Activity, ArrowRight, BookOpen, Download, FileSpreadsheet, ImagePlus, LayoutDashboard, Trash2, Upload, UsersRound } from "lucide-react";
 import "./AdminDashboard.css";
-import { apiRequest, asArray } from "../api";
+import { apiRequest, asArray, resolveQuestionImageUrl, uploadQuestionImage } from "../api";
 
 const defaultSubjects = ["Mathematics","English","Physics","Chemistry","Biology","Government","Economics","Literature","CRS","Geography"];
 const defaultExamTypes = ["JAMB","WAEC","NECO","POSTUTME"];
@@ -78,6 +78,12 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [selectedExam, setSelectedExam] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
   const [question, setQuestion] = useState("");
+  const [questionImage, setQuestionImage] = useState<File | null>(null);
+  const [questionImagePreview, setQuestionImagePreview] = useState("");
+  const [uploadedQuestionImageUrl, setUploadedQuestionImageUrl] = useState("");
+  const [questionImageError, setQuestionImageError] = useState("");
+  const [questionSubmitError, setQuestionSubmitError] = useState("");
+  const questionImageInput = useRef<HTMLInputElement>(null);
   const [options, setOptions] = useState(["","","",""]);
   const [correct, setCorrect] = useState("A");
   const [explanation, setExplanation] = useState("");
@@ -134,6 +140,10 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   }, [selectedExam, exams]);
   useEffect(()=>{ if(authState === "authenticated" && adminView === "students") void fetchStudents(); }, [authState, adminView, studentPage]);
   useEffect(()=>{ if(authState === "authenticated" && adminView === "exams" && examTab === "questions") void fetchQuestions(); }, [authState, adminView, examTab, selectedExam, selectedSubject]);
+  useEffect(() => {
+    if (!questionImagePreview) return;
+    return () => URL.revokeObjectURL(questionImagePreview);
+  }, [questionImagePreview]);
 
   const handleLogin = async () => {
     setAuthError("");
@@ -248,17 +258,50 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const addQuestion = async (e:React.FormEvent) => {
     e.preventDefault();
     if(!selectedExam || !selectedSubject) return alert("Select exam and subject");
+    setQuestionSubmitError("");
     setLoading(true);
     try {
+      let imageUrl = uploadedQuestionImageUrl;
+      if (questionImage && !imageUrl) {
+        imageUrl = await uploadQuestionImage(questionImage);
+        setUploadedQuestionImageUrl(imageUrl);
+      }
       await apiRequest("/api/admin/add-question", { method: "POST", body: JSON.stringify({
         examId: selectedExam, subject: selectedSubject, question,
         options: {A:options[0], B:options[1], C:options[2], D:options[3]},
         correctAnswer: correct, ...(explanation.trim() ? { explanation } : {}),
+        ...(imageUrl ? { imageUrl } : {}),
       }) });
       setMsg(`Added to ${selectedSubject}!`); setQuestion(""); setOptions(["","","",""]); setExplanation("");
+      setQuestionImage(null); setQuestionImagePreview(""); setUploadedQuestionImageUrl(""); setQuestionImageError("");
+      setQuestionSubmitError("");
+      if (questionImageInput.current) questionImageInput.current.value = "";
       await fetchQuestions(); setTimeout(()=>setMsg(""),3000);
-    } catch(error) { setMsg(error instanceof Error ? error.message : "Could not add question."); }
+    } catch(error) { setQuestionSubmitError(error instanceof Error ? error.message : "Could not add question."); }
     finally { setLoading(false); }
+  };
+  const handleQuestionImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const allowedTypes = ["image/png", "image/jpeg"];
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      setQuestionImageError("Choose a PNG, JPG, or JPEG image.");
+      return;
+    }
+
+    setQuestionImageError("");
+    setQuestionImage(file);
+    setUploadedQuestionImageUrl("");
+    setQuestionImagePreview(URL.createObjectURL(file));
+  };
+  const removeQuestionImage = () => {
+    setQuestionImage(null);
+    setQuestionImagePreview("");
+    setUploadedQuestionImageUrl("");
+    setQuestionImageError("");
+    if (questionImageInput.current) questionImageInput.current.value = "";
   };
   const downloadCsvTemplate = () => {
     const blob = new Blob([`${csvHeaders.join(",")}\n`], { type: "text/csv;charset=utf-8" });
@@ -587,7 +630,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         <section className="admin-overview-card" aria-live="polite">
           <div className="admin-section-heading"><div><h3>Questions</h3><p>{selectedSubject || "Select a subject in the form below"}</p></div></div>
           {questionsError && <p className="admin-error" role="alert">{questionsError}</p>}
-          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><strong>{item?.question || "Question text unavailable"}</strong><small>{item?.subject || selectedSubject}</small></article>)}</div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
+          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><strong>{item?.question || "Question text unavailable"}</strong>{(item?.imageUrl || item?.image_url) && <img className="admin-question-image" src={resolveQuestionImageUrl(item.imageUrl || item.image_url)} alt="Question diagram" />}<small>{item?.subject || selectedSubject}</small></article>)}</div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
         </section>
 
         <section className="csv-import-panel" aria-labelledby="csv-import-title">
@@ -666,6 +709,19 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
             </div>
           </div>
           <div className="admin-field"><label>Question</label><textarea value={question} onChange={e=>setQuestion(e.target.value)} rows={4} required style={{background:'#1a1a1a', color:'#fff', border:'1px solid #333'}}/></div>
+          {questionSubmitError && <p className="admin-error" role="alert">{questionSubmitError}</p>}
+          <div className="admin-field">
+            <label>Question image or diagram</label>
+            <div className="question-image-actions">
+              <button type="button" className="csv-template-btn" onClick={() => questionImageInput.current?.click()} disabled={loading}>
+                <ImagePlus size={16} /> {questionImagePreview ? "Replace image" : "Insert Image/Diagram"}
+              </button>
+              <input ref={questionImageInput} className="question-image-input" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={handleQuestionImageChange} />
+              {questionImagePreview && <button type="button" className="question-image-remove" onClick={removeQuestionImage} disabled={loading}><Trash2 size={15} /> Remove</button>}
+            </div>
+            {questionImageError && <p className="csv-error" role="alert">{questionImageError}</p>}
+            {questionImagePreview && <div className="question-image-preview"><img src={questionImagePreview} alt="Preview of the question diagram" /><span>{uploadedQuestionImageUrl ? "Uploaded and ready to save" : "Preview — image uploads when you add the question"}</span></div>}
+          </div>
           <div className="admin-options-grid">
             {["A","B","C","D"].map((o,i)=>(
               <div key={o} className={`admin-field option-field ${correct===o?'is-correct':''}`}>

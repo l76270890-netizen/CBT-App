@@ -27,6 +27,7 @@ export type Question = {
   id: string
   subject: string
   question: string
+  imageUrl?: string
   options: string[]
   answer: number
   explanation?: string

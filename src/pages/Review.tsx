@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { resolveQuestionImageUrl } from '../api'
 import './Review.css'
 
 type Props = { setActivePage: (page: string) => void }
@@ -42,6 +43,7 @@ export default function Review({ setActivePage }: Props) {
                 </span>
               </div>
               <p className="review-q-text">{q.question}</p>
+              {(q.imageUrl || q.image_url) && <img className="review-question-image" src={resolveQuestionImageUrl(q.imageUrl || q.image_url)} alt="Question diagram" />}
               <div className="review-options">
                 {q.options?.map((opt: string, idx: number) => (
                   <div key={idx} className={`review-option
