@@ -14,6 +14,10 @@ admin then sends that URL as `imageUrl` when creating a question. The questions
 API should include `imageUrl` (or `image_url`) when returning question records.
 Relative upload paths are resolved against `VITE_API_URL`.
 
+The bulk-question CSV importer accepts the existing eight required columns and
+an optional final `imageUrl` column. Image URLs must be HTTP(S) URLs or
+relative upload paths; blank image cells are imported without an image.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, type ChangeEvent } from "react";
-import Papa from "papaparse";
 import { Activity, ArrowRight, BookOpen, Download, FileSpreadsheet, ImagePlus, LayoutDashboard, Trash2, Upload, UsersRound } from "lucide-react";
 import "./AdminDashboard.css";
-import { apiRequest, asArray, resolveQuestionImageUrl, uploadQuestionImage } from "../api";
+import { apiRequest, asArray, uploadQuestionImage } from "../api";
+import QuestionImage from "../components/QuestionImage";
+import { csvTemplateHeaders, parseQuestionCsv, type CsvQuestionRow } from "../adminQuestionCsv";
 
 const defaultSubjects = ["Mathematics","English","Physics","Chemistry","Biology","Government","Economics","Literature","CRS","Geography"];
 const defaultExamTypes = ["JAMB","WAEC","NECO","POSTUTME"];
@@ -12,23 +13,6 @@ type Student = { id: string; displayName?: string | null; email?: string | null;
 type StudentPerformance = { completedAttempts?: number | null; scoreHistory?: unknown[] | null; resultsBySubject?: unknown[] | null }
 type StudentPagination = { page?: number; limit?: number; total?: number; pages?: number; totalPages?: number }
 type OverviewData = { counts?: Record<string, number | null> | null; performance?: Record<string, number | null> | null; recentExamActivity?: unknown[] | null }
-type CsvQuestionRow = {
-  rowNumber: number;
-  subject: string;
-  question: string;
-  optionA: string;
-  optionB: string;
-  optionC: string;
-  optionD: string;
-  correctAnswer: string;
-  explanation: string;
-  errors: string[];
-  status?: "imported" | "failed";
-  importError?: string;
-}
-
-const csvHeaders = ["subject", "question", "optionA", "optionB", "optionC", "optionD", "correctAnswer", "explanation"];
-const normalizedCsvHeaders = csvHeaders.map(header => header.toLowerCase());
 const maxCsvFileBytes = 5 * 1024 * 1024;
 const maxCsvRows = 500;
 
@@ -304,7 +288,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     if (questionImageInput.current) questionImageInput.current.value = "";
   };
   const downloadCsvTemplate = () => {
-    const blob = new Blob([`${csvHeaders.join(",")}\n`], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([`${csvTemplateHeaders.join(",")}\n`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -342,87 +326,17 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
 
     try {
       const contents = await file.text();
-      const parseWithDelimiter = (delimiter: string) => Papa.parse<Record<string, string>>(contents, {
-        header: true,
-        delimiter,
-        skipEmptyLines: "greedy",
-        transformHeader: header => header.trim().toLowerCase().replace(/[^a-z0-9]/g, ""),
-      });
-      const candidates = [",", ";", "\t"].map(parseWithDelimiter);
-      const scoreHeaders = (fields: string[] | undefined) =>
-        normalizedCsvHeaders.filter(header => fields?.includes(header)).length;
-      const results = candidates.reduce((best, candidate) =>
-        scoreHeaders(candidate.meta.fields) > scoreHeaders(best.meta.fields) ? candidate : best,
-      );
-
-      const parseErrors = results.errors.filter(error => error.code !== "UndetectableDelimiter");
-      if (parseErrors.length > 0) {
-        setCsvError(`Could not read this CSV: ${parseErrors[0].message}`);
+      const parsedRows = parseQuestionCsv(contents, exam.subjects);
+      if (parsedRows.length > maxCsvRows) {
+        setCsvError(`This file has ${parsedRows.length} rows. Import up to ${maxCsvRows} questions at a time.`);
         return;
       }
-      if (results.data.length === 0) {
-        setCsvError("The CSV has no question rows yet.");
-        return;
-      }
-      if (results.data.length > maxCsvRows) {
-        setCsvError(`This file has ${results.data.length} rows. Import up to ${maxCsvRows} questions at a time.`);
-        return;
-      }
-
-      const availableHeaders = results.meta.fields || [];
-      const missingHeaders = csvHeaders.filter((_, index) => !availableHeaders.includes(normalizedCsvHeaders[index]));
-      if (missingHeaders.length > 0) {
-        if (missingHeaders.length === csvHeaders.length) {
-          setCsvError("Could not find the template columns. Use the downloaded CSV template; do not rename an Excel .xlsx file to .csv.");
-        } else {
-          setCsvError(`Missing required columns: ${missingHeaders.join(", ")}. Download the template for the correct format.`);
-        }
-        return;
-      }
-
-      const subjectByNormalizedName = new Map(exam.subjects.map(subject => [subject.trim().toLowerCase().replace(/\s+/g, " "), subject]));
-      const seenQuestions = new Set<string>();
-      const parsedRows = results.data.map((row, index): CsvQuestionRow => {
-        const rawSubject = String(row.subject ?? "").trim();
-        const questionText = String(row.question ?? "").trim();
-        const optionA = String(row.optiona ?? "").trim();
-        const optionB = String(row.optionb ?? "").trim();
-        const optionC = String(row.optionc ?? "").trim();
-        const optionD = String(row.optiond ?? "").trim();
-        const correctAnswer = String(row.correctanswer ?? "").trim().toUpperCase();
-        const explanationText = String(row.explanation ?? "").trim();
-        const errors: string[] = [];
-        const subject = subjectByNormalizedName.get(rawSubject.toLowerCase().replace(/\s+/g, " "));
-
-        if (!rawSubject) errors.push("Subject is required");
-        else if (!subject) errors.push(`Subject "${rawSubject}" is not listed on this exam`);
-        if (!questionText) errors.push("Question is required");
-        if (!optionA || !optionB || !optionC || !optionD) errors.push("All four options are required");
-        if (!["A", "B", "C", "D"].includes(correctAnswer)) errors.push("Correct answer must be A, B, C, or D");
-
-        const questionKey = `${subject?.toLowerCase() || rawSubject.toLowerCase()}:${questionText.toLowerCase().replace(/\s+/g, " ")}`;
-        if (questionKey && seenQuestions.has(questionKey)) errors.push("Duplicate question in this file");
-        if (questionKey) seenQuestions.add(questionKey);
-
-        return {
-          rowNumber: index + 2,
-          subject: subject || rawSubject,
-          question: questionText,
-          optionA,
-          optionB,
-          optionC,
-          optionD,
-          correctAnswer,
-          explanation: explanationText,
-          errors,
-        };
-      });
 
       setCsvFileName(file.name);
       setCsvExamId(selectedExam);
       setCsvRows(parsedRows);
-    } catch {
-      setCsvError("Could not read this file. Try saving it again as a CSV and re-uploading it.");
+    } catch (error) {
+      setCsvError(error instanceof Error ? error.message : "Could not read this file. Try saving it again as a CSV and re-uploading it.");
     }
   };
 
@@ -458,6 +372,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
             options: { A: row.optionA, B: row.optionB, C: row.optionC, D: row.optionD },
             correctAnswer: row.correctAnswer,
             ...(row.explanation ? { explanation: row.explanation } : {}),
+            ...(row.imageUrl ? { imageUrl: row.imageUrl } : {}),
           }),
         });
         imported++;
@@ -630,7 +545,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         <section className="admin-overview-card" aria-live="polite">
           <div className="admin-section-heading"><div><h3>Questions</h3><p>{selectedSubject || "Select a subject in the form below"}</p></div></div>
           {questionsError && <p className="admin-error" role="alert">{questionsError}</p>}
-          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><strong>{item?.question || "Question text unavailable"}</strong>{(item?.imageUrl || item?.image_url) && <img className="admin-question-image" src={resolveQuestionImageUrl(item.imageUrl || item.image_url)} alt="Question diagram" />}<small>{item?.subject || selectedSubject}</small></article>)}</div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
+          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><strong>{item?.question || "Question text unavailable"}</strong>{(item?.imageUrl || item?.image_url) && <QuestionImage key={item.imageUrl || item.image_url} className="admin-question-image" imageUrl={item.imageUrl || item.image_url} /> }<small>{item?.subject || selectedSubject}</small></article>)}</div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
         </section>
 
         <section className="csv-import-panel" aria-labelledby="csv-import-title">
@@ -667,7 +582,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
               <div className="csv-preview-table-wrap">
                 <table className="csv-preview-table">
                   <thead>
-                    <tr><th>Row</th><th>Subject</th><th>Question</th><th>Options</th><th>Answer</th><th>Status</th></tr>
+                    <tr><th>Row</th><th>Subject</th><th>Question</th><th>Options</th><th>Answer</th><th>Image URL</th><th>Status</th></tr>
                   </thead>
                   <tbody>
                     {csvRows.map(row => {
@@ -680,6 +595,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
                           <td className="csv-question-cell">{row.question || "(empty question)"}</td>
                           <td>A: {row.optionA} · B: {row.optionB} · C: {row.optionC} · D: {row.optionD}</td>
                           <td>{row.correctAnswer || "—"}</td>
+                          <td className="csv-question-cell">{row.imageUrl || "—"}</td>
                           <td>{status}</td>
                         </tr>
                       );
