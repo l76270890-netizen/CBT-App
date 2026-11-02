@@ -3,7 +3,8 @@ import { Activity, ArrowRight, BookOpen, Download, FileSpreadsheet, ImagePlus, L
 import "./AdminDashboard.css";
 import { apiRequest, asArray, uploadQuestionImage } from "../api";
 import QuestionImage from "../components/QuestionImage";
-import { csvTemplateHeaders, parseQuestionCsv, type CsvQuestionRow } from "../adminQuestionCsv";
+import { csvTemplateHeaders, normalizeImageReference, parseQuestionCsv, type CsvQuestionRow } from "../adminQuestionCsv";
+import { loadQuestionZip } from "../questionZip";
 
 const defaultSubjects = ["Mathematics","English","Physics","Chemistry","Biology","Government","Economics","Literature","CRS","Geography"];
 const defaultExamTypes = ["JAMB","WAEC","NECO","POSTUTME"];
@@ -14,6 +15,7 @@ type StudentPerformance = { completedAttempts?: number | null; scoreHistory?: un
 type StudentPagination = { page?: number; limit?: number; total?: number; pages?: number; totalPages?: number }
 type OverviewData = { counts?: Record<string, number | null> | null; performance?: Record<string, number | null> | null; recentExamActivity?: unknown[] | null }
 const maxCsvFileBytes = 5 * 1024 * 1024;
+const maxQuestionZipBytes = 25 * 1024 * 1024;
 const maxCsvRows = 500;
 
 export default function AdminDashboard({ setActivePage }: { setActivePage: (p:string)=>void }) {
@@ -72,6 +74,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [correct, setCorrect] = useState("A");
   const [explanation, setExplanation] = useState("");
   const [csvRows, setCsvRows] = useState<CsvQuestionRow[]>([]);
+  const [csvImageFiles, setCsvImageFiles] = useState<Map<string, File>>(new Map());
   const [csvFileName, setCsvFileName] = useState("");
   const [csvExamId, setCsvExamId] = useState("");
   const [csvError, setCsvError] = useState("");
@@ -301,16 +304,23 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     const file = event.target.files?.[0];
     event.target.value = "";
     setCsvRows([]);
+    setCsvImageFiles(new Map());
     setCsvFileName("");
     setCsvExamId("");
     setCsvError("");
     setCsvProgress({ completed: 0, total: 0 });
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      setCsvError("Choose a .csv file.");
+    const extension = file.name.toLowerCase().split(".").pop();
+    if (extension !== "csv" && extension !== "zip") {
+      setCsvError("Choose a .csv or .zip file.");
       return;
     }
-    if (file.size > maxCsvFileBytes) {
+    const maxFileBytes = extension === "zip" ? maxQuestionZipBytes : maxCsvFileBytes;
+    if (file.size > maxFileBytes) {
+      if (extension === "zip") {
+        setCsvError("This ZIP is larger than 25 MB. Reduce its size and try again.");
+        return;
+      }
       setCsvError("This file is larger than 5 MB. Split it into smaller files and try again.");
       return;
     }
@@ -325,10 +335,17 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     }
 
     try {
-      const contents = await file.text();
-      const parsedRows = parseQuestionCsv(contents, exam.subjects);
+      let parsedRows: CsvQuestionRow[];
+      if (extension === "zip") {
+        const zipContents = await loadQuestionZip(file, exam.subjects);
+        parsedRows = zipContents.rows;
+        setCsvImageFiles(zipContents.images);
+      } else {
+        parsedRows = parseQuestionCsv(await file.text(), exam.subjects);
+      }
       if (parsedRows.length > maxCsvRows) {
         setCsvError(`This file has ${parsedRows.length} rows. Import up to ${maxCsvRows} questions at a time.`);
+        setCsvImageFiles(new Map());
         return;
       }
 
@@ -336,6 +353,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
       setCsvExamId(selectedExam);
       setCsvRows(parsedRows);
     } catch (error) {
+      setCsvImageFiles(new Map());
       setCsvError(error instanceof Error ? error.message : "Could not read this file. Try saving it again as a CSV and re-uploading it.");
     }
   };
@@ -360,9 +378,17 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setCsvProgress({ completed: 0, total: rowsToImport.length });
     let imported = 0;
     let failed = 0;
+    const uploadedImages = new Map<string, string>();
 
     for (const [index, row] of rowsToImport.entries()) {
       try {
+        let imageUrl = row.imageUrl;
+        const imageFile = row.imageUrl ? csvImageFiles.get(normalizeImageReference(row.imageUrl)) : undefined;
+        if (imageFile && row.imageUrl) {
+          const imageReference = normalizeImageReference(row.imageUrl);
+          imageUrl = uploadedImages.get(imageReference) || await uploadQuestionImage(imageFile);
+          uploadedImages.set(imageReference, imageUrl);
+        }
         await apiRequest("/api/admin/add-question", {
           method: "POST",
           body: JSON.stringify({
@@ -372,7 +398,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
             options: { A: row.optionA, B: row.optionB, C: row.optionC, D: row.optionD },
             correctAnswer: row.correctAnswer,
             ...(row.explanation ? { explanation: row.explanation } : {}),
-            ...(row.imageUrl ? { imageUrl: row.imageUrl } : {}),
+            ...(imageUrl ? { imageUrl } : {}),
           }),
         });
         imported++;
@@ -386,7 +412,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     }
 
     setCsvImporting(false);
-    setMsg(`CSV import finished: ${imported} added, ${failed} failed.`);
+    setMsg(`Question import finished: ${imported} added, ${failed} failed.`);
     setTimeout(() => setMsg(""), 5000);
   };
 
@@ -552,7 +578,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           <div className="csv-import-heading">
             <div>
               <h3 id="csv-import-title"><FileSpreadsheet size={18} /> Bulk import questions</h3>
-              <p>Choose an exam above. Add a subject column to the CSV to route each question separately. Up to 500 rows per file.</p>
+              <p>Choose a CSV, or a ZIP with one <code>questions.csv</code> and an optional <code>images/</code> folder. Reference image filenames in the <code>imageUrl</code> column. Up to 500 questions per file.</p>
             </div>
             <button type="button" className="csv-template-btn" onClick={downloadCsvTemplate}>
               <Download size={16} /> Download template
@@ -560,12 +586,12 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           </div>
 
           <label className="csv-upload-btn">
-            <Upload size={16} /> Choose CSV file
-            <input type="file" accept=".csv,text/csv" onChange={handleCsvFileChange} disabled={csvImporting} />
+            <Upload size={16} /> Choose CSV or ZIP file
+            <input type="file" accept=".csv,.zip,text/csv,application/zip" onChange={handleCsvFileChange} disabled={csvImporting} />
           </label>
           {csvFileName && <span className="csv-file-name">{csvFileName}</span>}
           {csvRows.length > 0 && (
-            <button type="button" className="csv-clear-btn" onClick={() => { setCsvRows([]); setCsvFileName(""); setCsvExamId(""); setCsvError(""); setCsvProgress({ completed: 0, total: 0 }); }} disabled={csvImporting}>
+            <button type="button" className="csv-clear-btn" onClick={() => { setCsvRows([]); setCsvImageFiles(new Map()); setCsvFileName(""); setCsvExamId(""); setCsvError(""); setCsvProgress({ completed: 0, total: 0 }); }} disabled={csvImporting}>
               Clear file
             </button>
           )}

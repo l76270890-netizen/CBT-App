@@ -20,6 +20,21 @@ const requiredHeaders = ["subject", "question", "optiona", "optionb", "optionc",
 export const csvTemplateHeaders = ["Question", "Option A", "Option B", "Option C", "Option D", "Correct Answer", "subject", "explanation", "imageUrl"];
 const normalizeHeader = (header: string) => header.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 
+export function normalizeImageReference(value: string): string {
+  return value.trim().replace(/\\/g, "/").replace(/^\.\/+/, "").toLowerCase();
+}
+
+export function isSafeImageReference(value: string): boolean {
+  const reference = value.trim().replace(/\\/g, "/");
+  const parts = reference.split("/");
+  const extension = parts[parts.length - 1]?.split(".").pop()?.toLowerCase();
+  return !!reference
+    && !reference.startsWith("/")
+    && !reference.includes(":")
+    && parts.every(part => part && part !== "." && part !== "..")
+    && ["png", "jpg", "jpeg"].includes(extension || "");
+}
+
 export function isValidQuestionImageUrl(value: string): boolean {
   const imageUrl = value.trim();
   if (!imageUrl || imageUrl.startsWith("//")) return false;
@@ -34,7 +49,7 @@ export function isValidQuestionImageUrl(value: string): boolean {
   }
 }
 
-export function parseQuestionCsv(contents: string, subjects: string[]): CsvQuestionRow[] {
+export function parseQuestionCsv(contents: string, subjects: string[], options: { allowImageReferences?: boolean } = {}): CsvQuestionRow[] {
   const parseWithDelimiter = (delimiter: string) => Papa.parse<Record<string, string>>(contents, {
     header: true,
     delimiter,
@@ -81,7 +96,9 @@ export function parseQuestionCsv(contents: string, subjects: string[]): CsvQuest
     if (!question) errors.push("Question is required");
     if (!optionA || !optionB || !optionC || !optionD) errors.push("All four options are required");
     if (!["A", "B", "C", "D"].includes(correctAnswer)) errors.push("Correct answer must be A, B, C, or D");
-    if (rawImageUrl && !isValidQuestionImageUrl(rawImageUrl)) errors.push("Image URL must be a valid HTTP(S) URL or a relative upload path");
+    if (rawImageUrl && !isValidQuestionImageUrl(rawImageUrl) && !(options.allowImageReferences && isSafeImageReference(rawImageUrl))) {
+      errors.push("Image URL must be a valid HTTP(S) URL or a relative upload path");
+    }
 
     const questionKey = `${subject?.toLowerCase() || rawSubject.toLowerCase()}:${question.toLowerCase().replace(/\s+/g, " ")}`;
     if (questionKey && seenQuestions.has(questionKey)) errors.push("Duplicate question in this file");

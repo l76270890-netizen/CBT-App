@@ -18,6 +18,14 @@ The bulk-question CSV importer accepts the existing eight required columns and
 an optional final `imageUrl` column. Image URLs must be HTTP(S) URLs or
 relative upload paths; blank image cells are imported without an image.
 
+For bulk questions with local diagrams, upload a ZIP containing exactly one
+`questions.csv` and an optional `images/` folder. Put image filenames (for
+example, `triangle.png`) in the CSV's `imageUrl` column. PNG, JPG, and JPEG
+images up to 5 MB each are accepted; the ZIP is limited to 25 MB. The admin
+uploads each referenced image through the permanent question-image endpoint
+before saving its question, so ZIP image imports require that endpoint to be
+available.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:
