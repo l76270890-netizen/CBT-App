@@ -19,6 +19,7 @@ import tempfile
 import re
 from urllib.parse import urlsplit
 import zipfile
+import zlib
 
 from flask import Flask, jsonify, request, send_from_directory, make_response, g
 from flask_cors import CORS
@@ -90,7 +91,9 @@ MAX_QUESTION_ARCHIVE_BYTES = 25 * 1024 * 1024
 MAX_QUESTION_ARCHIVE_TOTAL_BYTES = 50 * 1024 * 1024
 MAX_QUESTION_CSV_BYTES = 5 * 1024 * 1024
 MAX_QUESTION_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_QUESTION_README_BYTES = 128 * 1024
 MAX_QUESTION_IMPORT_ROWS = 500
+QUESTION_IMPORT_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
 VALID_ROLES = {"school_admin", "teacher", "exam_officer", "student"}
 ADMIN_ROLES = {"school_admin", "teacher", "exam_officer"}
 
@@ -105,6 +108,15 @@ def iso_utc(value):
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def valid_question_import_image(filename, contents):
+    extension = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
+    if extension == "png":
+        return contents.startswith(b"\x89PNG\r\n\x1a\n")
+    if extension in {"jpg", "jpeg"}:
+        return contents.startswith(b"\xff\xd8\xff")
+    return False
 
 
 def upload_to_cloudinary(file, folder):
@@ -149,7 +161,7 @@ def read_question_import_archive(file):
     try:
         with zipfile.ZipFile(io.BytesIO(archive_data)) as archive:
             members = archive.infolist()
-            if len(members) > MAX_QUESTION_IMPORT_ROWS + 2:
+            if len(members) > MAX_QUESTION_IMPORT_ROWS + 3:
                 return None, None, "The ZIP contains too many files.", 400
             if sum(member.file_size for member in members) > MAX_QUESTION_ARCHIVE_TOTAL_BYTES:
                 return None, None, "The uncompressed ZIP contents exceed 50 MB.", 400
@@ -173,6 +185,10 @@ def read_question_import_archive(file):
                     if name != "images/":
                         return None, None, "Only the images/ directory is allowed in the ZIP.", 400
                     continue
+                if name == "README.txt":
+                    if member.file_size > MAX_QUESTION_README_BYTES:
+                        return None, None, "README.txt must be 128 KB or smaller.", 400
+                    continue
                 if name.lower() == "questions.csv":
                     if name != "questions.csv" or csv_info is not None:
                         return None, None, "The ZIP must contain one root-level questions.csv file.", 400
@@ -182,8 +198,9 @@ def read_question_import_archive(file):
                     continue
                 if name.startswith("images/") and name.count("/") == 1:
                     filename = name[len("images/"):]
-                    if not filename or not allowed_file(filename):
-                        return None, None, f"Unsupported image file: {name}.", 400
+                    extension = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
+                    if not filename or extension not in QUESTION_IMPORT_IMAGE_EXTENSIONS:
+                        return None, None, f"Image {name} must be a PNG, JPG, or JPEG file.", 400
                     if member.file_size > MAX_QUESTION_IMAGE_BYTES:
                         return None, None, f"Image {filename} must be 10 MB or smaller.", 400
                     image_infos[name] = member
@@ -218,9 +235,11 @@ def read_question_import_archive(file):
                 image_data, error = read_member(member, MAX_QUESTION_IMAGE_BYTES)
                 if error:
                     return None, None, error, 400
+                if not valid_question_import_image(name, image_data):
+                    return None, None, f"Image {name} is not a valid PNG, JPG, or JPEG file.", 400
                 images[name] = image_data
             return csv_data, images, None, None
-    except (zipfile.BadZipFile, EOFError, OSError, RuntimeError, NotImplementedError):
+    except (zipfile.BadZipFile, EOFError, OSError, RuntimeError, NotImplementedError, zlib.error):
         return None, None, "The uploaded file is not a valid, readable ZIP archive.", 400
 
 
@@ -281,7 +300,8 @@ def parse_question_import_csv(contents, images, exam):
             elif image_reference:
                 filename = image_reference[len("images/"):] if image_reference.startswith("images/") else image_reference
                 if (not filename or "/" in filename or "\\" in filename or
-                        filename in {".", ".."} or not allowed_file(filename)):
+                        filename in {".", ".."} or
+                        filename.rsplit(".", 1)[-1].lower() not in QUESTION_IMPORT_IMAGE_EXTENSIONS):
                     return None, f"Question row {row_number} has an invalid image filename."
                 image_member = f"images/{filename}"
                 if image_member not in images:
