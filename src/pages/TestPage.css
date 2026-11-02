@@ -93,17 +93,15 @@
   margin-bottom: 22px;
   color: #FAFAFA;
 }
-.question-diagram {
+.question-image {
   display: block;
   max-width: 100%;
-  max-height: 60vh;
-  width: auto;
+  max-height: 55vh;
   height: auto;
   object-fit: contain;
   margin: 0 auto 22px;
   border-radius: 10px;
 }
-.question-diagram.question-image-fallback { text-align: center; }
 .options { display: flex; flex-direction: column; gap: 10px; }
 .option-btn {
   display: flex;

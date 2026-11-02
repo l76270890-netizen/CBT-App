@@ -1,58 +1,132 @@
-# React + TypeScript + Vite
+# School Admin CBT API
 
-Set `VITE_API_URL` to the backend origin. Set `VITE_SCHOOL_ID` to the school ID
-to attach public registrations to that school's student roster; if omitted, the
-backend must provide `DEFAULT_SCHOOL_ID`.
+Flask API for the School Admin workspace and the existing CBT client. All school data access is scoped from the authenticated account's `school_id` on the server.
 
-## Question image upload API
+## Authentication and roles
 
-The admin question form expects the backend to provide
-`POST /api/admin/upload-question-image` as an authenticated multipart upload
-with the file in the `image` field. The endpoint must store the image
-permanently and return JSON containing its URL as `imageUrl` or `url`. The
-admin then sends that URL as `imageUrl` when creating a question. The questions
-API should include `imageUrl` (or `image_url`) when returning question records.
-Relative upload paths are resolved against `VITE_API_URL`.
+Sign in at `POST /api/admin/login` for the admin workspace or `POST /api/login` for a student account. Credentials are checked against password hashes. A successful login sets an opaque, database-backed session in an `HttpOnly` cookie; the session value is not returned in JSON. Send browser requests with credentials enabled (`fetch(..., { credentials: "include" })` or the equivalent). Use `POST /api/logout` to revoke the session.
 
-The bulk-question CSV importer accepts the existing eight required columns and
-an optional final `imageUrl` column. Image URLs must be HTTP(S) URLs or
-relative upload paths; blank image cells are imported without an image.
+Roles are `school_admin`, `teacher`, `exam_officer`, and `student`. Admin overview, roster, and performance routes require an admin workspace role. Exam creation, deletion, editing, question creation, and image upload allow `school_admin` and `exam_officer`. Students can read exams/questions in their own school, send their heartbeat, and submit attempts. The public registration endpoint always creates a `student`; it cannot choose an admin role.
 
-For bulk questions with local diagrams, upload a ZIP containing exactly one
-`questions.csv` and an optional `images/` folder. Put image filenames (for
-example, `triangle.png`) in the CSV's `imageUrl` column. PNG, JPG, and JPEG
-images up to 5 MB each are accepted; the ZIP is limited to 25 MB. The admin
-uploads each referenced image through the permanent question-image endpoint
-before saving its question, so ZIP image imports require that endpoint to be
-available.
+The previous hardcoded admin email/password has been removed. Create privileged accounts through the Flask CLI. API JSON does not expose passwords or session credentials. Login responses contain only basic account fields needed by the client.
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+## Endpoints
 
-Currently, two official plugins are available:
+All routes below are under `/api`. Except registration and login, they require the session cookie unless marked otherwise.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Method and path | Access | Purpose |
+| --- | --- | --- |
+| `POST /register` | Public | Register a student with `email`, `password` (8+ chars), optional `name`, and `schoolId`. A single-school deployment may omit `schoolId`; multi-school deployments must pass it or configure `DEFAULT_SCHOOL_ID`. Registration signs the student in and sets the session cookie. `classId` is optional and must belong to that school. |
+| `POST /admin/login` | Public | Admin role login; sets session cookie. |
+| `POST /login` | Public | Any active account login; sets session cookie. |
+| `POST /logout` | Signed in | Revoke the current session and clear its cookie. |
+| `GET /admin/overview` | Admin roles | Counts, active students, average attempt score, and recent activity for the current school. |
+| `GET /admin/students?search=&classId=&page=1&limit=50` | Admin roles | Paginated student roster. Search checks display name and email. `limit` is capped at 200. |
+| `GET /admin/students/:studentId/performance?from=&to=` | Admin roles | Completed attempts, chronological score history, and results grouped by subject. Date filters accept ISO dates or datetimes. |
+| `POST /students/me/heartbeat` | Student | Update `lastSeenAt`. Overview counts an active student only when an active student account's heartbeat is within five minutes. |
+| `GET /exams` | Signed in | Current school's exams with `id`, `title`, `examType`, `year`, `duration`, `subjects`, and the actual `totalQuestions` count. |
+| `GET /questions?examId=ID&subject=NAME` | Signed in | Questions for exactly one exam and configured subject in the current school. |
+| `POST /admin/create-exam` | School admin, exam officer | Create an exam with `title`, `examType`, `subjects` (array), optional `year` and `duration`; may include a `questions` array. |
+| `POST /admin/add-question` | School admin, exam officer | Add one question to a school-owned exam. Accepts JSON or multipart form with an optional image. |
+| `POST /admin/import-questions-zip` | School admin, exam officer | Bulk import up to 500 questions to a school-owned exam from a multipart ZIP upload. |
+| `PUT /admin/exam/:examId`, `DELETE /admin/exam/:examId` | School admin, exam officer | Update or delete a school-owned exam. Subjects cannot be changed after questions exist. |
+| `POST /attempts` | Student | Record a reportable exam attempt with `examId`, `subject`, `score`, and `total`. Completion time, student, and school are assigned by the server. |
+| `POST /save-result` or `/history` | Student | Save a personal history result; when `examId` and `subject` are included it is also recorded for school reports. |
+| `GET /history/:userId`, `DELETE /history/:resultId`, `DELETE /history/clear/:userId` | Student | Read or manage the signed-in student's own history. Exam history includes `examId` and `subject`. |
 
-## React Compiler
+### Response examples
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+Login returns account details and sets the cookie in the response headers:
 
 ```json
 {
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+  "success": true,
+  "user_id": 12,
+  "username": "A. Admin",
+  "email": "admin@example.edu",
+  "role": "school_admin",
+  "profile_image": null
 }
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+The overview returns real counts. Before any attempts have been recorded, score and activity are explicitly unavailable:
+
+```json
+{
+  "counts": {
+    "exams": 3,
+    "configuredSubjects": 6,
+    "questions": 80,
+    "enrolledStudents": 120,
+    "activeStudents": 7
+  },
+  "performance": { "averageScore": null, "attemptCount": 0, "available": false },
+  "recentExamActivity": null
+}
+```
+
+Student roster returns a `students` array with `id`, `displayName`, `email`, `class`, `accountStatus`, and `lastSeenAt`, plus `pagination`. Student performance returns `completedAttempts`, `scoreHistory`, and `resultsBySubject`. Question creation returns `{ "success": true, "id": 456, "examId": 20, "subject": "Biology", "image_path": null, "image_url": null }`; validation failures return HTTP 400 with `{ "success": false, "error": "..." }`.
+
+Question body example:
+
+```json
+{
+  "examId": 20,
+  "subject": "Biology",
+  "question": "Which structure contains genetic material?",
+  "options": { "A": "Nucleus", "B": "Ribosome", "C": "Cell wall", "D": "Vacuole" },
+  "correctAnswer": "A",
+  "explanation": "Most cell genetic material is stored in the nucleus."
+}
+```
+
+All question rows require four non-empty options and an answer of `A`, `B`, `C`, or `D`. The requested exam and subject are checked before storage.
+
+### Bulk question ZIP format
+
+Send a `multipart/form-data` request to `/api/admin/import-questions-zip` with the selected `examId` and a ZIP file in the `file` field. The archive must contain a root-level `questions.csv` using the CSV template columns (`subject`, `question`, `optionA`, `optionB`, `optionC`, `optionD`, `correctAnswer`, `explanation`, and optional `imageUrl`). It may also contain PNG/JPG/JPEG images directly inside an `images/` directory and an optional root-level `README.txt`. In `imageUrl`, use either an image filename such as `triangle.png` or `images/triangle.png` to attach a ZIP image, or a valid HTTP(S) URL. Questions without images are supported.
+
+The endpoint accepts comma-, semicolon-, and tab-delimited UTF-8 CSV files. ZIP uploads are limited to 25 MB, their uncompressed contents to 50 MB, each image to 10 MB, the CSV to 5 MB, and `README.txt` to 128 KB. The backend validates every row, image reference, image type, and archive path before inserting questions; exam ownership and configured subjects are checked on the server. Student question responses include the stored image URL, served by `/uploads/...`.
+
+## Setup and deployment
+
+Python 3.10+ is recommended.
+
+1. Create and activate a virtual environment, then install dependencies:
+
+   ```sh
+   python -m venv venv
+   # Activate the environment for your shell, then:
+   pip install -r requirements.txt
+   ```
+
+2. Configure environment variables. `DATABASE_URL` accepts SQLite or PostgreSQL. `FRONTEND_ORIGIN` (or comma-separated `FRONTEND_ORIGINS`) must list the exact frontend origins. For production set `APP_ENV=production`, `COOKIE_SECURE=true`, and `COOKIE_SAMESITE=None` when the frontend is on a separate site; production must use HTTPS. `DEFAULT_SCHOOL_ID` can be set after school creation for student self-registration. Database credentials and optional Cloudinary credentials are read only from environment variables. Question images are stored locally under `uploads/` by default on a self-hosted deployment; set `UPLOAD_FOLDER` to a persistent mounted volume to retain images across redeployments. On serverless platforms with an ephemeral filesystem, configure a persistent volume for `UPLOAD_FOLDER` or image uploads will be rejected rather than saved temporarily. Cloudinary remains optional.
+
+   Example for local development:
+
+   ```text
+   DATABASE_URL=sqlite:///examcore.db
+   FRONTEND_ORIGIN=http://localhost:3000
+   APP_ENV=development
+   ```
+
+3. For a new database run `flask --app app db upgrade`, then create a school and its first admin with `flask --app app create-school-admin`. The command prompts for the admin password and stores only a password hash. Use `flask --app app create-school-user` to provision teachers and exam officers, `flask --app app create-school-class` to create classes, and `flask --app app set-school-user-role` to change a provisioned account's role.
+
+4. For an existing database created by the previous app version, first back it up. Mark the old schema as the baseline and apply the additive school migration:
+
+   ```sh
+   flask --app app db stamp 20261026_00
+   flask --app app db upgrade
+   flask --app app create-school-admin
+   flask --app app assign-legacy-data
+   ```
+
+   `assign-legacy-data` explicitly assigns old unscoped rows to one selected school. The migration defaults old users to `student`; create or promote the administrator using the CLI before opening the admin workspace. Never run that assignment command when the old database contains records from more than one school.
+
+5. Start locally with `flask --app app run` or deploy with `gunicorn app:app`. Migrations are run as a deployment step; the app no longer creates tables at import time. No sample students or activity are seeded.
+
+## Data and reporting notes
+
+`Attempt` stores the authenticated student ID, school ID, exam ID, subject, score, total, and server completion timestamp. The exam client records subject-level attempts for school reports and saves one aggregate result to the student's personal history. The server derives the student/school and validates the exam and configured subject. The overview average is the arithmetic mean of attempt percentages. A heartbeat only updates last-seen time; it does not record study time. Legacy history rows without exam and subject remain personal history and are not included in school performance metrics.
+
+The student client must call the login endpoint and send the resulting HttpOnly cookie with API requests. A browser-only localStorage admin flag cannot authorize any endpoint.

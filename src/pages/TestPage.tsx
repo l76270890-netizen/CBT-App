@@ -3,11 +3,18 @@ import type { TestConfigType } from '../types'
 import './TestPage.css'
 import { API_URL } from '../config'
 import { apiRequest } from '../api'
-import QuestionImage from '../components/QuestionImage'
 import { questionsBank } from '../data/questionsBank'
 
 type Props = { setActivePage: (page: string) => void; testConfig: TestConfigType }
-type Question = { id: string; subject: string; question: string; imageUrl?: string; options: string[]; answer: number; explanation?: string; topic?: string }
+type Question = { id: string; subject: string; question: string; options: string[]; answer: number; explanation?: string; topic?: string; image_url?: string }
+
+const questionImageUrl = (data: any): string | undefined => {
+  const image = data.image_url || data.image_path
+  if (typeof image !== "string" || !image) return undefined
+  if (/^https?:\/\//i.test(image)) return image
+  const path = image.startsWith("/") ? image : `/uploads/${image}`
+  return `${API_URL.replace(/\/$/, "")}${path}`
+}
 
 export default function Test({ setActivePage, testConfig }: Props) {
   const [startTime] = useState(() => Date.now())
@@ -43,11 +50,11 @@ export default function Test({ setActivePage, testConfig }: Props) {
             id: d.id || `q-${i}`,
             subject: d.subject || singleSubject,
             question: d.question,
-            imageUrl: d.imageUrl || d.image_url || undefined,
             options: Array.isArray(d.options)? d.options : [d.options.A, d.options.B, d.options.C, d.options.D],
             answer: typeof d.answer === 'number'? d.answer : ['A','B','C','D'].indexOf(d.answer || 'A'),
             explanation: d.explanation || '',
-            topic: d.topic || ''
+            topic: d.topic || '',
+            image_url: questionImageUrl(d)
           }))
           localStorage.removeItem('current_questions')
         }
@@ -70,11 +77,11 @@ export default function Test({ setActivePage, testConfig }: Props) {
                     id: d.id,
                     subject: d.subject || sub,
                     question: d.question,
-                    imageUrl: d.imageUrl || d.image_url || undefined,
                     options: Array.isArray(d.options)? d.options : Object.values(d.options),
                     answer: typeof d.answer === 'string'? ['A','B','C','D'].indexOf(d.answer) : d.answer?? 0,
                     explanation: d.explanation || '',
-                    topic: d.topic || ''
+                    topic: d.topic || '',
+                    image_url: questionImageUrl(d)
                   }))
                   allFetched = [...allFetched,...mapped]
                 }
@@ -220,7 +227,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
       <div className="test-body">
         <div className="question-card">
           <h2 className="question-text">{q.question}</h2>
-          {q.imageUrl && <QuestionImage key={q.imageUrl} className="question-diagram" imageUrl={q.imageUrl} />}
+          {q.image_url && <img className="question-image" src={q.image_url} alt="Diagram for this question" onError={event => { event.currentTarget.hidden = true; }} />}
           <div className="options">{q.options.map((opt,i)=><button key={i} className={`option-btn ${answers[current]===i?'selected':''}`} onClick={()=>{const c=[...answers]; c[current]=i; setAnswers(c)}}><span className="option-label">{String.fromCharCode(65+i)}</span><span>{opt}</span></button>)}</div>
           {testConfig.mode==='study' && answers[current]!==null && <div style={{marginTop:16, padding:12, background:'#1e1e1e', borderRadius:10, color: answers[current]===q.answer?'#10B981':'#EF4444'}}>{answers[current]===q.answer?'✓ Correct':`✗ Correct: ${String.fromCharCode(65+q.answer)}`} {q.explanation && ` - ${q.explanation}`}</div>}
         </div>

@@ -21,8 +21,9 @@ const heroSlides = [
   { src: 'https://images.unsplash.com/photo-1513258496099-48168024aec0?w=1200', alt: 'Students learning in a classroom' },
 ]
 
-export default function Home({ setActivePage, setSelectedExam, setTestConfig, searchQuery, setSearchQuery }: any) {
+export default function Home({ setActivePage, setSelectedExam, setTestConfig }: any) {
   const { user } = useAuth()
+  const [searchQuery, setSearchQuery] = useState("")
   const [activeHeroSlide, setActiveHeroSlide] = useState(0)
   const [heroPaused, setHeroPaused] = useState(false)
   const [examsFromDb, setExamsFromDb] = useState<ExamData[]>([])

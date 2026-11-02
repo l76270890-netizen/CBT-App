@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Home, FileText, BookOpen, History, User, LogOut, Settings, Bell, Menu, X, ChevronRight, Edit2, CheckCheck, Trash2, Search, Funnel, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Home, FileText, BookOpen, History, User, LogOut, Settings, Bell, Menu, X, ChevronRight, Edit2, CheckCheck, Trash2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import './Navbar.css'
 import { API_URL } from '../config'
@@ -7,7 +7,7 @@ import { apiRequest, asArray } from '../api'
 
 type Notif = { id: string; title: string; message: string; time: string; read: boolean; type: 'success'|'info'|'warning' }
 
-export default function Navbar({ activePage, setActivePage, sidebarCollapsed, setSidebarCollapsed, searchQuery, setSearchQuery }: any) {
+export default function Navbar({ activePage, setActivePage }: any) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [showNotif, setShowNotif] = useState(false)
   const [notifications, setNotifications] = useState<Notif[]>([])
@@ -123,32 +123,13 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
 
   return (
     <>
-      <header className={`navbar${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+      <header className="navbar">
         <div className="navbar-container">
           <button className="hamburger" onClick={() => setMenuOpen(true)}><Menu size={20} /></button>
           <img className="home-logo-box" src="/icons/examcore-192.png" alt="ExamCore" /><span className='span'>EXAMCORE</span>
           <nav className="nav-links">
             {navItems.map(item => { const Icon = item.icon; return <button key={item.id} className={`nav-link ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><Icon size={18} /> {item.label}</button> })}
           </nav>
-          {activePage === 'home' && (
-            <div className="desktop-search">
-              <div className="desktop-search-wrapper">
-                <Search size={18} className="desktop-search-icon" />
-                <input
-                  type="search"
-                  aria-label="Search exams"
-                  placeholder="Search JAMB, WAEC, NECO..."
-                  value={searchQuery}
-                  onChange={event => setSearchQuery(event.target.value)}
-                />
-                {searchQuery ? (
-                  <button type="button" aria-label="Clear search" onClick={() => setSearchQuery('')}>
-                    <X size={16} />
-                  </button>
-                ) : <Funnel size={16} className="desktop-search-filter" />}
-              </div>
-            </div>
-          )}
           <div className="navbar-right">
             {user && (
               <div className="navbar-user">
@@ -199,7 +180,7 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
       </header>
       {showNotif && <div style={{position:'fixed', inset:0, zIndex:90}} onClick={()=>setShowNotif(false)}></div>}
       <div className={`sidebar-overlay ${menuOpen? 'show' : ''}`} onClick={() => setMenuOpen(false)}></div>
-      <aside className={`sidebar ${menuOpen? 'open' : ''}${sidebarCollapsed ? ' collapsed' : ''}`}>
+      <aside className={`sidebar ${menuOpen? 'open' : ''}`}>
         <div className="sidebar-header">
           <div className="profile-section">
             <div className="avatar"><img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} /></div>
@@ -211,20 +192,11 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
             <button className="edit-profile" onClick={() => handleNavClick('account')}><Edit2 size={12} /> Edit</button>
           </div>
           <button className="close-btn" onClick={() => setMenuOpen(false)}><X size={20} /></button>
-          <button
-            className="sidebar-collapse-btn"
-            type="button"
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            onClick={() => setSidebarCollapsed((collapsed: boolean) => !collapsed)}
-          >
-            {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          </button>
         </div>
         <nav className="sidebar-links">
-          {navItems.map(item => { const Icon = item.icon; return <button key={item.id} aria-label={sidebarCollapsed ? item.label : undefined} title={sidebarCollapsed ? item.label : undefined} className={`sidebar-link ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><span className="sidebar-icon"><Icon size={18} /></span><span className="sidebar-link-label">{item.label}</span><ChevronRight size={16} className="chevron" /></button> })}
+          {navItems.map(item => { const Icon = item.icon; return <button key={item.id} className={`sidebar-link ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><span className="sidebar-icon"><Icon size={18} /></span>{item.label}<ChevronRight size={16} className="chevron" /></button> })}
           <div className="sidebar-divider"></div>
-          {extraItems.map(item => { const Icon = item.icon; return <button key={item.id} aria-label={sidebarCollapsed ? item.label : undefined} title={sidebarCollapsed ? item.label : undefined} className={`sidebar-link ${item.danger? 'danger' : 'muted'}`} onClick={() => handleNavClick(item.id)}><span className="sidebar-icon"><Icon size={18} /></span><span className="sidebar-link-label">{item.label}</span></button> })}
+          {extraItems.map(item => { const Icon = item.icon; return <button key={item.id} className={`sidebar-link ${item.danger? 'danger' : 'muted'}`} onClick={() => handleNavClick(item.id)}><span className="sidebar-icon"><Icon size={18} /></span>{item.label}</button> })}
         </nav>
         <div className="sidebar-footer">EXAMCORE v1.0 • {user?.email} • {historyCount} Tests 🇳🇬</div>
       </aside>

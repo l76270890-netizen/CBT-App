@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import QuestionImage from '../components/QuestionImage'
 import './Review.css'
 
 type Props = { setActivePage: (page: string) => void }
@@ -43,7 +42,7 @@ export default function Review({ setActivePage }: Props) {
                 </span>
               </div>
               <p className="review-q-text">{q.question}</p>
-              {(q.imageUrl || q.image_url) && <QuestionImage key={q.imageUrl || q.image_url} className="review-question-image" imageUrl={q.imageUrl || q.image_url} />}
+              {q.image_url && <img className="review-question-image" src={q.image_url} alt="Diagram for this question" onError={event => { event.currentTarget.hidden = true; }} />}
               <div className="review-options">
                 {q.options?.map((opt: string, idx: number) => (
                   <div key={idx} className={`review-option
