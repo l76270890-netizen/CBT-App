@@ -538,6 +538,295 @@ body {
   background: #1a2234;
 }
 
+@media (min-width: 960px) {
+  .navbar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 264px;
+    height: 72px;
+    box-sizing: border-box;
+    background: rgba(18, 18, 18, 0.96);
+    border-bottom: 1px solid #252525;
+    z-index: 50;
+    transition: left 220ms ease;
+  }
+
+  .navbar.sidebar-collapsed {
+    left: 76px;
+  }
+
+  .navbar-container {
+    height: 100%;
+    max-width: none;
+    padding: 0 32px;
+    justify-content: flex-end;
+  }
+
+  .desktop-search {
+    flex: 1;
+    min-width: 160px;
+    max-width: 520px;
+    margin-right: auto;
+  }
+
+  .desktop-search-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    height: 42px;
+    width: 130%;
+    box-sizing: border-box;
+    padding: 0 13px;
+    border: 1px solid #2c2b2b;
+    border-radius: 12px;
+    background: #1e1e1e;
+    transition: border-color 160ms ease, background-color 160ms ease;
+  }
+
+  .desktop-search-wrapper:focus-within {
+    border-color: #1d4be3;
+    background: #202020;
+  }
+
+  .desktop-search-icon,
+  .desktop-search-filter {
+    flex: 0 0 auto;
+    color: #8f9091;
+  }
+
+  .desktop-search-wrapper input {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    font-size: 13px;
+  }
+
+  .desktop-search-wrapper input::placeholder {
+    color: #8f9091;
+  }
+
+  .desktop-search-wrapper input::-webkit-search-cancel-button {
+    display: none;
+  }
+
+  .desktop-search-wrapper button {
+    display: grid;
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    border: 0;
+    border-radius: 7px;
+    background: #2a2a2a;
+    color: #fff;
+    cursor: pointer;
+  }
+
+  .navbar-container>.home-logo-box,
+  .navbar-container>.span,
+  .navbar-container>.hamburger,
+  .navbar-container>.nav-links {
+    display: none;
+  }
+
+  .navbar-right {
+    gap: 16px;
+    flex-shrink: 0;
+  }
+
+  .navbar-user {
+    max-width: 320px;
+    background: transparent;
+    border: 0;
+    padding: 4px 0;
+  }
+
+  .navbar-user-email {
+    max-width: 220px;
+  }
+
+  .sidebar-overlay {
+    display: none;
+  }
+
+  .sidebar {
+    width: 264px;
+    max-width: 264px;
+    height: 100vh;
+    height: 100dvh;
+    transform: none;
+    transition: width 220ms ease;
+    background: #151515;
+    border-right: 1px solid #252525;
+    z-index: 51;
+  }
+
+  .sidebar.collapsed {
+    width: 76px;
+    max-width: 76px;
+  }
+
+  .sidebar-header {
+    position: relative;
+    min-height: 150px;
+    box-sizing: border-box;
+    padding: 24px 20px 18px;
+    background: linear-gradient(145deg, #1d4be3 0%, #14213d 100%);
+  }
+
+  .profile-section {
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .avatar {
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+  }
+
+  .profile-text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .profile-text h3,
+  .profile-text span {
+    overflow: hidden;
+    max-width: 100%;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .close-btn {
+    display: none;
+  }
+
+  .sidebar-collapse-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 1;
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 9px;
+    background: rgba(0, 0, 0, 0.18);
+    color: #fff;
+    cursor: pointer;
+  }
+
+  .sidebar-collapse-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  .sidebar-links {
+    padding: 18px 14px;
+    gap: 4px;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .sidebar-links::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sidebar-link {
+    min-height: 42px;
+    padding: 10px 13px;
+    border-radius: 11px;
+    color: #a6a6ad;
+    font-weight: 600;
+  }
+
+  .sidebar-link:hover {
+    background: #202020;
+  }
+
+  .sidebar-link.active {
+    color: #fff;
+    background: rgba(29, 75, 227, 0.2);
+    box-shadow: inset 3px 0 #1d4be3;
+  }
+
+  .sidebar-link.active .sidebar-icon {
+    color: #7d9cff;
+  }
+
+  .sidebar-divider {
+    margin: 14px 4px;
+    background: #292929;
+  }
+
+  .sidebar-footer {
+    padding: 16px 14px;
+    border-top-color: #252525;
+  }
+
+  .sidebar.collapsed .sidebar-header {
+    min-height: 108px;
+    padding: 48px 8px 14px;
+  }
+
+  .sidebar.collapsed .sidebar-collapse-btn {
+    right: 22px;
+  }
+
+  .sidebar.collapsed .profile-section {
+    align-items: center;
+    width: 100%;
+  }
+
+  .sidebar.collapsed .avatar {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+  }
+
+  .sidebar.collapsed .profile-text,
+  .sidebar.collapsed .edit-profile,
+  .sidebar.collapsed .sidebar-link-label,
+  .sidebar.collapsed .sidebar-link .chevron,
+  .sidebar.collapsed .sidebar-footer {
+    display: none;
+  }
+
+  .sidebar.collapsed .sidebar-links {
+    padding: 16px 10px;
+  }
+
+  .sidebar.collapsed .sidebar-link {
+    justify-content: center;
+    width: 54px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .sidebar.collapsed .sidebar-icon {
+    width: 100%;
+  }
+
+  .sidebar.collapsed .sidebar-divider {
+    margin: 12px 4px;
+  }
+
+  .bottom-nav {
+    display: none;
+  }
+}
+
 .notif-type {
   width: 4px;
   min-width: 4px;
@@ -601,33 +890,38 @@ body {
   z-index: 998;
 }
 
-@media (min-width: 960px) {
-
-  .hamburger,
-  .bottom-nav,
-  .sidebar,
-  .sidebar-overlay {
-    display: none !important;
-  }
-
-  .nav-links {
-    display: flex;
-    flex: 1;
-    justify-content: center;
-  }
-
+@media (min-width: 960px) and (max-width: 1100px) {
   .navbar-container {
-    gap: 16px;
-    padding: 14px 24px;
+    padding: 0 16px;
+    gap: 10px;
+  }
+
+  .desktop-search {
+    max-width: 360px;
   }
 
   .navbar-right {
-    margin-left: auto;
+    gap: 10px;
+  }
+
+  .navbar-user {
+    max-width: 220px;
+    gap: 8px;
+  }
+
+  .navbar-user-email {
+    max-width: 145px;
   }
 }
 
 /* MOBILE */
 @media (max-width: 959px) {
+
+  .desktop-search,
+  .sidebar-collapse-btn {
+    display: none;
+  }
+
   .navbar-container {
     padding: 10px 12px;
     gap: 8px;
