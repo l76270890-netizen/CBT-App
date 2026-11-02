@@ -379,3 +379,4 @@
 .question-image-preview img, .admin-question-image { display: block; max-width: 100%; max-height: 320px; width: auto; height: auto; object-fit: contain; border-radius: 7px; }
 .question-image-preview span { color: #a1a1b5; font-size: 11px; }
 .admin-question-image { margin-top: 6px; }
+.question-image-fallback { color: #a1a1b5; font-size: 12px; }

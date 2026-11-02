@@ -6,19 +6,26 @@ session and current user/role from the database.
 """
 from datetime import datetime, timedelta
 from functools import wraps
+import csv
 import hashlib
+import io
 import json
 import math
 import os
 import secrets
+import stat
 import time
 import tempfile
+import re
+from urllib.parse import urlsplit
+import zipfile
 
 from flask import Flask, jsonify, request, send_from_directory, make_response, g
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, or_
+from werkzeug.datastructures import FileStorage
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -68,13 +75,22 @@ db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
 BASEDIR = os.path.abspath(os.path.dirname(__file__))
-# Vercel's deployment directory is read-only; use its temporary writable directory.
-UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), "examcore-uploads")
+is_serverless = is_vercel or bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER") or os.path.join(
+    tempfile.gettempdir() if is_serverless else BASEDIR,
+    "examcore-uploads" if is_serverless else "uploads",
+)
+QUESTION_STORAGE_IS_PERSISTENT = not is_serverless or bool(os.environ.get("UPLOAD_FOLDER"))
 AVATAR_FOLDER = os.path.join(UPLOAD_FOLDER, "avatars")
 QUESTION_FOLDER = os.path.join(UPLOAD_FOLDER, "questions")
 os.makedirs(AVATAR_FOLDER, exist_ok=True)
 os.makedirs(QUESTION_FOLDER, exist_ok=True)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "jfif"}
+MAX_QUESTION_ARCHIVE_BYTES = 25 * 1024 * 1024
+MAX_QUESTION_ARCHIVE_TOTAL_BYTES = 50 * 1024 * 1024
+MAX_QUESTION_CSV_BYTES = 5 * 1024 * 1024
+MAX_QUESTION_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_QUESTION_IMPORT_ROWS = 500
 VALID_ROLES = {"school_admin", "teacher", "exam_officer", "student"}
 ADMIN_ROLES = {"school_admin", "teacher", "exam_officer"}
 
@@ -107,6 +123,185 @@ def get_image_url(path):
     if path.startswith("http"):
         return path
     return f"/uploads/{path}"
+
+
+def store_question_image(file):
+    cloud_url = upload_to_cloudinary(file, "examcore/questions")
+    if cloud_url:
+        return cloud_url, None
+    if not QUESTION_STORAGE_IS_PERSISTENT:
+        return None, "Permanent image storage is unavailable. Configure Cloudinary or set UPLOAD_FOLDER to a persistent volume."
+
+    filename = f"q_{secrets.token_hex(12)}_{secure_filename(file.filename)}"
+    try:
+        file.save(os.path.join(QUESTION_FOLDER, filename))
+    except OSError:
+        app.logger.exception("Question image could not be saved")
+        return None, "Question image could not be saved to permanent storage."
+    return f"questions/{filename}", None
+
+
+def read_question_import_archive(file):
+    archive_data = file.read(MAX_QUESTION_ARCHIVE_BYTES + 1)
+    if len(archive_data) > MAX_QUESTION_ARCHIVE_BYTES:
+        return None, None, "ZIP files must be 25 MB or smaller.", 413
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive_data)) as archive:
+            members = archive.infolist()
+            if len(members) > MAX_QUESTION_IMPORT_ROWS + 2:
+                return None, None, "The ZIP contains too many files.", 400
+            if sum(member.file_size for member in members) > MAX_QUESTION_ARCHIVE_TOTAL_BYTES:
+                return None, None, "The uncompressed ZIP contents exceed 50 MB.", 400
+
+            csv_info = None
+            image_infos = {}
+            seen_names = set()
+            for member in members:
+                name = member.filename
+                if (not name or "\\" in name or name.startswith("/") or
+                        any(part in {"", ".", ".."} for part in name.rstrip("/").split("/"))):
+                    return None, None, "The ZIP contains an invalid file path.", 400
+                if name in seen_names:
+                    return None, None, f"The ZIP contains a duplicate path: {name}.", 400
+                seen_names.add(name)
+
+                unix_mode = member.external_attr >> 16
+                if stat.S_ISLNK(unix_mode) or member.flag_bits & 0x1:
+                    return None, None, "The ZIP cannot contain links or encrypted files.", 400
+                if member.is_dir():
+                    if name != "images/":
+                        return None, None, "Only the images/ directory is allowed in the ZIP.", 400
+                    continue
+                if name.lower() == "questions.csv":
+                    if name != "questions.csv" or csv_info is not None:
+                        return None, None, "The ZIP must contain one root-level questions.csv file.", 400
+                    if member.file_size > MAX_QUESTION_CSV_BYTES:
+                        return None, None, "questions.csv must be 5 MB or smaller.", 400
+                    csv_info = member
+                    continue
+                if name.startswith("images/") and name.count("/") == 1:
+                    filename = name[len("images/"):]
+                    if not filename or not allowed_file(filename):
+                        return None, None, f"Unsupported image file: {name}.", 400
+                    if member.file_size > MAX_QUESTION_IMAGE_BYTES:
+                        return None, None, f"Image {filename} must be 10 MB or smaller.", 400
+                    image_infos[name] = member
+                    continue
+                return None, None, f"Unsupported file in ZIP: {name}.", 400
+
+            if csv_info is None:
+                return None, None, "The ZIP must contain a root-level questions.csv file.", 400
+            if len(image_infos) > MAX_QUESTION_IMPORT_ROWS:
+                return None, None, "The ZIP can contain at most 500 question images.", 400
+
+            expanded_size = 0
+
+            def read_member(member, limit):
+                nonlocal expanded_size
+                with archive.open(member) as stream:
+                    contents = stream.read(limit + 1)
+                if len(contents) > limit:
+                    return None, "A ZIP file exceeds its allowed size."
+                expanded_size += len(contents)
+                if expanded_size > MAX_QUESTION_ARCHIVE_TOTAL_BYTES:
+                    return None, "The uncompressed ZIP contents exceed 50 MB."
+                if len(contents) != member.file_size:
+                    return None, "A ZIP file has an invalid declared size."
+                return contents, None
+
+            csv_data, error = read_member(csv_info, MAX_QUESTION_CSV_BYTES)
+            if error:
+                return None, None, error, 400
+            images = {}
+            for name, member in image_infos.items():
+                image_data, error = read_member(member, MAX_QUESTION_IMAGE_BYTES)
+                if error:
+                    return None, None, error, 400
+                images[name] = image_data
+            return csv_data, images, None, None
+    except (zipfile.BadZipFile, EOFError, OSError, RuntimeError, NotImplementedError):
+        return None, None, "The uploaded file is not a valid, readable ZIP archive.", 400
+
+
+def parse_question_import_csv(contents, images, exam):
+    try:
+        text = contents.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return None, "questions.csv must use UTF-8 encoding."
+
+    try:
+        try:
+            delimiter = csv.Sniffer().sniff(text[:8192], delimiters=",;\t").delimiter
+        except csv.Error:
+            delimiter = ","
+        reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=delimiter)
+        if not reader.fieldnames:
+            return None, "questions.csv must include a header row."
+        headers = [re.sub(r"[^a-z0-9]", "", header.strip().lower())
+                   for header in reader.fieldnames]
+        if len(headers) != len(set(headers)):
+            return None, "questions.csv contains duplicate column names."
+        required_headers = {
+            "question", "optiona", "optionb", "optionc", "optiond",
+            "correctanswer", "subject", "explanation",
+        }
+        missing_headers = sorted(required_headers - set(headers))
+        if missing_headers:
+            return None, f"questions.csv is missing required columns: {', '.join(missing_headers)}."
+
+        prepared = []
+        seen_questions = set()
+        for row_number, raw_row in enumerate(reader, start=2):
+            if None in raw_row:
+                return None, f"Question row {row_number} has more values than the header."
+            row = {header: (raw_row.get(original) or "").strip()
+                   for header, original in zip(headers, reader.fieldnames)}
+            if not any(row.values()):
+                continue
+            if len(prepared) >= MAX_QUESTION_IMPORT_ROWS:
+                return None, "Import up to 500 questions at a time."
+
+            image_reference = row.get("imageurl", "")
+            data = {
+                "subject": row.get("subject", ""),
+                "question": row.get("question", ""),
+                "options": {
+                    "A": row.get("optiona", ""),
+                    "B": row.get("optionb", ""),
+                    "C": row.get("optionc", ""),
+                    "D": row.get("optiond", ""),
+                },
+                "correctAnswer": row.get("correctanswer", "").upper(),
+                "explanation": row.get("explanation", ""),
+            }
+            image_member = None
+            if image_reference.lower().startswith(("http://", "https://")):
+                data["imageUrl"] = image_reference
+            elif image_reference:
+                filename = image_reference[len("images/"):] if image_reference.startswith("images/") else image_reference
+                if (not filename or "/" in filename or "\\" in filename or
+                        filename in {".", ".."} or not allowed_file(filename)):
+                    return None, f"Question row {row_number} has an invalid image filename."
+                image_member = f"images/{filename}"
+                if image_member not in images:
+                    return None, f"Question row {row_number} references missing image {filename}."
+
+            validated, error = validate_question_payload(data, exam)
+            if error:
+                return None, f"Question row {row_number}: {error}"
+            question_key = (validated["subject"].casefold(),
+                            " ".join(validated["question"].casefold().split()))
+            if question_key in seen_questions:
+                return None, f"Question row {row_number} duplicates an earlier question."
+            seen_questions.add(question_key)
+            prepared.append((validated, image_member))
+
+        if not prepared:
+            return None, "questions.csv does not contain any question rows."
+        return prepared, None
+    except csv.Error:
+        return None, "Could not parse questions.csv. Check its delimiter and quoting."
 
 
 class School(db.Model):
@@ -730,9 +925,30 @@ def validate_question_payload(data, exam):
         return None, "options must contain non-empty A, B, C, and D values."
     if answer not in {"A", "B", "C", "D"}:
         return None, "correctAnswer must be A, B, C, or D."
+    image_url = data.get("imageUrl")
+    if image_url not in (None, ""):
+        if not isinstance(image_url, str) or len(image_url) > 1000 or re.search(r"%(?![0-9a-fA-F]{2})", image_url):
+            return None, "imageUrl must be a valid HTTP or HTTPS URL."
+        try:
+            parsed_image_url = urlsplit(image_url)
+            valid_image_url = (
+                parsed_image_url.scheme.lower() in {"http", "https"}
+                and bool(parsed_image_url.hostname)
+                and not parsed_image_url.username
+                and not parsed_image_url.password
+                and not any(character.isspace() for character in image_url)
+            )
+            parsed_image_url.port
+        except ValueError:
+            valid_image_url = False
+        if not valid_image_url:
+            return None, "imageUrl must be a valid HTTP or HTTPS URL."
+        image_path = image_url
+    else:
+        image_path = data.get("image_path")
     return {"subject": subject.strip(), "question": question.strip(),
             "options": {key: options[key].strip() for key in "ABCD"}, "answer": answer,
-            "explanation": data.get("explanation", "") or "", "image_path": data.get("image_path")}, None
+            "explanation": data.get("explanation", "") or "", "image_path": image_path}, None
 
 
 @app.route("/api/admin/add-question", methods=["POST"])
@@ -753,21 +969,18 @@ def add_question():
         id=exam_id, school_id=g.current_user.school_id).first()
     if not exam:
         return api_error("Exam not found in your school.", 404, "exam_not_found")
-    file = request.files.get("image") if multipart else None
-    image_path = data.get("image_path")
-    if file and file.filename:
-        if not allowed_file(file.filename):
-            return api_error("Invalid image file type.")
-        image_path = upload_to_cloudinary(file, "examcore/questions")
-        if not image_path:
-            file.seek(0)
-            filename = f"q_{int(time.time())}_{secure_filename(file.filename)}"
-            file.save(os.path.join(QUESTION_FOLDER, filename))
-            image_path = f"questions/{filename}"
-    data["image_path"] = image_path
     validated, error = validate_question_payload(data, exam)
     if error:
         return api_error(error)
+
+    file = request.files.get("image") if multipart else None
+    if file and file.filename:
+        if not allowed_file(file.filename):
+            return api_error("Invalid image file type.")
+        image_path, storage_error = store_question_image(file)
+        if storage_error:
+            return api_error(storage_error, 503, "image_storage_unavailable")
+        validated["image_path"] = image_path
     row = Question(examId=exam.id, school_id=exam.school_id, examType=exam.examType,
                    subject=validated["subject"], question=validated["question"],
                    options=validated["options"], answer=validated["answer"],
@@ -781,6 +994,76 @@ def add_question():
                    image_path=row.image_path, image_url=get_image_url(row.image_path)), 201
 
 
+@app.route("/api/admin/import-questions-zip", methods=["POST"])
+@roles_required("school_admin", "exam_officer")
+def import_questions_zip():
+    if request.content_length and request.content_length > MAX_QUESTION_ARCHIVE_BYTES + 1024 * 1024:
+        return api_error("ZIP files must be 25 MB or smaller.", 413, "file_too_large")
+
+    try:
+        exam_id = int(request.form.get("examId", ""))
+    except (TypeError, ValueError):
+        return api_error("examId must be a valid integer.")
+    exam = Exam.query.filter_by(
+        id=exam_id, school_id=g.current_user.school_id).first()
+    if not exam:
+        return api_error("Exam not found in your school.", 404, "exam_not_found")
+
+    archive_file = request.files.get("file")
+    if not archive_file or not archive_file.filename:
+        return api_error("Upload a ZIP file in the file field.")
+
+    csv_contents, images, archive_error, status = read_question_import_archive(archive_file)
+    if archive_error:
+        return api_error(archive_error, status)
+    prepared, csv_error = parse_question_import_csv(csv_contents, images, exam)
+    if csv_error:
+        return api_error(csv_error)
+
+    stored_images = {}
+    for _, image_member in prepared:
+        if image_member and image_member not in stored_images:
+            image_file = FileStorage(
+                stream=io.BytesIO(images[image_member]),
+                filename=image_member.rsplit("/", 1)[-1],
+            )
+            image_path, storage_error = store_question_image(image_file)
+            if storage_error:
+                return api_error(storage_error, 503, "image_storage_unavailable")
+            stored_images[image_member] = image_path
+
+    try:
+        for question, image_member in prepared:
+            image_path = stored_images.get(image_member) if image_member else question["image_path"]
+            db.session.add(Question(
+                examId=exam.id,
+                school_id=exam.school_id,
+                examType=exam.examType,
+                subject=question["subject"],
+                question=question["question"],
+                options=question["options"],
+                answer=question["answer"],
+                explanation=question["explanation"],
+                year=exam.year,
+                image_path=image_path,
+            ))
+        db.session.flush()
+        exam.totalQuestions = Question.query.filter_by(
+            examId=exam.id, school_id=exam.school_id).count()
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Bulk question import failed for exam %s", exam.id)
+        return api_error("Could not save the imported questions.", 500, "question_import_failed")
+
+    return jsonify(
+        success=True,
+        exam_id=exam.id,
+        imported=len(prepared),
+        message=f"Imported {len(prepared)} questions.",
+    ), 201
+
+
 @app.route("/api/upload/question-image", methods=["POST"])
 @roles_required("school_admin", "exam_officer")
 def upload_question_image():
@@ -789,12 +1072,9 @@ def upload_question_image():
         return api_error("No image file was provided.")
     if not allowed_file(file.filename):
         return api_error("Invalid image type.")
-    cloud_url = upload_to_cloudinary(file, "examcore/questions")
-    if cloud_url:
-        return jsonify(success=True, image_path=cloud_url, image_url=cloud_url)
-    filename = f"q_{int(time.time())}_{secure_filename(file.filename)}"
-    file.save(os.path.join(QUESTION_FOLDER, filename))
-    path = f"questions/{filename}"
+    path, storage_error = store_question_image(file)
+    if storage_error:
+        return api_error(storage_error, 503, "image_storage_unavailable")
     return jsonify(success=True, image_path=path, image_url=get_image_url(path))
 
 

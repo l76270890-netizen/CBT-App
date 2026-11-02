@@ -12,6 +12,7 @@
 .status.wrong { color: #EF4444; }
 .review-q-text { font-weight: 600; margin-bottom: 12px; }
 .review-question-image { display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; object-fit: contain; margin: 0 auto 16px; border-radius: 10px; }
+.review-question-image.question-image-fallback { text-align: center; }
 .review-options { display: flex; flex-direction: column; gap: 8px; }
 .review-option { padding: 12px; border-radius: 10px; border: 2px solid #E2E8F0; display: flex; gap: 10px; }
 .correct-answer { border-color: #10B981; color: #ffff; ; background: #1e1e1e; }

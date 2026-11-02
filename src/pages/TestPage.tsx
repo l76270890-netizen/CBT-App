@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import type { TestConfigType } from '../types'
 import './TestPage.css'
 import { API_URL } from '../config'
-import { apiRequest, resolveQuestionImageUrl } from '../api'
+import { apiRequest } from '../api'
+import QuestionImage from '../components/QuestionImage'
 import { questionsBank } from '../data/questionsBank'
 
 type Props = { setActivePage: (page: string) => void; testConfig: TestConfigType }
@@ -219,7 +220,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
       <div className="test-body">
         <div className="question-card">
           <h2 className="question-text">{q.question}</h2>
-          {q.imageUrl && <img className="question-diagram" src={resolveQuestionImageUrl(q.imageUrl)} alt="Question diagram" />}
+          {q.imageUrl && <QuestionImage key={q.imageUrl} className="question-diagram" imageUrl={q.imageUrl} />}
           <div className="options">{q.options.map((opt,i)=><button key={i} className={`option-btn ${answers[current]===i?'selected':''}`} onClick={()=>{const c=[...answers]; c[current]=i; setAnswers(c)}}><span className="option-label">{String.fromCharCode(65+i)}</span><span>{opt}</span></button>)}</div>
           {testConfig.mode==='study' && answers[current]!==null && <div style={{marginTop:16, padding:12, background:'#1e1e1e', borderRadius:10, color: answers[current]===q.answer?'#10B981':'#EF4444'}}>{answers[current]===q.answer?'✓ Correct':`✗ Correct: ${String.fromCharCode(65+q.answer)}`} {q.explanation && ` - ${q.explanation}`}</div>}
         </div>

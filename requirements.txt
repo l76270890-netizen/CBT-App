@@ -6,3 +6,4 @@ gunicorn==21.2.0
 Werkzeug==2.3.7
 SQLAlchemy==2.0.55
 psycopg2-binary==2.9.13
+cloudinary>=1.44,<3

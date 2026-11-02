@@ -576,6 +576,7 @@ body {
     gap: 10px;
     min-width: 0;
     height: 42px;
+    width: 130%;
     box-sizing: border-box;
     padding: 0 13px;
     border: 1px solid #2c2b2b;
@@ -629,10 +630,10 @@ body {
     cursor: pointer;
   }
 
-  .navbar-container > .home-logo-box,
-  .navbar-container > .span,
-  .navbar-container > .hamburger,
-  .navbar-container > .nav-links {
+  .navbar-container>.home-logo-box,
+  .navbar-container>.span,
+  .navbar-container>.hamburger,
+  .navbar-container>.nav-links {
     display: none;
   }
 
@@ -915,6 +916,7 @@ body {
 
 /* MOBILE */
 @media (max-width: 959px) {
+
   .desktop-search,
   .sidebar-collapse-btn {
     display: none;
