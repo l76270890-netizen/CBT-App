@@ -19,7 +19,7 @@ All routes below are under `/api`. Except registration and login, they require t
 | `POST /register` | Public | Register a student with `email`, `password` (8+ chars), optional `name`, and `schoolId`. A single-school deployment may omit `schoolId`; multi-school deployments must pass it or configure `DEFAULT_SCHOOL_ID`. Registration signs the student in and sets the session cookie. `classId` is optional and must belong to that school. |
 | `POST /admin/login` | Public | Admin role login; sets session cookie. |
 | `POST /login` | Public | Any active account login; sets session cookie. |
-| `POST /payments/paystack/initialize` | Public | Initialize a hosted checkout for a `monthly` or `yearly` plan; the server selects the configured amount, currency, and callback URL. |
+| `POST /payments/paystack/initialize` | Public | Return the configured Paystack hosted payment-page URL for the `monthly` or `yearly` plan. |
 | `POST /logout` | Signed in | Revoke the current session and clear its cookie. |
 | `GET /admin/overview` | Admin roles | Counts, active students, average attempt score, and recent activity for the current school. |
 | `GET /admin/upcoming-exams?limit=10` | Admin roles | Scheduled future exams for the current school, ordered by start time (limit is capped at 100). |
@@ -73,9 +73,9 @@ Exam schedules use the optional `scheduledAt` field in ISO 8601 format (for exam
 
 ### Paystack checkout
 
-Set `PAYSTACK_SECRET_KEY` in the backend environment only. The server defaults to NGN 5,000 monthly (`500000` kobo), NGN 25,000 yearly (`2500000` kobo), and `https://cbt-app-lime.vercel.app/` as the callback URL. Override these with `PAYSTACK_MONTHLY_AMOUNT`, `PAYSTACK_YEARLY_AMOUNT`, `PAYSTACK_CURRENCY`, and `PAYSTACK_CALLBACK_URL` when needed. Amounts are positive integers in the currency's smallest unit; the endpoint never accepts an amount from the request. The callback URL must be an absolute HTTPS URL. Do not expose the secret key through frontend configuration.
+Create fixed-price monthly and yearly payment pages in Paystack and configure their HTTPS URLs on the backend as `PAYSTACK_MONTHLY_PAYMENT_URL` and `PAYSTACK_YEARLY_PAYMENT_URL`. Set each Paystack page to the intended plan price (NGN 5,000 monthly and NGN 25,000 yearly) and collect the payer details on the Paystack page. This static-link flow does not require `PAYSTACK_SECRET_KEY`.
 
-Send `POST /api/payments/paystack/initialize` a JSON body containing `name`, `email`, and `plan` (`monthly` or `yearly`). On success it returns `{ "authorization_url": "https://checkout.paystack.com/..." }`. Missing server configuration returns 503; invalid input returns 400; Paystack/network initialization failures return 502. This endpoint only starts checkout: do not activate a plan based on the browser redirect. Implement payment verification or a verified webhook separately before granting access.
+Send `POST /api/payments/paystack/initialize` a JSON body containing `plan` (`monthly` or `yearly`). On success it returns `{ "authorization_url": "https://paystack.com/pay/..." }`, which the frontend should open or redirect to. Missing or invalid link configuration returns 503; invalid input returns 400. Do not activate a plan based on the browser redirect; add server-side payment verification or a verified webhook before granting access.
 
 Question body example:
 
