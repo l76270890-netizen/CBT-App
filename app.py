@@ -736,7 +736,11 @@ def initialize_paystack_checkout():
             gateway_data = {}
         gateway_message = gateway_data.get("message")
         app.logger.warning(
-            "Paystack checkout initialization returned HTTP %s.", error.code)
+            "Paystack checkout initialization returned HTTP %s: %s",
+            error.code,
+            gateway_message[:200].replace("\r", " ").replace("\n", " ")
+            if isinstance(gateway_message, str) else "no error message",
+        )
         return api_error(
             gateway_message if isinstance(gateway_message, str) and gateway_message else
             "Paystack could not initialize this payment.",
@@ -759,21 +763,37 @@ def initialize_paystack_checkout():
     except ValueError:
         checkout_url = None
         checkout_host = None
-    if (not isinstance(response_data, dict) or
-            response_data.get("status") is not True or not checkout_url or
-            checkout_url.scheme != "https" or
-            checkout_host != "checkout.paystack.com"):
-        gateway_message = (
-            response_data.get("message")
-            if isinstance(response_data, dict) and isinstance(response_data.get("message"), str)
-            else None
+    if not isinstance(response_data, dict):
+        app.logger.error(
+            "Paystack checkout initialization returned a non-object response.")
+        return api_error(
+            "Paystack returned an invalid response. Please try again.",
+            502,
+            "payment_initialization_failed",
+        )
+    if response_data.get("status") is not True:
+        gateway_message = response_data.get("message")
+        safe_message = (
+            gateway_message[:200].replace("\r", " ").replace("\n", " ")
+            if isinstance(gateway_message, str) and gateway_message
+            else "no error message"
         )
         app.logger.error(
-            "Paystack checkout initialization was unsuccessful: %s",
-            gateway_message or "response did not include a valid checkout URL",
+            "Paystack rejected checkout initialization: %s", safe_message)
+        return api_error(
+            gateway_message if isinstance(gateway_message, str) and gateway_message
+            else "Paystack rejected checkout initialization. Check the backend logs.",
+            502,
+            "payment_initialization_failed",
+        )
+    if (not checkout_url or checkout_url.scheme != "https" or
+            checkout_host != "checkout.paystack.com"):
+        app.logger.error(
+            "Paystack initialization succeeded but returned an unsupported checkout URL host: %s",
+            checkout_host or "missing",
         )
         return api_error(
-            gateway_message or "Paystack could not initialize this payment.",
+            "Paystack returned an unsupported checkout URL. Check the backend deployment logs.",
             502,
             "payment_initialization_failed",
         )
