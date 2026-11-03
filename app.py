@@ -4,7 +4,7 @@ Authentication uses an opaque, database-backed session in an HttpOnly cookie.
 The cookie value is never included in JSON responses; each request resolves the
 session and current user/role from the database.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 import csv
 import hashlib
@@ -104,6 +104,20 @@ def utcnow():
 
 def iso_utc(value):
     return value.isoformat(timespec="seconds") + "Z" if value else None
+
+
+def parse_scheduled_at(value):
+    if value is None:
+        return None, None
+    if not isinstance(value, str) or not value.strip():
+        return None, "scheduledAt must be an ISO 8601 date or datetime."
+    try:
+        scheduled_at = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None, "scheduledAt must be an ISO 8601 date or datetime."
+    if scheduled_at.tzinfo is not None:
+        scheduled_at = scheduled_at.astimezone(timezone.utc).replace(tzinfo=None)
+    return scheduled_at, None
 
 
 def allowed_file(filename):
@@ -368,6 +382,7 @@ class Exam(db.Model):
     subject = db.Column(db.String(500))
     year = db.Column(db.Integer)
     duration = db.Column(db.Integer)
+    scheduled_at = db.Column(db.DateTime, nullable=True, index=True)
     totalQuestions = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=utcnow)
     school_id = db.Column(db.Integer, db.ForeignKey(
@@ -758,6 +773,7 @@ def get_exams():
             examId=exam.id, school_id=g.current_user.school_id).count()
         result.append({"id": exam.id, "title": exam.title, "examType": exam.examType,
                        "year": exam.year, "duration": exam.duration,
+                       "scheduledAt": iso_utc(exam.scheduled_at),
                        "subjects": subjects_for_exam(exam), "totalQuestions": actual_questions})
     return jsonify(result)
 
@@ -837,8 +853,11 @@ def validate_exam_payload(data):
             raise ValueError
     except (TypeError, ValueError):
         return None, "year and positive duration must be valid integers."
+    scheduled_at, error = parse_scheduled_at(data.get("scheduledAt"))
+    if error:
+        return None, error
     return {"title": title.strip(), "examType": exam_type.strip(), "subjects": subjects,
-            "year": year, "duration": duration}, None
+            "year": year, "duration": duration, "scheduled_at": scheduled_at}, None
 
 
 @app.route("/api/admin/create-exam", methods=["POST"])
@@ -870,7 +889,8 @@ def create_exam():
         prepared_questions.append(validated)
     school_id = g.current_user.school_id
     exam = Exam(title=data["title"], examType=data["examType"], subject=",".join(data["subjects"]),
-                year=data["year"], duration=data["duration"], totalQuestions=len(prepared_questions), school_id=school_id)
+                year=data["year"], duration=data["duration"], scheduled_at=data["scheduled_at"],
+                totalQuestions=len(prepared_questions), school_id=school_id)
     db.session.add(exam)
     db.session.flush()
     for subject in data["subjects"]:
@@ -914,6 +934,11 @@ def manage_exam(exam_id):
                 setattr(exam, key, value)
             except (TypeError, ValueError):
                 return api_error(f"{key} must be a valid integer" + (" greater than zero." if key == "duration" else "."))
+    if "scheduledAt" in data:
+        scheduled_at, error = parse_scheduled_at(data["scheduledAt"])
+        if error:
+            return api_error(error)
+        exam.scheduled_at = scheduled_at
     if "subjects" in data:
         if not isinstance(data["subjects"], list) or not data["subjects"] or any(not isinstance(x, str) or not x.strip() for x in data["subjects"]):
             return api_error("subjects must be a non-empty list of subject names.")
@@ -1137,6 +1162,35 @@ def admin_overview():
                                     "attemptCount": attempt_count,
                                     "available": attempt_count > 0},
                     "recentExamActivity": recent if attempt_count else None})
+
+
+@app.route("/api/admin/upcoming-exams", methods=["GET"])
+@roles_required("school_admin", "teacher", "exam_officer")
+def admin_upcoming_exams():
+    try:
+        limit = min(100, max(1, int(request.args.get("limit", "10"))))
+    except ValueError:
+        return api_error("limit must be an integer.")
+    query = Exam.query.filter(
+        Exam.school_id == g.current_user.school_id,
+        Exam.scheduled_at >= utcnow(),
+    )
+    total = query.count()
+    exams = query.order_by(Exam.scheduled_at.asc(), Exam.id.asc()).limit(limit).all()
+    result = []
+    for exam in exams:
+        question_count = Question.query.filter_by(
+            examId=exam.id, school_id=g.current_user.school_id).count()
+        result.append({
+            "id": exam.id,
+            "title": exam.title,
+            "examType": exam.examType,
+            "scheduledAt": iso_utc(exam.scheduled_at),
+            "duration": exam.duration,
+            "subjects": subjects_for_exam(exam),
+            "totalQuestions": question_count,
+        })
+    return jsonify({"exams": result, "total": total})
 
 
 @app.route("/api/admin/students", methods=["GET"])
