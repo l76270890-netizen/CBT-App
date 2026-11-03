@@ -763,9 +763,17 @@ def initialize_paystack_checkout():
             response_data.get("status") is not True or not checkout_url or
             checkout_url.scheme != "https" or
             checkout_host != "checkout.paystack.com"):
-        app.logger.error("Paystack returned an invalid checkout initialization response.")
+        gateway_message = (
+            response_data.get("message")
+            if isinstance(response_data, dict) and isinstance(response_data.get("message"), str)
+            else None
+        )
+        app.logger.error(
+            "Paystack checkout initialization was unsuccessful: %s",
+            gateway_message or "response did not include a valid checkout URL",
+        )
         return api_error(
-            "Paystack could not initialize this payment.",
+            gateway_message or "Paystack could not initialize this payment.",
             502,
             "payment_initialization_failed",
         )
