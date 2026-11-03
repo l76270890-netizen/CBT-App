@@ -17,7 +17,10 @@ import GeneralKnowledge from './pages/GeneralKnowledge'
 import LandingMobile from './pages/LandingMobile'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import Payment from './pages/Payment'
+import type { CheckoutDetails } from './pages/Register'
 import Activation from './pages/Activation'
+import DemoExperience from './pages/DemoExperience'
 import type { TestConfigType } from './types'
 import { AuthProvider } from './context/AuthContext'
 import './App.css'
@@ -27,6 +30,8 @@ export default function App() {
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [homeSearchQuery, setHomeSearchQuery] = useState('')
+  const [demoSection, setDemoSection] = useState('home')
+  const [checkoutDetails, setCheckoutDetails] = useState<CheckoutDetails | null>(null)
   const [selectedExam, setSelectedExam] = useState<any>(null)
   const [testConfig, setTestConfig] = useState<TestConfigType>({
     examType: 'JAMB',
@@ -40,7 +45,7 @@ export default function App() {
     difficulty: 'General',
     showAnswers: false,
     topic: 'All Topics'
-  } as any)
+  })
 
   // CHECK LOGIN FROM localStorage
   useEffect(() => {
@@ -52,14 +57,14 @@ export default function App() {
       }
     } else {
       // no user - if on protected page, force to landing
-      if (!['landing', 'login', 'register'].includes(page)) {
+      if (!['landing', 'login', 'register', 'activation', 'demo'].includes(page)) {
         setPage('landing')
       }
     }
     setCheckingAuth(false)
   }, [])
 
-  const hideNavbarPages = ['landing', 'login', 'register', 'activation', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
+  const hideNavbarPages = ['landing', 'login', 'register', 'payment', 'activation', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
   const AdminAny = AdminDashboard as any
 
   if (checkingAuth) {
@@ -78,20 +83,30 @@ export default function App() {
       <div className={`app-shell${!hideNavbarPages.includes(page) ? ' app-shell-workspace' : ''}`} style={{ background: '#121212', minHeight: '100vh' }}>
         {!hideNavbarPages.includes(page) && (
           <Navbar
-            activePage={page}
+            activePage={page === 'demo' ? demoSection : page}
             setActivePage={setPage}
             sidebarCollapsed={sidebarCollapsed}
             setSidebarCollapsed={setSidebarCollapsed}
             searchQuery={homeSearchQuery}
             setSearchQuery={setHomeSearchQuery}
+            demoMode={page === 'demo'}
+            onDemoNavigate={setDemoSection}
           />
         )}
 
         <main className={`app-main${!hideNavbarPages.includes(page) ? ' app-main-sidebar' : ''}${['testConfig', 'testInstructions'].includes(page) ? ' app-main-setup' : ''}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
           {page === 'landing' && <LandingMobile setActivePage={setPage} />}
           {page === 'login' && <Login setActivePage={setPage} />}
-          {page === 'register' && <Register setActivePage={setPage} />}
+          {['register', 'payment'].includes(page) && (
+            <Register
+              setActivePage={setPage}
+              onContinueToPayment={details => { setCheckoutDetails(details); setPage('payment') }}
+              hidden={page === 'payment'}
+            />
+          )}
+          {page === 'payment' && checkoutDetails && <Payment details={checkoutDetails} setActivePage={setPage} />}
           {page === 'activation' && <Activation setActivePage={setPage} />}
+          {page === 'demo' && <DemoExperience setActivePage={setPage} section={demoSection} setSection={setDemoSection} searchQuery={homeSearchQuery} setSearchQuery={setHomeSearchQuery} />}
 
           {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} searchQuery={homeSearchQuery} setSearchQuery={setHomeSearchQuery} />}
           {page === 'exams' && <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}

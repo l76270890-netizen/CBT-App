@@ -1,45 +1,37 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowRight, Check, Clock3, Crown } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
 import './Auth.css'
 
-type Plan = 'monthly' | 'yearly'
+export type SubscriptionPlan = 'monthly' | 'yearly'
+export type CheckoutDetails = { name: string; email: string; plan: SubscriptionPlan }
 
-export default function Register({ setActivePage }: { setActivePage: (p: string) => void }) {
-  const { register } = useAuth()
+export default function Register({
+  setActivePage,
+  onContinueToPayment,
+  hidden = false,
+}: {
+  setActivePage: (p: string) => void
+  onContinueToPayment: (details: CheckoutDetails) => void
+  hidden?: boolean
+}) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
   const [error, setError] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
 
-  const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
+  const handleRegister = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
-    if (!name || !email || !password || !confirmPassword) return setError('Fill all fields')
+    if (!name.trim() || !email.trim() || !password || !confirmPassword) return setError('Fill all fields')
     if (password !== confirmPassword) return setError('Passwords do not match')
     if (!selectedPlan) return setError('Choose a subscription plan to continue')
-
-    setIsLoading(true)
-    try {
-      const result = await register(name, email, password)
-      if (result.success) {
-        setActivePage('home')
-        window.location.reload()
-      } else {
-        setError(result.message || 'Registration failed')
-      }
-    } catch (registrationError) {
-      setError(registrationError instanceof Error ? registrationError.message : 'Registration failed. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
+    onContinueToPayment({ name: name.trim(), email: email.trim(), plan: selectedPlan })
   }
 
   return (
-    <div className="auth-page auth-register-page">
+    <div className="auth-page auth-register-page" hidden={hidden}>
       <header className="auth-register-header">
         <button type="button" className="auth-register-brand" onClick={() => setActivePage('landing')}>
           <img className="auth-logo" src="/icons/examcore-192.png" alt="" />
@@ -109,9 +101,9 @@ export default function Register({ setActivePage }: { setActivePage: (p: string)
               </div>
             </div>
 
-            <p className="auth-phase-note">Payment isn’t connected yet. Continue will create your account using the existing sign-up flow; your plan choice is for this UI phase only.</p>
-            <button className="auth-btn-primary" type="submit" disabled={isLoading}>
-              {isLoading ? 'Creating account...' : 'Continue to Payment'} {!isLoading && <ArrowRight size={17} />}
+            <p className="auth-phase-note">Your account will be created after payment is available. You won’t be charged in this preview.</p>
+            <button className="auth-btn-primary" type="submit">
+              Continue to Payment <ArrowRight size={17} />
             </button>
           </form>
 
@@ -121,8 +113,7 @@ export default function Register({ setActivePage }: { setActivePage: (p: string)
               <strong>Want to explore before subscribing?</strong>
               <p>Explore our CBT platform with a free demo account.</p>
             </div>
-            <button type="button" onClick={() => setActivePage('landing')}>Try Free Demo</button>
-            <small>Demo account access is not configured yet. The public welcome page is available to explore.</small>
+            <button type="button" onClick={() => setActivePage('demo')}>Try Free Demo</button>
           </div>
         </section>
       </main>

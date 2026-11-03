@@ -103,8 +103,7 @@ export default function Login({ setActivePage }: { setActivePage: (p: string) =>
               <strong>Want to explore before subscribing?</strong>
               <p>Explore our CBT platform with a free demo account.</p>
             </div>
-            <button type="button" onClick={() => setActivePage('landing')}>Try Free Demo</button>
-            <small>Demo account access is not configured yet. The public welcome page is available to explore.</small>
+            <button type="button" onClick={() => setActivePage('demo')}>Try Free Demo</button>
           </div>
         </section>
         <p className="auth-secure-note"><ShieldCheck size={14} /> Your sign-in is protected by your school account.</p>

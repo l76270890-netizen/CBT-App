@@ -18,6 +18,8 @@ import time
 import tempfile
 import re
 from urllib.parse import urlsplit
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 import zipfile
 import zlib
 
@@ -655,6 +657,111 @@ def admin_login():
     # The former hardcoded admin password has been removed. Admin users are provisioned
     # with the Flask CLI and authenticate with their own hashed account password.
     return authenticate(json_body(), admins_only=True)
+
+
+@app.route("/api/payments/paystack/initialize", methods=["POST"])
+def initialize_paystack_checkout():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return api_error("A JSON request body is required.")
+
+    name = data.get("name")
+    email = data.get("email")
+    plan = data.get("plan")
+    if not isinstance(name, str) or not name.strip() or len(name.strip()) > 120:
+        return api_error("name is required and must be 120 characters or fewer.")
+    if (not isinstance(email, str) or len(email.strip()) > 254 or
+            not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip())):
+        return api_error("A valid email address is required.")
+    if not isinstance(plan, str) or plan not in {"monthly", "yearly"}:
+        return api_error("plan must be either 'monthly' or 'yearly'.")
+
+    secret_key = os.environ.get("PAYSTACK_SECRET_KEY", "").strip()
+    amount_key = f"PAYSTACK_{plan.upper()}_AMOUNT"
+    amount_value = os.environ.get(amount_key, "").strip()
+    currency = os.environ.get("PAYSTACK_CURRENCY", "").strip().upper()
+    callback_url = os.environ.get("PAYSTACK_CALLBACK_URL", "").strip()
+    if not secret_key or not amount_value or not currency or not callback_url:
+        app.logger.error("Paystack checkout is missing required server configuration.")
+        return api_error("Payment checkout is not configured.", 503, "payment_not_configured")
+    if not amount_value.isdigit() or int(amount_value) <= 0:
+        app.logger.error("Paystack checkout has an invalid %s value.", amount_key)
+        return api_error("Payment checkout is not configured correctly.", 503, "payment_not_configured")
+    if not re.fullmatch(r"[A-Z]{3}", currency):
+        app.logger.error("Paystack checkout has an invalid currency configuration.")
+        return api_error("Payment checkout is not configured correctly.", 503, "payment_not_configured")
+    try:
+        callback = urlsplit(callback_url)
+        callback_host = callback.hostname
+    except ValueError:
+        callback = None
+        callback_host = None
+    if (not callback or callback.scheme != "https" or not callback_host or
+            callback.username or callback.password):
+        app.logger.error("Paystack checkout has an invalid callback URL configuration.")
+        return api_error("Payment checkout is not configured correctly.", 503, "payment_not_configured")
+
+    payload = json.dumps({
+        "email": email.strip().lower(),
+        "amount": int(amount_value),
+        "currency": currency,
+        "callback_url": callback_url,
+        "metadata": {"name": name.strip(), "plan": plan},
+    }).encode("utf-8")
+    paystack_request = Request(
+        "https://api.paystack.co/transaction/initialize",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {secret_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(paystack_request, timeout=10) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        try:
+            gateway_data = json.loads(error.read().decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            gateway_data = {}
+        gateway_message = gateway_data.get("message")
+        app.logger.warning(
+            "Paystack checkout initialization returned HTTP %s.", error.code)
+        return api_error(
+            gateway_message if isinstance(gateway_message, str) and gateway_message else
+            "Paystack could not initialize this payment.",
+            502,
+            "payment_initialization_failed",
+        )
+    except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+        app.logger.exception("Paystack checkout initialization failed.")
+        return api_error(
+            "Could not connect to Paystack. Please try again.",
+            502,
+            "payment_initialization_failed",
+        )
+
+    payment_data = response_data.get("data") if isinstance(response_data, dict) else None
+    authorization_url = payment_data.get("authorization_url") if isinstance(payment_data, dict) else None
+    try:
+        checkout_url = urlsplit(authorization_url) if isinstance(authorization_url, str) else None
+        checkout_host = checkout_url.hostname if checkout_url else None
+    except ValueError:
+        checkout_url = None
+        checkout_host = None
+    if (not isinstance(response_data, dict) or
+            response_data.get("status") is not True or not checkout_url or
+            checkout_url.scheme != "https" or
+            checkout_host != "checkout.paystack.com"):
+        app.logger.error("Paystack returned an invalid checkout initialization response.")
+        return api_error(
+            "Paystack could not initialize this payment.",
+            502,
+            "payment_initialization_failed",
+        )
+    return jsonify(authorization_url=authorization_url)
 
 
 @app.route("/api/logout", methods=["POST"])
