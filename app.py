@@ -678,12 +678,20 @@ def initialize_paystack_checkout():
 
     secret_key = os.environ.get("PAYSTACK_SECRET_KEY", "").strip()
     amount_key = f"PAYSTACK_{plan.upper()}_AMOUNT"
-    amount_value = os.environ.get(amount_key, "").strip()
-    currency = os.environ.get("PAYSTACK_CURRENCY", "").strip().upper()
-    callback_url = os.environ.get("PAYSTACK_CALLBACK_URL", "").strip()
-    if not secret_key or not amount_value or not currency or not callback_url:
+    default_amounts = {"PAYSTACK_MONTHLY_AMOUNT": "500000",
+                       "PAYSTACK_YEARLY_AMOUNT": "2500000"}
+    amount_value = os.environ.get(amount_key, default_amounts[amount_key]).strip()
+    currency = os.environ.get("PAYSTACK_CURRENCY", "NGN").strip().upper()
+    callback_url = os.environ.get(
+        "PAYSTACK_CALLBACK_URL",
+        "https://cbt-app-lime.vercel.app/",
+    ).strip()
+    if not secret_key:
+        app.logger.error("Paystack checkout is missing PAYSTACK_SECRET_KEY.")
+        return api_error("Payment checkout is not configured on the server.", 503, "payment_not_configured")
+    if not amount_value or not currency or not callback_url:
         app.logger.error("Paystack checkout is missing required server configuration.")
-        return api_error("Payment checkout is not configured.", 503, "payment_not_configured")
+        return api_error("Payment checkout is not configured on the server.", 503, "payment_not_configured")
     if not amount_value.isdigit() or int(amount_value) <= 0:
         app.logger.error("Paystack checkout has an invalid %s value.", amount_key)
         return api_error("Payment checkout is not configured correctly.", 503, "payment_not_configured")
