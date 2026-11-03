@@ -16,6 +16,27 @@ type ExamData = {
   examDate?: string
 }
 
+function mapExamRecords(payload: unknown): ExamData[] {
+  const data = Array.isArray(payload) ? payload : asArray<any>((payload as any)?.exams)
+  return data.filter((exam: unknown) => exam && typeof exam === 'object').map((exam: any) => {
+    const examDate = exam.scheduledAt ?? exam.scheduled_at ?? exam.examDate ?? exam.exam_date ?? exam.scheduledDate ?? exam.scheduled_date
+    return {
+      id: String(exam.id ?? ''),
+      title: String(exam.title ?? 'Untitled exam'),
+      examType: String(exam.examType ?? ''),
+      subjects: Array.isArray(exam.subjects)
+        ? exam.subjects.filter((subject: unknown): subject is string => typeof subject === 'string')
+        : typeof exam.subject === 'string'
+          ? exam.subject.split(',').map((subject: string) => subject.trim()).filter(Boolean)
+          : [],
+      year: Number(exam.year) || 0,
+      duration: Number(exam.duration) || 0,
+      totalQuestions: typeof exam.totalQuestions === 'number' ? exam.totalQuestions : undefined,
+      examDate: typeof examDate === 'string' && examDate.trim() ? examDate : undefined,
+    }
+  })
+}
+
 const heroSlides = [
   { src: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=1200', alt: 'Students studying together' },
   { src: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=1200', alt: 'Student writing study notes' },
@@ -27,6 +48,8 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
   const [activeHeroSlide, setActiveHeroSlide] = useState(0)
   const [heroPaused, setHeroPaused] = useState(false)
   const [examsFromDb, setExamsFromDb] = useState<ExamData[]>([])
+  const [upcomingFromEndpoint, setUpcomingFromEndpoint] = useState<ExamData[] | null>(null)
+  const [upcomingError, setUpcomingError] = useState('')
   const [loading, setLoading] = useState(true)
   const [examsError, setExamsError] = useState("")
   const [stats, setStats] = useState({ practiced: 0, avgScore: 0, bestScore: 0, streak: 3 })
@@ -47,19 +70,31 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
         }).catch(()=>{})
     }
     apiRequest<unknown>("/api/exams").then(payload => {
-        const data = Array.isArray(payload) ? payload : asArray<any>((payload as any)?.exams);
-        const mapped = data.filter((e:any) => e && typeof e === 'object').map((e:any) => ({
-          id: String(e.id ?? ''), title: String(e.title ?? 'Untitled exam'), examType: String(e.examType ?? ''),
-          subjects: Array.isArray(e.subjects) ? e.subjects.filter((s:unknown): s is string => typeof s === 'string') : (typeof e.subject === 'string' ? e.subject.split(',').map((s:string)=>s.trim()).filter(Boolean) : []),
-          year: Number(e.year) || 0, duration: Number(e.duration) || 0, totalQuestions: typeof e.totalQuestions === 'number' ? e.totalQuestions : undefined,
-          examDate: typeof (e.examDate ?? e.exam_date ?? e.scheduledDate ?? e.scheduled_date) === 'string' ? (e.examDate ?? e.exam_date ?? e.scheduledDate ?? e.scheduled_date) : undefined
-        }))
-        setExamsFromDb(mapped)
+        setExamsFromDb(mapExamRecords(payload))
       }).catch(loadError => {
         setExamsError(loadError instanceof Error ? loadError.message : "Could not load exams.");
         setExamsFromDb([]);
       }).finally(()=> setLoading(false))
   }, [user])
+
+  useEffect(() => {
+    let active = true
+    apiRequest<unknown>('/api/admin/upcoming-exams?limit=3').then(payload => {
+      if (active) {
+        setUpcomingFromEndpoint(mapExamRecords(payload))
+        setUpcomingError('')
+      }
+    }).catch(loadError => {
+      if (!active) return
+      if ((loadError as { status?: number }).status === 403) {
+        setUpcomingFromEndpoint(null)
+        setUpcomingError('')
+        return
+      }
+      setUpcomingError(loadError instanceof Error ? loadError.message : 'Could not load upcoming examinations.')
+    })
+    return () => { active = false }
+  }, [user?.user_id])
 
   useEffect(() => {
     if (heroPaused) return
@@ -83,9 +118,12 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    return examsFromDb.flatMap(exam => {
+    const examsById = new Map(
+      [...(upcomingFromEndpoint ?? []), ...examsFromDb].map(exam => [exam.id, exam])
+    )
+    return [...examsById.values()].flatMap(exam => {
       if (!exam.examDate) return []
-      const dateOnlyParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(exam.examDate)
+      const dateOnlyParts = /^(\d{4})-(\d{2})-(\d{2})/.exec(exam.examDate)
       const scheduledDate = dateOnlyParts
         ? new Date(Number(dateOnlyParts[1]), Number(dateOnlyParts[2]) - 1, Number(dateOnlyParts[3]))
         : new Date(exam.examDate)
@@ -93,7 +131,7 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
       scheduledDate.setHours(0, 0, 0, 0)
       return scheduledDate >= today ? [{ ...exam, scheduledDate }] : []
     }).sort((a, b) => a.scheduledDate.getTime() - b.scheduledDate.getTime())
-  }, [examsFromDb])
+  }, [examsFromDb, upcomingFromEndpoint])
 
   const handleExamClick = (exam: ExamData, mode: 'exam' | 'practice' = 'exam') => {
     setSelectedExam(exam.examType)
@@ -228,7 +266,7 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
                 </button>
               ))}
             </div>
-          ) : <div className="home-extra-empty">No upcoming examinations have been scheduled yet.</div>}
+          ) : <div className="home-extra-empty" role={upcomingError ? 'alert' : undefined}>{upcomingError || 'No upcoming examinations have been scheduled yet.'}</div>}
         </section>
       </div>
     </div>

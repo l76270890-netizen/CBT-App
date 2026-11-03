@@ -114,7 +114,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
       const payload = await apiRequest<unknown>("/api/exams");
       const raw = Array.isArray(payload) ? payload : asArray<any>((payload as any)?.exams);
       const list: Exam[] = raw.map((e:any) => {
-        const examDate = e?.examDate ?? e?.exam_date ?? e?.scheduledDate ?? e?.scheduled_date;
+        const examDate = e?.scheduledAt ?? e?.scheduled_at ?? e?.examDate ?? e?.exam_date ?? e?.scheduledDate ?? e?.scheduled_date;
         return {
           id: String(e?.id ?? ""), title: String(e?.title ?? "Untitled exam"),
           examType: String(e?.examType ?? ""), year: Number(e?.year) || 0,
@@ -209,13 +209,14 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     e.preventDefault();
     if(!eTitle.trim()) return alert("Enter Exam Title");
     if(eSubjects.length===0) return alert("Select at least 1 subject");
+    const scheduledAt = eExamDate ? `${eExamDate}T23:59:59` : null;
     setLoading(true);
     try {
       if(editingExam) {
-        await apiRequest(`/api/admin/exam/${encodeURIComponent(editingExam.id)}`, { method: "PUT", body: JSON.stringify({ title:eTitle, examType:eType, year:Number(eYear), duration:Number(eDuration), subjects:eSubjects, examDate:eExamDate || null }) });
+        await apiRequest(`/api/admin/exam/${encodeURIComponent(editingExam.id)}`, { method: "PUT", body: JSON.stringify({ title:eTitle, examType:eType, year:Number(eYear), duration:Number(eDuration), subjects:eSubjects, scheduledAt }) });
         setMsg(`"${eTitle}" updated!`); setEditingExam(null);
       } else {
-        await apiRequest("/api/admin/create-exam", { method: "POST", body: JSON.stringify({ title:eTitle, examType:eType, year:eYear, duration:eDuration, subjects:eSubjects, examDate:eExamDate || null, questions:[] }) });
+        await apiRequest("/api/admin/create-exam", { method: "POST", body: JSON.stringify({ title:eTitle, examType:eType, year:eYear, duration:eDuration, subjects:eSubjects, scheduledAt, questions:[] }) });
         setMsg(`"${eTitle}" created with ${eSubjects.length} subjects!`);
       }
       setETitle(""); setEExamDate(""); setESubjects(["Mathematics","English"]); await fetchExams();

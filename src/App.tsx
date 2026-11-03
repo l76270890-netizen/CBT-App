@@ -17,6 +17,7 @@ import GeneralKnowledge from './pages/GeneralKnowledge'
 import LandingMobile from './pages/LandingMobile'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import Activation from './pages/Activation'
 import type { TestConfigType } from './types'
 import { AuthProvider } from './context/AuthContext'
 import './App.css'
@@ -58,7 +59,7 @@ export default function App() {
     setCheckingAuth(false)
   }, [])
 
-  const hideNavbarPages = ['landing', 'login', 'register', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
+  const hideNavbarPages = ['landing', 'login', 'register', 'activation', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
   const AdminAny = AdminDashboard as any
 
   if (checkingAuth) {
@@ -90,6 +91,7 @@ export default function App() {
           {page === 'landing' && <LandingMobile setActivePage={setPage} />}
           {page === 'login' && <Login setActivePage={setPage} />}
           {page === 'register' && <Register setActivePage={setPage} />}
+          {page === 'activation' && <Activation setActivePage={setPage} />}
 
           {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} searchQuery={homeSearchQuery} setSearchQuery={setHomeSearchQuery} />}
           {page === 'exams' && <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
