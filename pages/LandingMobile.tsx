@@ -39,7 +39,7 @@ export default function LandingMobile({ setActivePage }: { setActivePage: (p: st
           Experience real JAMB, WAEC & NECO exams with our AI-powered platform. Get instant results & detailed analysis.
         </p>
         
-        <button className="landing-primary" onClick={() => setActivePage('login')}>
+        <button className="landing-primary" onClick={() => setActivePage('demo')}>
           Take a free practice test <ArrowRight size={18} />
         </button>
 

@@ -215,6 +215,38 @@
 @media (min-width: 768px) {
   .test-page1 { max-width: 760px; margin: 0 auto; border-left: 1px solid #222; border-right: 1px solid #222; }
   .test-body { padding: 24px; }
-  .test-footer { max-width: 760px; margin: 0 auto; left: 50%; transform: translateX(-50%); }
+  .test-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 90px minmax(0, 1fr);
+    align-items: center;
+    max-width: 760px;
+    margin: 0 auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .test-footer .nav-btn,
+  .test-footer .submit-btn {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .test-footer .nav-btn { flex: initial; }
+  .test-footer .grid-btn { justify-self: center; }
+  .test-footer .submit-btn { flex: initial; }
   .question-grid { grid-template-columns: repeat(8,1fr); }
+}
+
+@media (min-width: 960px) {
+  .app-main-sidebar .test-footer {
+    width: min(760px, calc(100vw - 296px));
+    left: calc(50% + 132px);
+    right: auto;
+    margin: 0;
+    box-sizing: border-box;
+  }
+
+  .app-main-sidebar.sidebar-collapsed .test-footer {
+    width: min(760px, calc(100vw - 108px));
+    left: calc(50% + 38px);
+  }
 }
