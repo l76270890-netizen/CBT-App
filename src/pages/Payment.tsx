@@ -13,11 +13,13 @@ const planDetails = {
   monthly: {
     title: 'Monthly Plan',
     duration: 'Full CBT platform access for one month',
+    price: '₦5,000',
     Icon: Clock3,
   },
   yearly: {
     title: 'Yearly Plan',
     duration: 'Full CBT platform access for one year',
+    price: '₦25,000',
     Icon: Crown,
   },
 }
@@ -91,18 +93,18 @@ export default function Payment({
             </div>
             <div className="payment-summary-row"><span>Account name</span><strong>{details.name}</strong></div>
             <div className="payment-summary-row"><span>Email address</span><strong>{details.email}</strong></div>
-            <div className="payment-summary-total"><span>Amount due</span><strong>Price coming soon</strong></div>
+            <div className="payment-summary-total"><span>Amount due</span><strong>{plan.price}</strong></div>
           </div>
 
-            <div className="payment-unavailable">
+          <div className="payment-unavailable">
             <ShieldCheck size={18} />
-              <p><strong>Secure Paystack checkout.</strong> Your payment session is prepared by the server, and payment details are entered on Paystack.</p>
+            <p><strong>Secure Paystack checkout.</strong> Your payment session is prepared by the server, and payment details are entered on Paystack.</p>
           </div>
-            {error && <div className="auth-error payment-error" role="alert">{error}</div>}
-            <button type="button" className="auth-btn-primary" onClick={handlePaystackCheckout} disabled={isLoading}>
-              {isLoading ? 'Connecting to Paystack...' : 'Pay securely with Paystack'}
-            </button>
-            <p className="auth-secure-note"><ShieldCheck size={14} /> Card details are entered on Paystack’s secure checkout page.</p>
+          {error && <div className="auth-error payment-error" role="alert">{error}</div>}
+          <button type="button" className="auth-btn-primary" onClick={handlePaystackCheckout} disabled={isLoading}>
+            {isLoading ? 'Connecting to Paystack...' : 'Pay securely with Paystack'}
+          </button>
+          <p className="auth-secure-note"><ShieldCheck size={14} /> Card details are entered on Paystack’s secure checkout page.</p>
         </section>
       </main>
     </div>
