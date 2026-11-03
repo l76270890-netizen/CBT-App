@@ -88,7 +88,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
   }
   const handleContinue = () => {
     const totalQuestions = selectedSubjects.reduce((sum, s) => sum + s.questions, 0)
-    setTestConfig((prev: any) => ({...prev, examType: selectedExam, subjects: selectedSubjects, totalQuestions, year: '2024', duration: Math.ceil(totalQuestions * 1.2) || 60, mode: 'exam', difficulty: 'Normal', showAnswers: false, topic: 'All Topics'}))
+    setTestConfig((prev: any) => ({...prev, examType: selectedExam, subjects: selectedSubjects, totalQuestions, year: '2024', duration: Math.ceil(totalQuestions * 1.2) || 60, mode: prev.mode || 'exam', difficulty: 'Normal', showAnswers: prev.mode === 'practice', topic: 'All Topics'}))
     setActivePage('testConfig')
   }
   const isSelected = (subject: string) => selectedSubjects.some(s => s.subject === subject)

@@ -30,7 +30,7 @@ export default function Exams({ setActivePage, setSelectedExam, setTestConfig }:
 
   const handleExamClick = (exam: any) => {
     setSelectedExam(exam.examType);
-    setTestConfig((prev: any) => ({...prev, examType: exam.examType, year: String(exam.year), duration: exam.duration, customExamId: exam.id, customTitle: exam.title, examId: exam.id, examTitle: exam.title, subjects: Array.isArray(exam.subjects) ? exam.subjects : (typeof exam.subject === 'string' ? exam.subject.split(',').map((s:string)=>s.trim()).filter(Boolean) : []), totalQuestions: exam.totalQuestions}))
+    setTestConfig((prev: any) => ({...prev, examType: exam.examType, year: String(exam.year), duration: exam.duration, customExamId: exam.id, customTitle: exam.title, examId: exam.id, examTitle: exam.title, subjects: Array.isArray(exam.subjects) ? exam.subjects : (typeof exam.subject === 'string' ? exam.subject.split(',').map((s:string)=>s.trim()).filter(Boolean) : []), totalQuestions: exam.totalQuestions, mode: 'exam', showAnswers: false}))
     setActivePage('subjects')
   }
 

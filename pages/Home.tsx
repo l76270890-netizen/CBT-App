@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { BookOpen, Search, X, Funnel, Flame, Trophy, Target, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowRight, BookOpen, CalendarDays, Search, X, Funnel, Flame, Trophy, Target, BarChart3, ChevronLeft, ChevronRight, Clock3, Play, Zap } from 'lucide-react'
 import './Home.css'
 import { apiRequest, asArray } from '../api'
 
@@ -13,6 +13,28 @@ type ExamData = {
   year: number
   duration: number
   totalQuestions?: number
+  examDate?: string
+}
+
+function mapExamRecords(payload: unknown): ExamData[] {
+  const data = Array.isArray(payload) ? payload : asArray<any>((payload as any)?.exams)
+  return data.filter((exam: unknown) => exam && typeof exam === 'object').map((exam: any) => {
+    const examDate = exam.scheduledAt ?? exam.scheduled_at ?? exam.examDate ?? exam.exam_date ?? exam.scheduledDate ?? exam.scheduled_date
+    return {
+      id: String(exam.id ?? ''),
+      title: String(exam.title ?? 'Untitled exam'),
+      examType: String(exam.examType ?? ''),
+      subjects: Array.isArray(exam.subjects)
+        ? exam.subjects.filter((subject: unknown): subject is string => typeof subject === 'string')
+        : typeof exam.subject === 'string'
+          ? exam.subject.split(',').map((subject: string) => subject.trim()).filter(Boolean)
+          : [],
+      year: Number(exam.year) || 0,
+      duration: Number(exam.duration) || 0,
+      totalQuestions: typeof exam.totalQuestions === 'number' ? exam.totalQuestions : undefined,
+      examDate: typeof examDate === 'string' && examDate.trim() ? examDate : undefined,
+    }
+  })
 }
 
 const heroSlides = [
@@ -21,12 +43,13 @@ const heroSlides = [
   { src: 'https://images.unsplash.com/photo-1513258496099-48168024aec0?w=1200', alt: 'Students learning in a classroom' },
 ]
 
-export default function Home({ setActivePage, setSelectedExam, setTestConfig }: any) {
+export default function Home({ setActivePage, setSelectedExam, setTestConfig, searchQuery, setSearchQuery }: any) {
   const { user } = useAuth()
-  const [searchQuery, setSearchQuery] = useState("")
   const [activeHeroSlide, setActiveHeroSlide] = useState(0)
   const [heroPaused, setHeroPaused] = useState(false)
   const [examsFromDb, setExamsFromDb] = useState<ExamData[]>([])
+  const [upcomingFromEndpoint, setUpcomingFromEndpoint] = useState<ExamData[] | null>(null)
+  const [upcomingError, setUpcomingError] = useState('')
   const [loading, setLoading] = useState(true)
   const [examsError, setExamsError] = useState("")
   const [stats, setStats] = useState({ practiced: 0, avgScore: 0, bestScore: 0, streak: 3 })
@@ -47,18 +70,31 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
         }).catch(()=>{})
     }
     apiRequest<unknown>("/api/exams").then(payload => {
-        const data = Array.isArray(payload) ? payload : asArray<any>((payload as any)?.exams);
-        const mapped = data.filter((e:any) => e && typeof e === 'object').map((e:any) => ({
-          id: String(e.id ?? ''), title: String(e.title ?? 'Untitled exam'), examType: String(e.examType ?? ''),
-          subjects: Array.isArray(e.subjects) ? e.subjects.filter((s:unknown): s is string => typeof s === 'string') : (typeof e.subject === 'string' ? e.subject.split(',').map((s:string)=>s.trim()).filter(Boolean) : []),
-          year: Number(e.year) || 0, duration: Number(e.duration) || 0, totalQuestions: typeof e.totalQuestions === 'number' ? e.totalQuestions : undefined
-        }))
-        setExamsFromDb(mapped)
+        setExamsFromDb(mapExamRecords(payload))
       }).catch(loadError => {
         setExamsError(loadError instanceof Error ? loadError.message : "Could not load exams.");
         setExamsFromDb([]);
       }).finally(()=> setLoading(false))
   }, [user])
+
+  useEffect(() => {
+    let active = true
+    apiRequest<unknown>('/api/admin/upcoming-exams?limit=3').then(payload => {
+      if (active) {
+        setUpcomingFromEndpoint(mapExamRecords(payload))
+        setUpcomingError('')
+      }
+    }).catch(loadError => {
+      if (!active) return
+      if ((loadError as { status?: number }).status === 403) {
+        setUpcomingFromEndpoint(null)
+        setUpcomingError('')
+        return
+      }
+      setUpcomingError(loadError instanceof Error ? loadError.message : 'Could not load upcoming examinations.')
+    })
+    return () => { active = false }
+  }, [user?.user_id])
 
   useEffect(() => {
     if (heroPaused) return
@@ -77,15 +113,35 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
     })
   }, [examsFromDb, searchQuery])
 
-  const handleExamClick = (exam: ExamData) => {
+  const quickPracticeExams = examsFromDb.slice(0, 3)
+  const upcomingExams = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const examsById = new Map(
+      [...(upcomingFromEndpoint ?? []), ...examsFromDb].map(exam => [exam.id, exam])
+    )
+    return [...examsById.values()].flatMap(exam => {
+      if (!exam.examDate) return []
+      const dateOnlyParts = /^(\d{4})-(\d{2})-(\d{2})/.exec(exam.examDate)
+      const scheduledDate = dateOnlyParts
+        ? new Date(Number(dateOnlyParts[1]), Number(dateOnlyParts[2]) - 1, Number(dateOnlyParts[3]))
+        : new Date(exam.examDate)
+      if (Number.isNaN(scheduledDate.getTime())) return []
+      scheduledDate.setHours(0, 0, 0, 0)
+      return scheduledDate >= today ? [{ ...exam, scheduledDate }] : []
+    }).sort((a, b) => a.scheduledDate.getTime() - b.scheduledDate.getTime())
+  }, [examsFromDb, upcomingFromEndpoint])
+
+  const handleExamClick = (exam: ExamData, mode: 'exam' | 'practice' = 'exam') => {
     setSelectedExam(exam.examType)
     const subjStr = (exam.subjects?.join(",") || "").toLowerCase()
     if (exam.examType.toLowerCase().includes('general') || subjStr.includes('general')) {
-      setTestConfig((prev: any) => ({...prev, examType: exam.examType, subjects: exam.subjects || [], totalQuestions: exam.totalQuestions || 20, year: String(exam.year), duration: exam.duration, customExamId: exam.id, examId: exam.id, examTitle: exam.title }))
+      setTestConfig((prev: any) => ({...prev, examType: exam.examType, subjects: exam.subjects || [], totalQuestions: exam.totalQuestions || 20, year: String(exam.year), duration: exam.duration, customExamId: exam.id, examId: exam.id, examTitle: exam.title, mode, showAnswers: mode === 'practice' }))
       setActivePage('generalKnowledge')
       return
     }
-    setTestConfig((prev: any) => ({...prev, examType: exam.examType, year: String(exam.year), duration: exam.duration, customExamId: exam.id, examId: exam.id, examTitle: exam.title, subjects: exam.subjects || [], totalQuestions: exam.totalQuestions }))
+    setTestConfig((prev: any) => ({...prev, examType: exam.examType, year: String(exam.year), duration: exam.duration, customExamId: exam.id, examId: exam.id, examTitle: exam.title, subjects: exam.subjects || [], totalQuestions: exam.totalQuestions, mode, showAnswers: mode === 'practice' }))
     setActivePage('subjects')
   }
 
@@ -155,6 +211,64 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig }: 
           </div>
         ) : <div className="no-result">{examsFromDb.length===0? "No exams yet - Add in Admin." : `No exam for "${searchQuery}"`}</div>
       }
+      <div className="home-extra-sections">
+        <section className="home-extra-section" aria-labelledby="quick-practice-title">
+          <div className="home-extra-heading">
+            <div className="home-extra-title">
+              <span className="home-extra-icon practice"><Zap size={18} /></span>
+              <div>
+                <h3 id="quick-practice-title">Quick practice</h3>
+                <p>Jump into a practice session</p>
+              </div>
+            </div>
+            <button type="button" className="home-extra-link" onClick={() => setActivePage('exams')}>All exams <ArrowRight size={15} /></button>
+          </div>
+          {loading ? <div className="home-extra-empty">Loading practice options...</div> : quickPracticeExams.length > 0 ? (
+            <div className="quick-practice-list">
+              {quickPracticeExams.map(exam => (
+                <button key={exam.id} type="button" className="quick-practice-card" onClick={() => handleExamClick(exam, 'practice')}>
+                  <span className="quick-practice-card-icon"><Play size={16} fill="currentColor" /></span>
+                  <span className="quick-practice-card-copy">
+                    <strong>{exam.title}</strong>
+                    <span>{exam.examType} · {exam.totalQuestions ?? '—'} questions</span>
+                  </span>
+                  <ArrowRight className="quick-practice-arrow" size={17} />
+                </button>
+              ))}
+            </div>
+          ) : <div className="home-extra-empty">Practice options will appear here when exams are available.</div>}
+        </section>
+
+        <section className="home-extra-section" aria-labelledby="upcoming-exams-title">
+          <div className="home-extra-heading">
+            <div className="home-extra-title">
+              <span className="home-extra-icon upcoming"><CalendarDays size={18} /></span>
+              <div>
+                <h3 id="upcoming-exams-title">Upcoming examinations</h3>
+                <p>Keep track of your next exam</p>
+              </div>
+            </div>
+            <Clock3 className="home-extra-heading-clock" size={17} aria-hidden="true" />
+          </div>
+          {upcomingExams.length > 0 ? (
+            <div className="upcoming-exam-list">
+              {upcomingExams.slice(0, 3).map(exam => (
+                <button key={exam.id} type="button" className="upcoming-exam-card" onClick={() => handleExamClick(exam)}>
+                  <span className="upcoming-exam-date">
+                    <strong>{new Intl.DateTimeFormat(undefined, { day: '2-digit' }).format(exam.scheduledDate)}</strong>
+                    <span>{new Intl.DateTimeFormat(undefined, { month: 'short' }).format(exam.scheduledDate)}</span>
+                  </span>
+                  <span className="upcoming-exam-copy">
+                    <strong>{exam.title}</strong>
+                    <span>{exam.examType} · {new Intl.DateTimeFormat(undefined, { weekday: 'short', year: 'numeric' }).format(exam.scheduledDate)}</span>
+                  </span>
+                  <ArrowRight className="quick-practice-arrow" size={17} />
+                </button>
+              ))}
+            </div>
+          ) : <div className="home-extra-empty" role={upcomingError ? 'alert' : undefined}>{upcomingError || 'No upcoming examinations have been scheduled yet.'}</div>}
+        </section>
+      </div>
     </div>
   )
 }

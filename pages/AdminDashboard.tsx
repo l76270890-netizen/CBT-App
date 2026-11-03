@@ -1,36 +1,30 @@
-import { useState, useEffect, type ChangeEvent } from "react";
-import Papa from "papaparse";
-import { Activity, ArrowRight, BookOpen, Download, FileSpreadsheet, LayoutDashboard, Upload, UsersRound } from "lucide-react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
+import { Activity, ArrowRight, BookOpen, Download, FileSpreadsheet, ImagePlus, LayoutDashboard, Trash2, Upload, UsersRound } from "lucide-react";
 import "./AdminDashboard.css";
-import { apiRequest, asArray } from "../api";
+import { apiRequest, asArray, uploadQuestionImage } from "../api";
+import QuestionImage from "../components/QuestionImage";
+import { csvTemplateHeaders, normalizeImageReference, parseQuestionCsv, type CsvQuestionRow } from "../adminQuestionCsv";
+import { loadQuestionZip } from "../questionZip";
 
 const defaultSubjects = ["Mathematics","English","Physics","Chemistry","Biology","Government","Economics","Literature","CRS","Geography"];
 const defaultExamTypes = ["JAMB","WAEC","NECO","POSTUTME"];
 
-type Exam = { id: string; title: string; examType: string; year: number; duration: number; subjects: string[]; totalQuestions?: number }
+type Exam = { id: string; title: string; examType: string; year: number; duration: number; subjects: string[]; totalQuestions?: number; examDate?: string }
 type Student = { id: string; displayName?: string | null; email?: string | null; class?: string | null; accountStatus?: string | null; lastSeenAt?: string | null }
 type StudentPerformance = { completedAttempts?: number | null; scoreHistory?: unknown[] | null; resultsBySubject?: unknown[] | null }
 type StudentPagination = { page?: number; limit?: number; total?: number; pages?: number; totalPages?: number }
 type OverviewData = { counts?: Record<string, number | null> | null; performance?: Record<string, number | null> | null; recentExamActivity?: unknown[] | null }
-type CsvQuestionRow = {
-  rowNumber: number;
-  subject: string;
-  question: string;
-  optionA: string;
-  optionB: string;
-  optionC: string;
-  optionD: string;
-  correctAnswer: string;
-  explanation: string;
-  errors: string[];
-  status?: "imported" | "failed";
-  importError?: string;
-}
-
-const csvHeaders = ["subject", "question", "optionA", "optionB", "optionC", "optionD", "correctAnswer", "explanation"];
-const normalizedCsvHeaders = csvHeaders.map(header => header.toLowerCase());
 const maxCsvFileBytes = 5 * 1024 * 1024;
+const maxQuestionZipBytes = 25 * 1024 * 1024;
 const maxCsvRows = 500;
+
+const formatExamDate = (value: string) => {
+  const dateOnlyParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const date = dateOnlyParts
+    ? new Date(Number(dateOnlyParts[1]), Number(dateOnlyParts[2]) - 1, Number(dateOnlyParts[3]))
+    : new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+};
 
 export default function AdminDashboard({ setActivePage }: { setActivePage: (p:string)=>void }) {
   const [authState, setAuthState] = useState<"checking" | "signedOut" | "denied" | "authenticated">("checking");
@@ -69,6 +63,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [showCustomType, setShowCustomType] = useState(false);
   const [eYear, setEYear] = useState("2024");
   const [eDuration, setEDuration] = useState("60");
+  const [eExamDate, setEExamDate] = useState("");
   const [eSubjects, setESubjects] = useState<string[]>(["Mathematics","English"]);
 
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
@@ -78,10 +73,17 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [selectedExam, setSelectedExam] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
   const [question, setQuestion] = useState("");
+  const [questionImage, setQuestionImage] = useState<File | null>(null);
+  const [questionImagePreview, setQuestionImagePreview] = useState("");
+  const [uploadedQuestionImageUrl, setUploadedQuestionImageUrl] = useState("");
+  const [questionImageError, setQuestionImageError] = useState("");
+  const [questionSubmitError, setQuestionSubmitError] = useState("");
+  const questionImageInput = useRef<HTMLInputElement>(null);
   const [options, setOptions] = useState(["","","",""]);
   const [correct, setCorrect] = useState("A");
   const [explanation, setExplanation] = useState("");
   const [csvRows, setCsvRows] = useState<CsvQuestionRow[]>([]);
+  const [csvImageFiles, setCsvImageFiles] = useState<Map<string, File>>(new Map());
   const [csvFileName, setCsvFileName] = useState("");
   const [csvExamId, setCsvExamId] = useState("");
   const [csvError, setCsvError] = useState("");
@@ -111,13 +113,17 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     try {
       const payload = await apiRequest<unknown>("/api/exams");
       const raw = Array.isArray(payload) ? payload : asArray<any>((payload as any)?.exams);
-      const list: Exam[] = raw.map((e:any) => ({
-        id: String(e?.id ?? ""), title: String(e?.title ?? "Untitled exam"),
-        examType: String(e?.examType ?? ""), year: Number(e?.year) || 0,
-        duration: Number(e?.duration) || 0,
-        subjects: Array.isArray(e?.subjects) ? e.subjects.filter((s:unknown): s is string => typeof s === "string") : typeof e?.subject === "string" ? e.subject.split(",").map((s:string)=>s.trim()).filter(Boolean) : [],
-        totalQuestions: typeof e?.totalQuestions === "number" ? e.totalQuestions : undefined,
-      })).filter((exam: Exam) => exam.id);
+      const list: Exam[] = raw.map((e:any) => {
+        const examDate = e?.scheduledAt ?? e?.scheduled_at ?? e?.examDate ?? e?.exam_date ?? e?.scheduledDate ?? e?.scheduled_date;
+        return {
+          id: String(e?.id ?? ""), title: String(e?.title ?? "Untitled exam"),
+          examType: String(e?.examType ?? ""), year: Number(e?.year) || 0,
+          duration: Number(e?.duration) || 0,
+          subjects: Array.isArray(e?.subjects) ? e.subjects.filter((s:unknown): s is string => typeof s === "string") : typeof e?.subject === "string" ? e.subject.split(",").map((s:string)=>s.trim()).filter(Boolean) : [],
+          totalQuestions: typeof e?.totalQuestions === "number" ? e.totalQuestions : undefined,
+          examDate: typeof examDate === "string" && examDate.trim() ? examDate : undefined,
+        };
+      }).filter((exam: Exam) => exam.id);
       setExams(list);
       if(list[0] && !selectedExam){ setSelectedExam(list[0].id); if(list[0].subjects[0]) setSelectedSubject(list[0].subjects[0]); }
     } catch (error) { setExamsError(error instanceof Error ? error.message : "Could not load exams."); setExams([]); }
@@ -134,6 +140,10 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   }, [selectedExam, exams]);
   useEffect(()=>{ if(authState === "authenticated" && adminView === "students") void fetchStudents(); }, [authState, adminView, studentPage]);
   useEffect(()=>{ if(authState === "authenticated" && adminView === "exams" && examTab === "questions") void fetchQuestions(); }, [authState, adminView, examTab, selectedExam, selectedSubject]);
+  useEffect(() => {
+    if (!questionImagePreview) return;
+    return () => URL.revokeObjectURL(questionImagePreview);
+  }, [questionImagePreview]);
 
   const handleLogin = async () => {
     setAuthError("");
@@ -199,16 +209,17 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     e.preventDefault();
     if(!eTitle.trim()) return alert("Enter Exam Title");
     if(eSubjects.length===0) return alert("Select at least 1 subject");
+    const scheduledAt = eExamDate ? `${eExamDate}T23:59:59` : null;
     setLoading(true);
     try {
       if(editingExam) {
-        await apiRequest(`/api/admin/exam/${encodeURIComponent(editingExam.id)}`, { method: "PUT", body: JSON.stringify({ title:eTitle, examType:eType, year:Number(eYear), duration:Number(eDuration), subjects:eSubjects }) });
+        await apiRequest(`/api/admin/exam/${encodeURIComponent(editingExam.id)}`, { method: "PUT", body: JSON.stringify({ title:eTitle, examType:eType, year:Number(eYear), duration:Number(eDuration), subjects:eSubjects, scheduledAt }) });
         setMsg(`"${eTitle}" updated!`); setEditingExam(null);
       } else {
-        await apiRequest("/api/admin/create-exam", { method: "POST", body: JSON.stringify({ title:eTitle, examType:eType, year:eYear, duration:eDuration, subjects:eSubjects, questions:[] }) });
+        await apiRequest("/api/admin/create-exam", { method: "POST", body: JSON.stringify({ title:eTitle, examType:eType, year:eYear, duration:eDuration, subjects:eSubjects, scheduledAt, questions:[] }) });
         setMsg(`"${eTitle}" created with ${eSubjects.length} subjects!`);
       }
-      setETitle(""); setESubjects(["Mathematics","English"]); await fetchExams();
+      setETitle(""); setEExamDate(""); setESubjects(["Mathematics","English"]); await fetchExams();
       setTimeout(()=>setMsg(""),3000);
     } catch(error) { setMsg(error instanceof Error ? error.message : "Could not save exam."); }
     finally { setLoading(false); }
@@ -217,6 +228,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setEditingExam(ex);
     setETitle(ex.title); setEType(ex.examType);
     setEYear(String(ex.year)); setEDuration(String(ex.duration));
+    setEExamDate(ex.examDate?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? "");
     setESubjects(ex.subjects);
     setAdminView("exams");
     setExamTab("exams");
@@ -248,20 +260,53 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const addQuestion = async (e:React.FormEvent) => {
     e.preventDefault();
     if(!selectedExam || !selectedSubject) return alert("Select exam and subject");
+    setQuestionSubmitError("");
     setLoading(true);
     try {
+      let imageUrl = uploadedQuestionImageUrl;
+      if (questionImage && !imageUrl) {
+        imageUrl = await uploadQuestionImage(questionImage);
+        setUploadedQuestionImageUrl(imageUrl);
+      }
       await apiRequest("/api/admin/add-question", { method: "POST", body: JSON.stringify({
         examId: selectedExam, subject: selectedSubject, question,
         options: {A:options[0], B:options[1], C:options[2], D:options[3]},
         correctAnswer: correct, ...(explanation.trim() ? { explanation } : {}),
+        ...(imageUrl ? { imageUrl } : {}),
       }) });
       setMsg(`Added to ${selectedSubject}!`); setQuestion(""); setOptions(["","","",""]); setExplanation("");
+      setQuestionImage(null); setQuestionImagePreview(""); setUploadedQuestionImageUrl(""); setQuestionImageError("");
+      setQuestionSubmitError("");
+      if (questionImageInput.current) questionImageInput.current.value = "";
       await fetchQuestions(); setTimeout(()=>setMsg(""),3000);
-    } catch(error) { setMsg(error instanceof Error ? error.message : "Could not add question."); }
+    } catch(error) { setQuestionSubmitError(error instanceof Error ? error.message : "Could not add question."); }
     finally { setLoading(false); }
   };
+  const handleQuestionImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const allowedTypes = ["image/png", "image/jpeg"];
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      setQuestionImageError("Choose a PNG, JPG, or JPEG image.");
+      return;
+    }
+
+    setQuestionImageError("");
+    setQuestionImage(file);
+    setUploadedQuestionImageUrl("");
+    setQuestionImagePreview(URL.createObjectURL(file));
+  };
+  const removeQuestionImage = () => {
+    setQuestionImage(null);
+    setQuestionImagePreview("");
+    setUploadedQuestionImageUrl("");
+    setQuestionImageError("");
+    if (questionImageInput.current) questionImageInput.current.value = "";
+  };
   const downloadCsvTemplate = () => {
-    const blob = new Blob([`${csvHeaders.join(",")}\n`], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([`${csvTemplateHeaders.join(",")}\n`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -274,16 +319,23 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     const file = event.target.files?.[0];
     event.target.value = "";
     setCsvRows([]);
+    setCsvImageFiles(new Map());
     setCsvFileName("");
     setCsvExamId("");
     setCsvError("");
     setCsvProgress({ completed: 0, total: 0 });
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      setCsvError("Choose a .csv file.");
+    const extension = file.name.toLowerCase().split(".").pop();
+    if (extension !== "csv" && extension !== "zip") {
+      setCsvError("Choose a .csv or .zip file.");
       return;
     }
-    if (file.size > maxCsvFileBytes) {
+    const maxFileBytes = extension === "zip" ? maxQuestionZipBytes : maxCsvFileBytes;
+    if (file.size > maxFileBytes) {
+      if (extension === "zip") {
+        setCsvError("This ZIP is larger than 25 MB. Reduce its size and try again.");
+        return;
+      }
       setCsvError("This file is larger than 5 MB. Split it into smaller files and try again.");
       return;
     }
@@ -298,88 +350,26 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     }
 
     try {
-      const contents = await file.text();
-      const parseWithDelimiter = (delimiter: string) => Papa.parse<Record<string, string>>(contents, {
-        header: true,
-        delimiter,
-        skipEmptyLines: "greedy",
-        transformHeader: header => header.trim().toLowerCase().replace(/[^a-z0-9]/g, ""),
-      });
-      const candidates = [",", ";", "\t"].map(parseWithDelimiter);
-      const scoreHeaders = (fields: string[] | undefined) =>
-        normalizedCsvHeaders.filter(header => fields?.includes(header)).length;
-      const results = candidates.reduce((best, candidate) =>
-        scoreHeaders(candidate.meta.fields) > scoreHeaders(best.meta.fields) ? candidate : best,
-      );
-
-      const parseErrors = results.errors.filter(error => error.code !== "UndetectableDelimiter");
-      if (parseErrors.length > 0) {
-        setCsvError(`Could not read this CSV: ${parseErrors[0].message}`);
+      let parsedRows: CsvQuestionRow[];
+      if (extension === "zip") {
+        const zipContents = await loadQuestionZip(file, exam.subjects);
+        parsedRows = zipContents.rows;
+        setCsvImageFiles(zipContents.images);
+      } else {
+        parsedRows = parseQuestionCsv(await file.text(), exam.subjects);
+      }
+      if (parsedRows.length > maxCsvRows) {
+        setCsvError(`This file has ${parsedRows.length} rows. Import up to ${maxCsvRows} questions at a time.`);
+        setCsvImageFiles(new Map());
         return;
       }
-      if (results.data.length === 0) {
-        setCsvError("The CSV has no question rows yet.");
-        return;
-      }
-      if (results.data.length > maxCsvRows) {
-        setCsvError(`This file has ${results.data.length} rows. Import up to ${maxCsvRows} questions at a time.`);
-        return;
-      }
-
-      const availableHeaders = results.meta.fields || [];
-      const missingHeaders = csvHeaders.filter((_, index) => !availableHeaders.includes(normalizedCsvHeaders[index]));
-      if (missingHeaders.length > 0) {
-        if (missingHeaders.length === csvHeaders.length) {
-          setCsvError("Could not find the template columns. Use the downloaded CSV template; do not rename an Excel .xlsx file to .csv.");
-        } else {
-          setCsvError(`Missing required columns: ${missingHeaders.join(", ")}. Download the template for the correct format.`);
-        }
-        return;
-      }
-
-      const subjectByNormalizedName = new Map(exam.subjects.map(subject => [subject.trim().toLowerCase().replace(/\s+/g, " "), subject]));
-      const seenQuestions = new Set<string>();
-      const parsedRows = results.data.map((row, index): CsvQuestionRow => {
-        const rawSubject = String(row.subject ?? "").trim();
-        const questionText = String(row.question ?? "").trim();
-        const optionA = String(row.optiona ?? "").trim();
-        const optionB = String(row.optionb ?? "").trim();
-        const optionC = String(row.optionc ?? "").trim();
-        const optionD = String(row.optiond ?? "").trim();
-        const correctAnswer = String(row.correctanswer ?? "").trim().toUpperCase();
-        const explanationText = String(row.explanation ?? "").trim();
-        const errors: string[] = [];
-        const subject = subjectByNormalizedName.get(rawSubject.toLowerCase().replace(/\s+/g, " "));
-
-        if (!rawSubject) errors.push("Subject is required");
-        else if (!subject) errors.push(`Subject "${rawSubject}" is not listed on this exam`);
-        if (!questionText) errors.push("Question is required");
-        if (!optionA || !optionB || !optionC || !optionD) errors.push("All four options are required");
-        if (!["A", "B", "C", "D"].includes(correctAnswer)) errors.push("Correct answer must be A, B, C, or D");
-
-        const questionKey = `${subject?.toLowerCase() || rawSubject.toLowerCase()}:${questionText.toLowerCase().replace(/\s+/g, " ")}`;
-        if (questionKey && seenQuestions.has(questionKey)) errors.push("Duplicate question in this file");
-        if (questionKey) seenQuestions.add(questionKey);
-
-        return {
-          rowNumber: index + 2,
-          subject: subject || rawSubject,
-          question: questionText,
-          optionA,
-          optionB,
-          optionC,
-          optionD,
-          correctAnswer,
-          explanation: explanationText,
-          errors,
-        };
-      });
 
       setCsvFileName(file.name);
       setCsvExamId(selectedExam);
       setCsvRows(parsedRows);
-    } catch {
-      setCsvError("Could not read this file. Try saving it again as a CSV and re-uploading it.");
+    } catch (error) {
+      setCsvImageFiles(new Map());
+      setCsvError(error instanceof Error ? error.message : "Could not read this file. Try saving it again as a CSV and re-uploading it.");
     }
   };
 
@@ -403,9 +393,17 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setCsvProgress({ completed: 0, total: rowsToImport.length });
     let imported = 0;
     let failed = 0;
+    const uploadedImages = new Map<string, string>();
 
     for (const [index, row] of rowsToImport.entries()) {
       try {
+        let imageUrl = row.imageUrl;
+        const imageFile = row.imageUrl ? csvImageFiles.get(normalizeImageReference(row.imageUrl)) : undefined;
+        if (imageFile && row.imageUrl) {
+          const imageReference = normalizeImageReference(row.imageUrl);
+          imageUrl = uploadedImages.get(imageReference) || await uploadQuestionImage(imageFile);
+          uploadedImages.set(imageReference, imageUrl);
+        }
         await apiRequest("/api/admin/add-question", {
           method: "POST",
           body: JSON.stringify({
@@ -415,6 +413,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
             options: { A: row.optionA, B: row.optionB, C: row.optionC, D: row.optionD },
             correctAnswer: row.correctAnswer,
             ...(row.explanation ? { explanation: row.explanation } : {}),
+            ...(imageUrl ? { imageUrl } : {}),
           }),
         });
         imported++;
@@ -428,7 +427,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     }
 
     setCsvImporting(false);
-    setMsg(`CSV import finished: ${imported} added, ${failed} failed.`);
+    setMsg(`Question import finished: ${imported} added, ${failed} failed.`);
     setTimeout(() => setMsg(""), 5000);
   };
 
@@ -528,6 +527,12 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           </div>
 
           <div className="admin-field">
+            <label htmlFor="exam-date">Scheduled examination date</label>
+            <input id="exam-date" type="date" value={eExamDate} onChange={e=>setEExamDate(e.target.value)} />
+            <small style={{color:'#8b8ba7'}}>Optional. Scheduled dates appear in the Upcoming Examinations section on Home.</small>
+          </div>
+
+          <div className="admin-field">
             <label>Subjects in this Exam * ({eSubjects.length})</label>
             <div style={{display:'flex', flexWrap:'wrap', gap:6, padding:'10px', border:'1px solid #333', borderRadius:8, maxHeight:140, overflowY:'auto', background:'#1a1a1a'}}>
               {allSubjects.map(s=>(
@@ -540,7 +545,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
 
           <div style={{display:'flex', gap:8}}>
             <button className="admin-btn primary lg" disabled={loading} style={{flex:1}}>{loading? (editingExam?"Updating...":"Creating...") : (editingExam?"Update Exam":"Create Exam")}</button>
-            {editingExam && <button type="button" className="admin-btn ghost" onClick={()=>{setEditingExam(null); setETitle(""); setESubjects(["Mathematics","English"]);}}>Cancel</button>}
+            {editingExam && <button type="button" className="admin-btn ghost" onClick={()=>{setEditingExam(null); setETitle(""); setEExamDate(""); setESubjects(["Mathematics","English"]);}}>Cancel</button>}
           </div>
         </form>
 
@@ -549,7 +554,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           {exams.map(ex=>(
             <div key={ex.id} className="exam-card" style={{flexDirection:'column', alignItems:'stretch', background:'#1a1a1a', border:'1px solid #2a2a2a'}}>
               <div style={{display:'flex', justifyContent:'space-between', width:'100%'}}>
-                <div className="exam-info"><b style={{color:'#fff'}}>{ex.title}</b><div className="exam-meta"><span className="badge">{ex.examType}</span><span style={{color:'#888'}}>{ex.year} • {ex.duration}min • {ex.subjects?.length} subjects · {ex.totalQuestions ?? "—"} questions</span></div></div>
+                <div className="exam-info"><b style={{color:'#fff'}}>{ex.title}</b><div className="exam-meta"><span className="badge">{ex.examType}</span><span style={{color:'#888'}}>{ex.year} • {ex.duration}min • {ex.subjects?.length} subjects · {ex.totalQuestions ?? "—"} questions</span>{ex.examDate && <span style={{color:'#a5b4fc'}}>Scheduled: {formatExamDate(ex.examDate)}</span>}</div></div>
                 <div style={{display:'flex', gap:6}}>
                   <button className="admin-btn sm" onClick={()=>setExpandedExam(expandedExam===ex.id? null : ex.id)}>{expandedExam===ex.id? '▲' : '▼'}</button>
                   <button className="admin-btn sm" onClick={()=>startEdit(ex)}>✏️</button>
@@ -587,14 +592,14 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         <section className="admin-overview-card" aria-live="polite">
           <div className="admin-section-heading"><div><h3>Questions</h3><p>{selectedSubject || "Select a subject in the form below"}</p></div></div>
           {questionsError && <p className="admin-error" role="alert">{questionsError}</p>}
-          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><strong>{item?.question || "Question text unavailable"}</strong><small>{item?.subject || selectedSubject}</small></article>)}</div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
+          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><strong>{item?.question || "Question text unavailable"}</strong>{(item?.imageUrl || item?.image_url) && <QuestionImage key={item.imageUrl || item.image_url} className="admin-question-image" imageUrl={item.imageUrl || item.image_url} /> }<small>{item?.subject || selectedSubject}</small></article>)}</div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
         </section>
 
         <section className="csv-import-panel" aria-labelledby="csv-import-title">
           <div className="csv-import-heading">
             <div>
               <h3 id="csv-import-title"><FileSpreadsheet size={18} /> Bulk import questions</h3>
-              <p>Choose an exam above. Add a subject column to the CSV to route each question separately. Up to 500 rows per file.</p>
+              <p>Choose a CSV, or a ZIP with one <code>questions.csv</code> and an optional <code>images/</code> folder. Reference image filenames in the <code>imageUrl</code> column. Up to 500 questions per file.</p>
             </div>
             <button type="button" className="csv-template-btn" onClick={downloadCsvTemplate}>
               <Download size={16} /> Download template
@@ -602,12 +607,12 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           </div>
 
           <label className="csv-upload-btn">
-            <Upload size={16} /> Choose CSV file
-            <input type="file" accept=".csv,text/csv" onChange={handleCsvFileChange} disabled={csvImporting} />
+            <Upload size={16} /> Choose CSV or ZIP file
+            <input type="file" accept=".csv,.zip,text/csv,application/zip" onChange={handleCsvFileChange} disabled={csvImporting} />
           </label>
           {csvFileName && <span className="csv-file-name">{csvFileName}</span>}
           {csvRows.length > 0 && (
-            <button type="button" className="csv-clear-btn" onClick={() => { setCsvRows([]); setCsvFileName(""); setCsvExamId(""); setCsvError(""); setCsvProgress({ completed: 0, total: 0 }); }} disabled={csvImporting}>
+            <button type="button" className="csv-clear-btn" onClick={() => { setCsvRows([]); setCsvImageFiles(new Map()); setCsvFileName(""); setCsvExamId(""); setCsvError(""); setCsvProgress({ completed: 0, total: 0 }); }} disabled={csvImporting}>
               Clear file
             </button>
           )}
@@ -624,7 +629,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
               <div className="csv-preview-table-wrap">
                 <table className="csv-preview-table">
                   <thead>
-                    <tr><th>Row</th><th>Subject</th><th>Question</th><th>Options</th><th>Answer</th><th>Status</th></tr>
+                    <tr><th>Row</th><th>Subject</th><th>Question</th><th>Options</th><th>Answer</th><th>Image URL</th><th>Status</th></tr>
                   </thead>
                   <tbody>
                     {csvRows.map(row => {
@@ -637,6 +642,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
                           <td className="csv-question-cell">{row.question || "(empty question)"}</td>
                           <td>A: {row.optionA} · B: {row.optionB} · C: {row.optionC} · D: {row.optionD}</td>
                           <td>{row.correctAnswer || "—"}</td>
+                          <td className="csv-question-cell">{row.imageUrl || "—"}</td>
                           <td>{status}</td>
                         </tr>
                       );
@@ -666,6 +672,19 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
             </div>
           </div>
           <div className="admin-field"><label>Question</label><textarea value={question} onChange={e=>setQuestion(e.target.value)} rows={4} required style={{background:'#1a1a1a', color:'#fff', border:'1px solid #333'}}/></div>
+          {questionSubmitError && <p className="admin-error" role="alert">{questionSubmitError}</p>}
+          <div className="admin-field">
+            <label>Question image or diagram</label>
+            <div className="question-image-actions">
+              <button type="button" className="csv-template-btn" onClick={() => questionImageInput.current?.click()} disabled={loading}>
+                <ImagePlus size={16} /> {questionImagePreview ? "Replace image" : "Insert Image/Diagram"}
+              </button>
+              <input ref={questionImageInput} className="question-image-input" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={handleQuestionImageChange} />
+              {questionImagePreview && <button type="button" className="question-image-remove" onClick={removeQuestionImage} disabled={loading}><Trash2 size={15} /> Remove</button>}
+            </div>
+            {questionImageError && <p className="csv-error" role="alert">{questionImageError}</p>}
+            {questionImagePreview && <div className="question-image-preview"><img src={questionImagePreview} alt="Preview of the question diagram" /><span>{uploadedQuestionImageUrl ? "Uploaded and ready to save" : "Preview — image uploads when you add the question"}</span></div>}
+          </div>
           <div className="admin-options-grid">
             {["A","B","C","D"].map((o,i)=>(
               <div key={o} className={`admin-field option-field ${correct===o?'is-correct':''}`}>

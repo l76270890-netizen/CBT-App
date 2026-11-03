@@ -270,17 +270,14 @@ export default function Account({ setActivePage }: Props) {
       desc: 'Theme, notifications',
       action: () => alert('Settings coming soon'),
     },
-    ...(isAdmin
-      ? [
-          {
+   {
             id: 'admin',
             label: 'Admin Dashboard',
             icon: Shield,
             desc: 'Manage exams and students',
             action: () => setActivePage('admin'),
           },
-        ]
-      : []),
+       
     {
       id: 'help',
       label: 'Help & Support',
