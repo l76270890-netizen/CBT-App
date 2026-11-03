@@ -222,7 +222,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
           <h2 className="question-text">{q.question}</h2>
           {q.imageUrl && <QuestionImage key={q.imageUrl} className="question-diagram" imageUrl={q.imageUrl} />}
           <div className="options">{q.options.map((opt,i)=><button key={i} className={`option-btn ${answers[current]===i?'selected':''}`} onClick={()=>{const c=[...answers]; c[current]=i; setAnswers(c)}}><span className="option-label">{String.fromCharCode(65+i)}</span><span>{opt}</span></button>)}</div>
-          {testConfig.mode==='study' && answers[current]!==null && <div style={{marginTop:16, padding:12, background:'#1e1e1e', borderRadius:10, color: answers[current]===q.answer?'#10B981':'#EF4444'}}>{answers[current]===q.answer?'✓ Correct':`✗ Correct: ${String.fromCharCode(65+q.answer)}`} {q.explanation && ` - ${q.explanation}`}</div>}
+          {testConfig.mode==='practice' && answers[current]!==null && <div style={{marginTop:16, padding:12, background:'#1e1e1e', borderRadius:10, color: answers[current]===q.answer?'#10B981':'#EF4444'}}>{answers[current]===q.answer?'✓ Correct':`✗ Correct: ${String.fromCharCode(65+q.answer)}`} {q.explanation && ` - ${q.explanation}`}</div>}
         </div>
       </div>
       <div className="test-footer">

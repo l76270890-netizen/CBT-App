@@ -9,7 +9,7 @@ import { loadQuestionZip } from "../questionZip";
 const defaultSubjects = ["Mathematics","English","Physics","Chemistry","Biology","Government","Economics","Literature","CRS","Geography"];
 const defaultExamTypes = ["JAMB","WAEC","NECO","POSTUTME"];
 
-type Exam = { id: string; title: string; examType: string; year: number; duration: number; subjects: string[]; totalQuestions?: number }
+type Exam = { id: string; title: string; examType: string; year: number; duration: number; subjects: string[]; totalQuestions?: number; examDate?: string }
 type Student = { id: string; displayName?: string | null; email?: string | null; class?: string | null; accountStatus?: string | null; lastSeenAt?: string | null }
 type StudentPerformance = { completedAttempts?: number | null; scoreHistory?: unknown[] | null; resultsBySubject?: unknown[] | null }
 type StudentPagination = { page?: number; limit?: number; total?: number; pages?: number; totalPages?: number }
@@ -17,6 +17,14 @@ type OverviewData = { counts?: Record<string, number | null> | null; performance
 const maxCsvFileBytes = 5 * 1024 * 1024;
 const maxQuestionZipBytes = 25 * 1024 * 1024;
 const maxCsvRows = 500;
+
+const formatExamDate = (value: string) => {
+  const dateOnlyParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const date = dateOnlyParts
+    ? new Date(Number(dateOnlyParts[1]), Number(dateOnlyParts[2]) - 1, Number(dateOnlyParts[3]))
+    : new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+};
 
 export default function AdminDashboard({ setActivePage }: { setActivePage: (p:string)=>void }) {
   const [authState, setAuthState] = useState<"checking" | "signedOut" | "denied" | "authenticated">("checking");
@@ -55,6 +63,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [showCustomType, setShowCustomType] = useState(false);
   const [eYear, setEYear] = useState("2024");
   const [eDuration, setEDuration] = useState("60");
+  const [eExamDate, setEExamDate] = useState("");
   const [eSubjects, setESubjects] = useState<string[]>(["Mathematics","English"]);
 
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
@@ -104,13 +113,17 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     try {
       const payload = await apiRequest<unknown>("/api/exams");
       const raw = Array.isArray(payload) ? payload : asArray<any>((payload as any)?.exams);
-      const list: Exam[] = raw.map((e:any) => ({
-        id: String(e?.id ?? ""), title: String(e?.title ?? "Untitled exam"),
-        examType: String(e?.examType ?? ""), year: Number(e?.year) || 0,
-        duration: Number(e?.duration) || 0,
-        subjects: Array.isArray(e?.subjects) ? e.subjects.filter((s:unknown): s is string => typeof s === "string") : typeof e?.subject === "string" ? e.subject.split(",").map((s:string)=>s.trim()).filter(Boolean) : [],
-        totalQuestions: typeof e?.totalQuestions === "number" ? e.totalQuestions : undefined,
-      })).filter((exam: Exam) => exam.id);
+      const list: Exam[] = raw.map((e:any) => {
+        const examDate = e?.examDate ?? e?.exam_date ?? e?.scheduledDate ?? e?.scheduled_date;
+        return {
+          id: String(e?.id ?? ""), title: String(e?.title ?? "Untitled exam"),
+          examType: String(e?.examType ?? ""), year: Number(e?.year) || 0,
+          duration: Number(e?.duration) || 0,
+          subjects: Array.isArray(e?.subjects) ? e.subjects.filter((s:unknown): s is string => typeof s === "string") : typeof e?.subject === "string" ? e.subject.split(",").map((s:string)=>s.trim()).filter(Boolean) : [],
+          totalQuestions: typeof e?.totalQuestions === "number" ? e.totalQuestions : undefined,
+          examDate: typeof examDate === "string" && examDate.trim() ? examDate : undefined,
+        };
+      }).filter((exam: Exam) => exam.id);
       setExams(list);
       if(list[0] && !selectedExam){ setSelectedExam(list[0].id); if(list[0].subjects[0]) setSelectedSubject(list[0].subjects[0]); }
     } catch (error) { setExamsError(error instanceof Error ? error.message : "Could not load exams."); setExams([]); }
@@ -199,13 +212,13 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setLoading(true);
     try {
       if(editingExam) {
-        await apiRequest(`/api/admin/exam/${encodeURIComponent(editingExam.id)}`, { method: "PUT", body: JSON.stringify({ title:eTitle, examType:eType, year:Number(eYear), duration:Number(eDuration), subjects:eSubjects }) });
+        await apiRequest(`/api/admin/exam/${encodeURIComponent(editingExam.id)}`, { method: "PUT", body: JSON.stringify({ title:eTitle, examType:eType, year:Number(eYear), duration:Number(eDuration), subjects:eSubjects, examDate:eExamDate || null }) });
         setMsg(`"${eTitle}" updated!`); setEditingExam(null);
       } else {
-        await apiRequest("/api/admin/create-exam", { method: "POST", body: JSON.stringify({ title:eTitle, examType:eType, year:eYear, duration:eDuration, subjects:eSubjects, questions:[] }) });
+        await apiRequest("/api/admin/create-exam", { method: "POST", body: JSON.stringify({ title:eTitle, examType:eType, year:eYear, duration:eDuration, subjects:eSubjects, examDate:eExamDate || null, questions:[] }) });
         setMsg(`"${eTitle}" created with ${eSubjects.length} subjects!`);
       }
-      setETitle(""); setESubjects(["Mathematics","English"]); await fetchExams();
+      setETitle(""); setEExamDate(""); setESubjects(["Mathematics","English"]); await fetchExams();
       setTimeout(()=>setMsg(""),3000);
     } catch(error) { setMsg(error instanceof Error ? error.message : "Could not save exam."); }
     finally { setLoading(false); }
@@ -214,6 +227,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setEditingExam(ex);
     setETitle(ex.title); setEType(ex.examType);
     setEYear(String(ex.year)); setEDuration(String(ex.duration));
+    setEExamDate(ex.examDate?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? "");
     setESubjects(ex.subjects);
     setAdminView("exams");
     setExamTab("exams");
@@ -512,6 +526,12 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           </div>
 
           <div className="admin-field">
+            <label htmlFor="exam-date">Scheduled examination date</label>
+            <input id="exam-date" type="date" value={eExamDate} onChange={e=>setEExamDate(e.target.value)} />
+            <small style={{color:'#8b8ba7'}}>Optional. Scheduled dates appear in the Upcoming Examinations section on Home.</small>
+          </div>
+
+          <div className="admin-field">
             <label>Subjects in this Exam * ({eSubjects.length})</label>
             <div style={{display:'flex', flexWrap:'wrap', gap:6, padding:'10px', border:'1px solid #333', borderRadius:8, maxHeight:140, overflowY:'auto', background:'#1a1a1a'}}>
               {allSubjects.map(s=>(
@@ -524,7 +544,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
 
           <div style={{display:'flex', gap:8}}>
             <button className="admin-btn primary lg" disabled={loading} style={{flex:1}}>{loading? (editingExam?"Updating...":"Creating...") : (editingExam?"Update Exam":"Create Exam")}</button>
-            {editingExam && <button type="button" className="admin-btn ghost" onClick={()=>{setEditingExam(null); setETitle(""); setESubjects(["Mathematics","English"]);}}>Cancel</button>}
+            {editingExam && <button type="button" className="admin-btn ghost" onClick={()=>{setEditingExam(null); setETitle(""); setEExamDate(""); setESubjects(["Mathematics","English"]);}}>Cancel</button>}
           </div>
         </form>
 
@@ -533,7 +553,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           {exams.map(ex=>(
             <div key={ex.id} className="exam-card" style={{flexDirection:'column', alignItems:'stretch', background:'#1a1a1a', border:'1px solid #2a2a2a'}}>
               <div style={{display:'flex', justifyContent:'space-between', width:'100%'}}>
-                <div className="exam-info"><b style={{color:'#fff'}}>{ex.title}</b><div className="exam-meta"><span className="badge">{ex.examType}</span><span style={{color:'#888'}}>{ex.year} • {ex.duration}min • {ex.subjects?.length} subjects · {ex.totalQuestions ?? "—"} questions</span></div></div>
+                <div className="exam-info"><b style={{color:'#fff'}}>{ex.title}</b><div className="exam-meta"><span className="badge">{ex.examType}</span><span style={{color:'#888'}}>{ex.year} • {ex.duration}min • {ex.subjects?.length} subjects · {ex.totalQuestions ?? "—"} questions</span>{ex.examDate && <span style={{color:'#a5b4fc'}}>Scheduled: {formatExamDate(ex.examDate)}</span>}</div></div>
                 <div style={{display:'flex', gap:6}}>
                   <button className="admin-btn sm" onClick={()=>setExpandedExam(expandedExam===ex.id? null : ex.id)}>{expandedExam===ex.id? '▲' : '▼'}</button>
                   <button className="admin-btn sm" onClick={()=>startEdit(ex)}>✏️</button>
