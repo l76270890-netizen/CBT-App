@@ -101,6 +101,11 @@ MAX_QUESTION_IMPORT_ROWS = 500
 QUESTION_IMPORT_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
 VALID_ROLES = {"school_admin", "teacher", "exam_officer", "student"}
 ADMIN_ROLES = {"school_admin", "teacher", "exam_officer"}
+SUBSCRIPTION_PLANS = {
+    "weekly": {"amount": 30000, "price": 300, "duration_days": 7},
+    "monthly": {"amount": 500000, "price": 5000, "duration_months": 1},
+    "yearly": {"amount": 2500000, "price": 25000, "duration_months": 12},
+}
 
 
 def utcnow():
@@ -688,8 +693,8 @@ def initialize_paystack_checkout():
         return api_error("A JSON request body is required.")
 
     plan = data.get("plan")
-    if not isinstance(plan, str) or plan not in {"monthly", "yearly"}:
-        return api_error("plan must be either 'monthly' or 'yearly'.")
+    if not isinstance(plan, str) or plan not in SUBSCRIPTION_PLANS:
+        return api_error("plan must be 'weekly', 'monthly', or 'yearly'.")
 
     payment_url_key = f"PAYSTACK_{plan.upper()}_PAYMENT_URL"
     authorization_url = os.environ.get(payment_url_key, "").strip()
@@ -721,6 +726,26 @@ def initialize_paystack_checkout():
             "payment_not_configured",
         )
     return jsonify(authorization_url=authorization_url)
+
+
+@app.route("/api/payments/plans", methods=["GET"])
+def get_payment_plans():
+    return jsonify({
+        "currency": "NGN",
+        "plans": [
+            {
+                "id": plan,
+                "price": details["price"],
+                "currency": "NGN",
+                "durationDays": details.get("duration_days"),
+                "durationMonths": details.get("duration_months"),
+                "checkoutAvailable": bool(
+                    os.environ.get(f"PAYSTACK_{plan.upper()}_PAYMENT_URL", "").strip()
+                ),
+            }
+            for plan, details in SUBSCRIPTION_PLANS.items()
+        ],
+    })
 
 
 def send_activation_pin(email, pin, plan):
@@ -762,7 +787,10 @@ def send_activation_pin(email, pin, plan):
 
 
 def add_subscription_period(start, plan):
-    months = 1 if plan == "monthly" else 12
+    plan_details = SUBSCRIPTION_PLANS[plan]
+    if "duration_days" in plan_details:
+        return start + timedelta(days=plan_details["duration_days"])
+    months = plan_details["duration_months"]
     month_index = start.month - 1 + months
     year = start.year + month_index // 12
     month = month_index % 12 + 1
@@ -810,11 +838,10 @@ def paystack_webhook():
             "Signed Paystack webhook failed status, reference, currency, amount, or email validation.")
         return api_error("Payment event details are invalid.", 400, "invalid_payment")
 
-    plan_amounts = {"monthly": 500000, "yearly": 2500000}
-    matching_plans = [plan for plan, expected_amount in plan_amounts.items()
-                      if amount == expected_amount]
+    matching_plans = [plan for plan, details in SUBSCRIPTION_PLANS.items()
+                      if amount == details["amount"]]
     if len(matching_plans) != 1:
-        app.logger.warning("Verified Paystack transaction amount does not match a configured plan.")
+        app.logger.warning("Signed Paystack transaction amount does not match an available plan.")
         return api_error("Payment amount does not match an available plan.", 400, "plan_amount_mismatch")
     plan = matching_plans[0]
     email = verified_email.strip().lower()

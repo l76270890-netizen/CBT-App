@@ -1,9 +1,20 @@
 import { useState } from 'react'
 import { ArrowLeft, Check, Clock3, CreditCard, Crown, ShieldCheck } from 'lucide-react'
+import { apiRequest } from '../api'
 import type { CheckoutDetails } from './Register'
 import './Auth.css'
 
+type PaystackInitializationResponse = {
+  authorization_url?: string
+}
+
 const planDetails = {
+  weekly: {
+    title: 'Weekly Plan',
+    duration: 'Full CBT platform access for one week',
+    price: '₦300',
+    Icon: Clock3,
+  },
   monthly: {
     title: 'Monthly Plan',
     duration: 'Full CBT platform access for one month',
@@ -27,8 +38,42 @@ export default function Payment({
   details: CheckoutDetails
   setActivePage: (page: string) => void
 }) {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
   const plan = planDetails[details.plan]
   const PlanIcon = plan.Icon
+
+  const handleCheckout = async () => {
+    if (details.plan !== 'weekly') {
+      window.location.assign(planDetails[details.plan].checkoutUrl)
+      return
+    }
+
+    setError('')
+    setIsLoading(true)
+    try {
+      const response = await apiRequest<PaystackInitializationResponse>('/api/payments/paystack/initialize', {
+        method: 'POST',
+        body: JSON.stringify({ plan: 'weekly' }),
+      })
+      if (typeof response?.authorization_url !== 'string') {
+        throw new Error('The payment service did not return a checkout URL.')
+      }
+
+      const checkoutUrl = new URL(response.authorization_url)
+      const isPaystackHost = checkoutUrl.hostname === 'paystack.shop'
+        || checkoutUrl.hostname.endsWith('.paystack.shop')
+        || checkoutUrl.hostname.endsWith('.paystack.com')
+      if (checkoutUrl.protocol !== 'https:' || !isPaystackHost) {
+        throw new Error('The payment service returned an invalid secure Paystack checkout URL.')
+      }
+
+      window.location.assign(checkoutUrl.href)
+    } catch (checkoutError) {
+      setError(checkoutError instanceof Error ? checkoutError.message : 'Could not start Paystack checkout. Please try again.')
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="auth-page auth-register-page">
@@ -65,8 +110,9 @@ export default function Payment({
             <ShieldCheck size={18} />
             <p><strong>Secure Paystack checkout.</strong> You’ll complete your payment on Paystack’s hosted page.</p>
           </div>
-          <button type="button" className="auth-btn-primary" onClick={() => window.location.assign(plan.checkoutUrl)}>
-            Pay securely with Paystack
+          {error && <div className="auth-error payment-error" role="alert">{error}</div>}
+          <button type="button" className="auth-btn-primary" onClick={handleCheckout} disabled={isLoading}>
+            {isLoading ? 'Connecting to Paystack...' : 'Pay securely with Paystack'}
           </button>
           <p className="auth-secure-note"><ShieldCheck size={14} /> Your account should be activated only after payment is verified by the server.</p>
         </section>
