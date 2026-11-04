@@ -142,7 +142,7 @@ Python 3.10+ is recommended.
 
    `assign-legacy-data` explicitly assigns old unscoped rows to one selected school. The migration defaults old users to `student`; create or promote the administrator using the CLI before opening the admin workspace. Never run that assignment command when the old database contains records from more than one school.
 
-5. Start locally with `flask --app app run` or deploy with `gunicorn app:app`. Migrations are run as a deployment step; the app no longer creates tables at import time. No sample students or activity are seeded.
+5. Start locally with `flask --app app run` or deploy the backend folder to Vercel with the included `vercel.json` routing all requests to the Flask app. Migrations are run as a deployment step; the app no longer creates tables at import time. No sample students or activity are seeded.
 
 ## Data and reporting notes
 
