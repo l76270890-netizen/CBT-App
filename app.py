@@ -4,10 +4,13 @@ Authentication uses an opaque, database-backed session in an HttpOnly cookie.
 The cookie value is never included in JSON responses; each request resolves the
 session and current user/role from the database.
 """
+import calendar
 from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 from functools import wraps
 import csv
 import hashlib
+import hmac
 import io
 import json
 import math
@@ -17,7 +20,10 @@ import stat
 import time
 import tempfile
 import re
-from urllib.parse import urlsplit
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote as urlquote, urlsplit
+from urllib.request import Request, urlopen
+import smtplib
 import zipfile
 import zlib
 
@@ -26,6 +32,7 @@ from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, or_
+from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.datastructures import FileStorage
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -371,6 +378,8 @@ class User(db.Model):
     account_status = db.Column(
         db.String(20), nullable=False, default="active", index=True)
     last_seen_at = db.Column(db.DateTime, nullable=True, index=True)
+    subscription_plan = db.Column(db.String(16), nullable=True)
+    subscription_expires_at = db.Column(db.DateTime, nullable=True, index=True)
 
 
 class Exam(db.Model):
@@ -468,6 +477,23 @@ class AuthToken(db.Model):
                            nullable=False, index=True)
     expires_at = db.Column(db.DateTime, nullable=False, index=True)
     revoked_at = db.Column(db.DateTime, nullable=True)
+
+
+class PaystackPayment(db.Model):
+    __tablename__ = "paystack_payments"
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    email = db.Column(db.String(254), nullable=False, index=True)
+    plan = db.Column(db.String(16), nullable=False)
+    amount = db.Column(db.Integer, nullable=False)
+    currency = db.Column(db.String(3), nullable=False)
+    pin_hash = db.Column(db.String(255), nullable=True)
+    pin_expires_at = db.Column(db.DateTime, nullable=True, index=True)
+    pin_attempts = db.Column(db.Integer, nullable=False, default=0)
+    pin_used_at = db.Column(db.DateTime, nullable=True)
+    email_sent_at = db.Column(db.DateTime, nullable=True)
+    verified_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
 
 def api_error(message, status=400, code=None):
@@ -697,6 +723,275 @@ def initialize_paystack_checkout():
             "payment_not_configured",
         )
     return jsonify(authorization_url=authorization_url)
+
+
+def send_activation_pin(email, pin, plan):
+    host = os.environ.get("SMTP_HOST", "").strip()
+    username = os.environ.get("SMTP_USERNAME", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "")
+    sender = os.environ.get("MAIL_FROM_EMAIL", "").strip()
+    try:
+        port = int(os.environ.get("SMTP_PORT", "587"))
+    except ValueError as error:
+        raise ValueError("SMTP_PORT must be an integer.") from error
+    if not host or not username or not password or not sender:
+        raise ValueError(
+            "SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, and MAIL_FROM_EMAIL are required.")
+
+    message = EmailMessage()
+    message["Subject"] = "Your CBT account activation PIN"
+    message["From"] = sender
+    message["To"] = email
+    message.set_content(
+        f"Your {plan} plan payment was verified.\n\n"
+        f"Your single-use activation PIN is: {pin}\n\n"
+        "Enter this PIN on the CBT app to activate your account. "
+        "It expires in 24 hours. If you did not make this payment, ignore this email."
+    )
+    if port == 465:
+        with smtplib.SMTP_SSL(host, port, timeout=15) as server:
+            server.login(username, password)
+            refused = server.send_message(message)
+    else:
+        with smtplib.SMTP(host, port, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(username, password)
+            refused = server.send_message(message)
+    if refused:
+        raise smtplib.SMTPRecipientsRefused(refused)
+
+
+def verify_paystack_transaction(reference, secret_key):
+    request_url = (
+        "https://api.paystack.co/transaction/verify/" + urlquote(reference, safe="")
+    )
+    paystack_request = Request(
+        request_url,
+        headers={"Authorization": f"Bearer {secret_key}", "Accept": "application/json"},
+        method="GET",
+    )
+    try:
+        with urlopen(paystack_request, timeout=10) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        app.logger.warning(
+            "Paystack transaction verification returned HTTP %s.", error.code)
+        raise RuntimeError("Could not verify the Paystack transaction.") from error
+    except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        app.logger.exception("Paystack transaction verification failed.")
+        raise RuntimeError("Could not verify the Paystack transaction.") from error
+    if not isinstance(body, dict) or body.get("status") is not True:
+        raise ValueError("Paystack did not verify the transaction.")
+    transaction = body.get("data")
+    if not isinstance(transaction, dict):
+        raise ValueError("Paystack returned an invalid transaction.")
+    return transaction
+
+
+def add_subscription_period(start, plan):
+    months = 1 if plan == "monthly" else 12
+    month_index = start.month - 1 + months
+    year = start.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(start.day, calendar.monthrange(year, month)[1])
+    return start.replace(year=year, month=month, day=day)
+
+
+@app.route("/api/payments/paystack/webhook", methods=["POST"])
+def paystack_webhook():
+    secret_key = os.environ.get("PAYSTACK_SECRET_KEY", "").strip()
+    if not secret_key:
+        app.logger.error("Paystack webhook is missing PAYSTACK_SECRET_KEY.")
+        return api_error("Payment verification is not configured.", 503, "payment_not_configured")
+
+    raw_body = request.get_data(cache=True)
+    signature = request.headers.get("x-paystack-signature", "")
+    expected_signature = hmac.new(
+        secret_key.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+    if not signature or not hmac.compare_digest(signature, expected_signature):
+        return api_error("Invalid Paystack webhook signature.", 401, "invalid_signature")
+    try:
+        event_body = json.loads(raw_body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return api_error("Invalid webhook JSON.")
+    if not isinstance(event_body, dict):
+        return api_error("Invalid webhook event.")
+    if event_body.get("event") != "charge.success":
+        return jsonify(success=True, ignored=True)
+
+    event_data = event_body.get("data")
+    reference = event_data.get("reference") if isinstance(event_data, dict) else None
+    if not isinstance(reference, str) or not reference.strip() or len(reference) > 120:
+        return api_error("Webhook transaction reference is invalid.")
+    try:
+        transaction = verify_paystack_transaction(reference, secret_key)
+    except ValueError as error:
+        app.logger.warning("Paystack transaction verification was rejected: %s", error)
+        return api_error(str(error), 400, "transaction_not_verified")
+    except RuntimeError as error:
+        return api_error(str(error), 502, "transaction_verification_failed")
+
+    verified_email = transaction.get("customer", {}).get("email") if isinstance(
+        transaction.get("customer"), dict) else None
+    verified_reference = transaction.get("reference")
+    amount = transaction.get("amount")
+    currency = transaction.get("currency")
+    if (transaction.get("status") != "success" or verified_reference != reference or
+            currency != "NGN" or type(amount) is not int or
+            not isinstance(verified_email, str) or
+            not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", verified_email.strip())):
+        app.logger.warning(
+            "Verified Paystack transaction failed status, reference, currency, amount, or email validation.")
+        return api_error("Verified payment details are invalid.", 400, "invalid_payment")
+
+    plan_amounts = {"monthly": 500000, "yearly": 2500000}
+    matching_plans = [plan for plan, expected_amount in plan_amounts.items()
+                      if amount == expected_amount]
+    if len(matching_plans) != 1:
+        app.logger.warning("Verified Paystack transaction amount does not match a configured plan.")
+        return api_error("Payment amount does not match an available plan.", 400, "plan_amount_mismatch")
+    plan = matching_plans[0]
+    email = verified_email.strip().lower()
+    now = utcnow()
+
+    payment = PaystackPayment.query.filter_by(reference=reference).with_for_update().first()
+    if payment:
+        if (payment.email != email or payment.plan != plan or
+                payment.amount != amount or payment.currency != currency):
+            app.logger.error("Paystack reference was received with conflicting verified transaction details.")
+            return api_error("Payment reference conflicts with a previously processed transaction.", 409, "payment_conflict")
+        if payment.email_sent_at:
+            return jsonify(success=True, duplicate=True)
+    else:
+        PaystackPayment.query.filter(
+            PaystackPayment.email == email,
+            PaystackPayment.pin_used_at.is_(None),
+            PaystackPayment.pin_expires_at > now,
+        ).update({"pin_expires_at": now}, synchronize_session=False)
+        payment = PaystackPayment(
+            reference=reference,
+            email=email,
+            plan=plan,
+            amount=amount,
+            currency=currency,
+            verified_at=now,
+        )
+        db.session.add(payment)
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            app.logger.exception("Could not record verified Paystack transaction.")
+            return api_error("Could not record the verified payment.", 500, "payment_record_failed")
+
+    payment = PaystackPayment.query.filter_by(reference=reference).with_for_update().first()
+    if payment.email_sent_at:
+        return jsonify(success=True, duplicate=True)
+    pin = f"{secrets.randbelow(100_000_000):08d}"
+    payment.pin_hash = generate_password_hash(pin)
+    payment.pin_expires_at = now + timedelta(hours=24)
+    payment.pin_attempts = 0
+    try:
+        send_activation_pin(email, pin, plan)
+        payment.email_sent_at = utcnow()
+        db.session.commit()
+    except (OSError, ValueError, smtplib.SMTPException, SQLAlchemyError) as error:
+        db.session.rollback()
+        app.logger.error("Could not email the verified-payment activation PIN: %s", error)
+        return api_error("Could not email the activation PIN. Please retry the webhook.", 503, "activation_email_failed")
+    return jsonify(success=True, message="Payment verified and activation PIN emailed.")
+
+
+@app.route("/api/payments/paystack/redeem", methods=["POST"])
+def redeem_paystack_activation_pin():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return api_error("A JSON request body is required.")
+    email = data.get("email")
+    pin = data.get("pin")
+    if (not isinstance(email, str) or len(email.strip()) > 254 or
+            not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip())):
+        return api_error("A valid email address is required.")
+    if not isinstance(pin, str) or not re.fullmatch(r"\d{8}", pin.strip()):
+        return api_error("pin must be the 8-digit code sent to your email.")
+    email = email.strip().lower()
+    now = utcnow()
+    payment = PaystackPayment.query.filter(
+        PaystackPayment.email == email,
+        PaystackPayment.email_sent_at.isnot(None),
+        PaystackPayment.pin_used_at.is_(None),
+        PaystackPayment.pin_expires_at > now,
+    ).order_by(PaystackPayment.created_at.desc()).with_for_update().first()
+    if not payment:
+        return api_error("PIN is invalid, expired, or already used.", 400, "invalid_pin")
+    if payment.pin_attempts >= 5:
+        return api_error("Too many PIN attempts. Request a new payment PIN.", 429, "pin_attempts_exceeded")
+    if not check_password_hash(payment.pin_hash, pin.strip()):
+        payment.pin_attempts += 1
+        db.session.commit()
+        if payment.pin_attempts >= 5:
+            return api_error("Too many PIN attempts. Request a new payment PIN.", 429, "pin_attempts_exceeded")
+        return api_error("PIN is invalid, expired, or already used.", 400, "invalid_pin")
+
+    user = User.query.filter(func.lower(User.email) == email).first()
+    is_new_user = user is None
+    if user and user.role != "student":
+        return api_error("This email belongs to a non-student account.", 409, "account_role_conflict")
+    if not user:
+        name = data.get("name")
+        password = data.get("password")
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+            return api_error("name is required and must be 80 characters or fewer.")
+        if not isinstance(password, str) or len(password) < 8:
+            return api_error("password must be at least 8 characters.")
+        school_id = data.get("schoolId") or os.environ.get("DEFAULT_SCHOOL_ID")
+        if not school_id:
+            schools = School.query.order_by(School.id.asc()).limit(2).all()
+            if len(schools) == 1:
+                school_id = schools[0].id
+            else:
+                return api_error("schoolId is required when more than one school is configured.")
+        try:
+            school_id = int(school_id)
+        except (TypeError, ValueError):
+            return api_error("schoolId must be an integer.")
+        if not db.session.get(School, school_id):
+            return api_error("School not found.", 404, "school_not_found")
+        user = User(
+            username=name.strip(),
+            email=email,
+            password=generate_password_hash(password),
+            school_id=school_id,
+            role="student",
+            account_status="active",
+        )
+        db.session.add(user)
+
+    subscription_start = now
+    if user.subscription_expires_at and user.subscription_expires_at > now:
+        subscription_start = user.subscription_expires_at
+    user.subscription_plan = payment.plan
+    user.subscription_expires_at = add_subscription_period(subscription_start, payment.plan)
+    user.account_status = "active"
+    payment.pin_used_at = now
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        app.logger.exception("Could not redeem payment activation PIN.")
+        return api_error("Could not activate this account. Please try again.", 500, "activation_failed")
+    raw_token = issue_session(user)
+    return cookie_response({
+        "success": True,
+        "user_id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+        "subscription_plan": user.subscription_plan,
+        "subscription_expires_at": iso_utc(user.subscription_expires_at),
+    }, raw_token=raw_token), 201 if is_new_user else 200
 
 
 @app.route("/api/logout", methods=["POST"])
