@@ -20,9 +20,7 @@ import stat
 import time
 import tempfile
 import re
-from urllib.error import HTTPError, URLError
-from urllib.parse import quote as urlquote, urlsplit
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 import smtplib
 import zipfile
 import zlib
@@ -763,33 +761,6 @@ def send_activation_pin(email, pin, plan):
         raise smtplib.SMTPRecipientsRefused(refused)
 
 
-def verify_paystack_transaction(reference, secret_key):
-    request_url = (
-        "https://api.paystack.co/transaction/verify/" + urlquote(reference, safe="")
-    )
-    paystack_request = Request(
-        request_url,
-        headers={"Authorization": f"Bearer {secret_key}", "Accept": "application/json"},
-        method="GET",
-    )
-    try:
-        with urlopen(paystack_request, timeout=10) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except HTTPError as error:
-        app.logger.warning(
-            "Paystack transaction verification returned HTTP %s.", error.code)
-        raise RuntimeError("Could not verify the Paystack transaction.") from error
-    except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        app.logger.exception("Paystack transaction verification failed.")
-        raise RuntimeError("Could not verify the Paystack transaction.") from error
-    if not isinstance(body, dict) or body.get("status") is not True:
-        raise ValueError("Paystack did not verify the transaction.")
-    transaction = body.get("data")
-    if not isinstance(transaction, dict):
-        raise ValueError("Paystack returned an invalid transaction.")
-    return transaction
-
-
 def add_subscription_period(start, plan):
     months = 1 if plan == "monthly" else 12
     month_index = start.month - 1 + months
@@ -825,16 +796,9 @@ def paystack_webhook():
     reference = event_data.get("reference") if isinstance(event_data, dict) else None
     if not isinstance(reference, str) or not reference.strip() or len(reference) > 120:
         return api_error("Webhook transaction reference is invalid.")
-    try:
-        transaction = verify_paystack_transaction(reference, secret_key)
-    except ValueError as error:
-        app.logger.warning("Paystack transaction verification was rejected: %s", error)
-        return api_error(str(error), 400, "transaction_not_verified")
-    except RuntimeError as error:
-        return api_error(str(error), 502, "transaction_verification_failed")
-
-    verified_email = transaction.get("customer", {}).get("email") if isinstance(
-        transaction.get("customer"), dict) else None
+    transaction = event_data
+    customer = transaction.get("customer")
+    verified_email = customer.get("email") if isinstance(customer, dict) else None
     verified_reference = transaction.get("reference")
     amount = transaction.get("amount")
     currency = transaction.get("currency")
@@ -843,8 +807,8 @@ def paystack_webhook():
             not isinstance(verified_email, str) or
             not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", verified_email.strip())):
         app.logger.warning(
-            "Verified Paystack transaction failed status, reference, currency, amount, or email validation.")
-        return api_error("Verified payment details are invalid.", 400, "invalid_payment")
+            "Signed Paystack webhook failed status, reference, currency, amount, or email validation.")
+        return api_error("Payment event details are invalid.", 400, "invalid_payment")
 
     plan_amounts = {"monthly": 500000, "yearly": 2500000}
     matching_plans = [plan for plan, expected_amount in plan_amounts.items()
