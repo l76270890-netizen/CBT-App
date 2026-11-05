@@ -13,6 +13,7 @@ import secrets
 import stat
 import time
 import json
+import tempfile
 import zipfile
 import zlib
 
@@ -44,9 +45,10 @@ else:
     app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(basedir, 'examcore.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-UPLOAD_FOLDER = os.path.join(basedir, 'uploads')
-UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or UPLOAD_FOLDER
 IS_SERVERLESS = os.environ.get('VERCEL') == '1' or bool(os.environ.get('AWS_LAMBDA_FUNCTION_NAME'))
+DEFAULT_UPLOAD_FOLDER = os.path.join(
+    tempfile.gettempdir(), 'uploads') if IS_SERVERLESS else os.path.join(basedir, 'uploads')
+UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or DEFAULT_UPLOAD_FOLDER
 QUESTION_STORAGE_IS_PERSISTENT = not IS_SERVERLESS or bool(os.environ.get('UPLOAD_FOLDER'))
 AVATAR_FOLDER = os.path.join(UPLOAD_FOLDER, 'avatars')
 QUESTION_FOLDER = os.path.join(UPLOAD_FOLDER, 'questions')
