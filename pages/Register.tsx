@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, Check, Clock3, Crown } from 'lucide-react'
+import { ArrowRight, Check, Clock3, Crown, Timer } from 'lucide-react'
 import './Auth.css'
 
-export type SubscriptionPlan = 'monthly' | 'yearly'
+export type SubscriptionPlan = 'weekly' | 'monthly' | 'yearly'
 export type CheckoutDetails = { name: string; email: string; plan: SubscriptionPlan }
 
 export default function Register({
@@ -77,13 +77,25 @@ export default function Register({
                 <button
                   type="button"
                   role="radio"
+                  aria-checked={selectedPlan === 'weekly'}
+                  className={`auth-plan-card${selectedPlan === 'weekly' ? ' selected' : ''}`}
+                  onClick={() => setSelectedPlan('weekly')}
+                >
+                  <span className="auth-plan-top"><span className="auth-plan-icon"><Timer size={19} /></span>{selectedPlan === 'weekly' && <span className="auth-plan-check"><Check size={14} /></span>}</span>
+                  <strong>Weekly Plan</strong>
+                  <span className="auth-plan-price">₦300</span>
+                  <span className="auth-plan-description">Full CBT platform access for one week.</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
                   aria-checked={selectedPlan === 'monthly'}
                   className={`auth-plan-card${selectedPlan === 'monthly' ? ' selected' : ''}`}
                   onClick={() => setSelectedPlan('monthly')}
                 >
                   <span className="auth-plan-top"><span className="auth-plan-icon"><Clock3 size={19} /></span>{selectedPlan === 'monthly' && <span className="auth-plan-check"><Check size={14} /></span>}</span>
                   <strong>Monthly Plan</strong>
-                  <span className="auth-plan-price">Price coming soon</span>
+                  <span className="auth-plan-price">₦5,000</span>
                   <span className="auth-plan-description">Full CBT platform access for one month.</span>
                 </button>
                 <button
@@ -95,13 +107,13 @@ export default function Register({
                 >
                   <span className="auth-plan-top"><span className="auth-plan-icon"><Crown size={19} /></span>{selectedPlan === 'yearly' && <span className="auth-plan-check"><Check size={14} /></span>}</span>
                   <strong>Yearly Plan</strong>
-                  <span className="auth-plan-price">Price coming soon</span>
+                  <span className="auth-plan-price">₦25,000</span>
                   <span className="auth-plan-description">Full CBT platform access for one year.</span>
                 </button>
               </div>
             </div>
 
-            <p className="auth-phase-note">Your account will be created after payment is available. You won’t be charged in this preview.</p>
+            <p className="auth-phase-note">After payment, check your email for an activation PIN. Use it to activate your subscription.</p>
             <button className="auth-btn-primary" type="submit">
               Continue to Payment <ArrowRight size={17} />
             </button>

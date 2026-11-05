@@ -1,9 +1,15 @@
-import { useState } from 'react'
 import { ArrowLeft, Check, Clock3, CreditCard, Crown, ShieldCheck } from 'lucide-react'
 import type { CheckoutDetails } from './Register'
 import './Auth.css'
 
 const planDetails = {
+  weekly: {
+    title: 'Weekly Plan',
+    duration: 'Full CBT platform access for one week',
+    price: '₦300',
+    checkoutUrl: 'https://paystack.shop/pay/7g5efoqcwn',
+    Icon: Clock3,
+  },
   monthly: {
     title: 'Monthly Plan',
     duration: 'Full CBT platform access for one month',

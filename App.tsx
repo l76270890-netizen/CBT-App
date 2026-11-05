@@ -20,13 +20,16 @@ import Register from './pages/Register'
 import Payment from './pages/Payment'
 import type { CheckoutDetails } from './pages/Register'
 import Activation from './pages/Activation'
+import PaymentReceived from './pages/PaymentReceived'
 import DemoExperience from './pages/DemoExperience'
 import type { TestConfigType } from './types'
 import { AuthProvider } from './context/AuthContext'
 import './App.css'
 
 export default function App() {
-  const [page, setPage] = useState('landing')
+  const [page, setPage] = useState(() => (
+    window.location.pathname.replace(/\/+$/, '') === '/payment-received' ? 'paymentReceived' : 'landing'
+  ))
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [homeSearchQuery, setHomeSearchQuery] = useState('')
@@ -57,14 +60,14 @@ export default function App() {
       }
     } else {
       // no user - if on protected page, force to landing
-      if (!['landing', 'login', 'register', 'activation', 'demo'].includes(page)) {
+      if (!['landing', 'login', 'register', 'activation', 'paymentReceived', 'demo'].includes(page)) {
         setPage('landing')
       }
     }
     setCheckingAuth(false)
   }, [])
 
-  const hideNavbarPages = ['landing', 'login', 'register', 'payment', 'activation', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
+  const hideNavbarPages = ['landing', 'login', 'register', 'payment', 'paymentReceived', 'activation', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
   const AdminAny = AdminDashboard as any
 
   if (checkingAuth) {
@@ -106,6 +109,7 @@ export default function App() {
           )}
           {page === 'payment' && checkoutDetails && <Payment details={checkoutDetails} setActivePage={setPage} />}
           {page === 'activation' && <Activation setActivePage={setPage} />}
+          {page === 'paymentReceived' && <PaymentReceived setActivePage={setPage} />}
           {page === 'demo' && <DemoExperience setActivePage={setPage} section={demoSection} setSection={setDemoSection} searchQuery={homeSearchQuery} setSearchQuery={setHomeSearchQuery} />}
 
           {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} searchQuery={homeSearchQuery} setSearchQuery={setHomeSearchQuery} />}

@@ -479,7 +479,7 @@
 
 .auth-plan-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   margin-top: 17px;
 }
@@ -728,6 +728,25 @@
   margin: -7px 0 14px;
 }
 
+.auth-new-account-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 20px;
+  color: #c5cbda;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.auth-new-account-toggle input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin: 1px 0 0;
+  accent-color: #4a70f0;
+}
+
 .auth-pin-input {
   letter-spacing: 0.08em;
   font-weight: 700;
@@ -749,6 +768,10 @@
 
 .auth-activation-card .auth-secure-note {
   margin-top: 22px;
+}
+
+.payment-return-note {
+  margin: 22px 0 18px;
 }
 
 @media (max-width: 900px) {
@@ -808,6 +831,14 @@
   .auth-payment-main {
     min-height: calc(100dvh - 72px);
     padding: 20px 16px 38px;
+  }
+
+  .auth-plan-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .auth-plan-card:last-child {
+    grid-column: 1 / -1;
   }
 }
 
