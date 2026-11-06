@@ -1,27 +1,32 @@
-import { ArrowLeft, Check, Clock3, CreditCard, Crown, ShieldCheck } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowLeft, Check, Clock3, CreditCard, Crown, ShieldCheck, Sun } from 'lucide-react'
+import { apiRequest } from '../api'
 import type { CheckoutDetails } from './Register'
 import './Auth.css'
 
 const planDetails = {
+  daily: {
+    title: 'Daily Plan',
+    duration: 'Full CBT platform access for one day',
+    price: '₦100',
+    Icon: Sun,
+  },
   weekly: {
     title: 'Weekly Plan',
     duration: 'Full CBT platform access for one week',
     price: '₦300',
-    checkoutUrl: 'https://paystack.shop/pay/7g5efoqcwn',
     Icon: Clock3,
   },
   monthly: {
     title: 'Monthly Plan',
     duration: 'Full CBT platform access for one month',
     price: '₦5,000',
-    checkoutUrl: 'https://paystack.shop/pay/he75p1tjkq',
     Icon: Clock3,
   },
   yearly: {
     title: 'Yearly Plan',
     duration: 'Full CBT platform access for one year',
     price: '₦25,000',
-    checkoutUrl: 'https://paystack.shop/pay/bgk9a5syxh',
     Icon: Crown,
   },
 }
@@ -33,8 +38,30 @@ export default function Payment({
   details: CheckoutDetails
   setActivePage: (page: string) => void
 }) {
+  const [isStartingCheckout, setIsStartingCheckout] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
   const plan = planDetails[details.plan]
   const PlanIcon = plan.Icon
+
+  const startCheckout = async () => {
+    setIsStartingCheckout(true)
+    setCheckoutError('')
+
+    try {
+      const response = await apiRequest<{ authorization_url?: unknown }>(
+        '/api/payments/paystack/initialize',
+        { method: 'POST', body: JSON.stringify({ plan: details.plan }) },
+      )
+      if (typeof response.authorization_url !== 'string') {
+        throw new Error('The server did not return a Paystack checkout URL.')
+      }
+
+      window.location.assign(response.authorization_url)
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : 'Unable to start checkout.')
+      setIsStartingCheckout(false)
+    }
+  }
 
   return (
     <div className="auth-page auth-register-page">
@@ -71,8 +98,9 @@ export default function Payment({
             <ShieldCheck size={18} />
             <p><strong>Secure Paystack checkout.</strong> You’ll complete your payment on Paystack’s hosted page.</p>
           </div>
-          <button type="button" className="auth-btn-primary" onClick={() => window.location.assign(plan.checkoutUrl)}>
-            Pay securely with Paystack
+          {checkoutError && <div className="auth-error" role="alert">{checkoutError}</div>}
+          <button type="button" className="auth-btn-primary" onClick={startCheckout} disabled={isStartingCheckout}>
+            {isStartingCheckout ? 'Connecting to Paystack...' : 'Pay securely with Paystack'}
           </button>
           <p className="auth-secure-note"><ShieldCheck size={14} /> Your account should be activated only after payment is verified by the server.</p>
         </section>

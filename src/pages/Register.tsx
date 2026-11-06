@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, Check, Clock3, Crown, Timer } from 'lucide-react'
+import { ArrowRight, Check, Clock3, Crown, Sun, Timer } from 'lucide-react'
 import './Auth.css'
 
-export type SubscriptionPlan = 'weekly' | 'monthly' | 'yearly'
+export type SubscriptionPlan = 'daily' | 'weekly' | 'monthly' | 'yearly'
 export type CheckoutDetails = { name: string; email: string; plan: SubscriptionPlan }
 
 export default function Register({
@@ -74,6 +74,18 @@ export default function Register({
                 <p>Get full access to the CBT platform for the period you choose.</p>
               </div>
               <div className="auth-plan-grid" role="radiogroup" aria-label="Choose your subscription">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={selectedPlan === 'daily'}
+                  className={`auth-plan-card${selectedPlan === 'daily' ? ' selected' : ''}`}
+                  onClick={() => setSelectedPlan('daily')}
+                >
+                  <span className="auth-plan-top"><span className="auth-plan-icon"><Sun size={19} /></span>{selectedPlan === 'daily' && <span className="auth-plan-check"><Check size={14} /></span>}</span>
+                  <strong>Daily Plan</strong>
+                  <span className="auth-plan-price">₦100</span>
+                  <span className="auth-plan-description">Full CBT platform access for one day.</span>
+                </button>
                 <button
                   type="button"
                   role="radio"
