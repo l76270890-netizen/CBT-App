@@ -102,6 +102,7 @@ QUESTION_IMPORT_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
 VALID_ROLES = {"school_admin", "teacher", "exam_officer", "student"}
 ADMIN_ROLES = {"school_admin", "teacher", "exam_officer"}
 SUBSCRIPTION_PLANS = {
+    "daily": {"amount": 10000, "price": 100, "duration_days": 1},
     "weekly": {"amount": 30000, "price": 300, "duration_days": 7},
     "monthly": {"amount": 500000, "price": 5000, "duration_months": 1},
     "yearly": {"amount": 2500000, "price": 25000, "duration_months": 12},
@@ -694,7 +695,8 @@ def initialize_paystack_checkout():
 
     plan = data.get("plan")
     if not isinstance(plan, str) or plan not in SUBSCRIPTION_PLANS:
-        return api_error("plan must be 'weekly', 'monthly', or 'yearly'.")
+        available_plans = ", ".join(SUBSCRIPTION_PLANS)
+        return api_error(f"plan must be one of: {available_plans}.")
 
     payment_url_key = f"PAYSTACK_{plan.upper()}_PAYMENT_URL"
     authorization_url = os.environ.get(payment_url_key, "").strip()
