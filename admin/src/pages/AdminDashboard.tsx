@@ -26,7 +26,7 @@ const formatExamDate = (value: string) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
 };
 
-export default function AdminDashboard({ setActivePage }: { setActivePage: (p:string)=>void }) {
+export default function AdminDashboard() {
   const [authState, setAuthState] = useState<"checking" | "signedOut" | "denied" | "authenticated">("checking");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -437,7 +437,6 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     <div className="admin-wrap"><div className="admin-login-card">
       <div className="admin-logo"><img src="/icons/examcore-192.png" alt="ExamCore" />EXAMCORE<span>ADMIN</span></div>
       <h2>Access denied</h2><p className="admin-sub">{authError || "Your account does not have admin access."}</p>
-      <button className="admin-btn ghost" onClick={()=>setActivePage("home")}>Back to Home</button>
     </div></div>
   );
 
@@ -449,7 +448,6 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
       <div className="admin-field"><label htmlFor="admin-email">Email</label><input id="admin-email" type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} required /></div>
       <div className="admin-field"><label htmlFor="admin-password">Password</label><input id="admin-password" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required /></div>
       <button className="admin-btn primary" type="submit" disabled={!email || !password}>Sign In</button>
-      <button type="button" className="admin-btn ghost" onClick={()=>setActivePage("home")}>Back to Home</button>
     </form></div>
   );
   return (
