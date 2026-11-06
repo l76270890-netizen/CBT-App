@@ -68,12 +68,17 @@ app.config["SESSION_COOKIE_SAMESITE"] = os.environ.get(
 app.config["SESSION_TTL_HOURS"] = int(
     os.environ.get("SESSION_TTL_HOURS", "24"))
 
-configured_origins = os.environ.get(
-    "FRONTEND_ORIGINS", os.environ.get(
-        "FRONTEND_ORIGIN", "http://localhost:3000")
-)
-FRONTEND_ORIGINS = [origin.strip()
-                    for origin in configured_origins.split(",") if origin.strip()]
+configured_origins = [
+    os.environ.get("FRONTEND_ORIGINS", os.environ.get(
+        "FRONTEND_ORIGIN", "http://localhost:3000")),
+    os.environ.get("ADMIN_FRONTEND_ORIGINS", ""),
+]
+FRONTEND_ORIGINS = [
+    origin.strip()
+    for configured in configured_origins
+    for origin in configured.split(",")
+    if origin.strip()
+]
 CORS(app, resources={r"/api/*": {"origins": FRONTEND_ORIGINS}},
      supports_credentials=True)
 

@@ -16,7 +16,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import './Account.css'
-import { API_URL } from '../config'
+import { ADMIN_APP_URL, API_URL } from '../config'
 import { apiRequest, asArray } from '../api'
 
 type Props = {
@@ -275,7 +275,7 @@ export default function Account({ setActivePage }: Props) {
             label: 'Admin Dashboard',
             icon: Shield,
             desc: 'Manage exams and students',
-            action: () => setActivePage('admin'),
+            action: () => window.location.assign(ADMIN_APP_URL),
           },
 
     {

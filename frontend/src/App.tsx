@@ -11,7 +11,6 @@ import Account from './pages/Account'
 import Result from './pages/Result'
 import PracticeHistory from './pages/PracticeHistory'
 import Review from './pages/Review'
-import AdminDashboard from './pages/AdminDashboard'
 import TestInstructions from './pages/TestInstructions'
 import GeneralKnowledge from './pages/GeneralKnowledge'
 import LandingMobile from './pages/LandingMobile'
@@ -67,8 +66,7 @@ export default function App() {
     setCheckingAuth(false)
   }, [])
 
-  const hideNavbarPages = ['landing', 'login', 'register', 'payment', 'paymentReceived', 'activation', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
-  const AdminAny = AdminDashboard as any
+  const hideNavbarPages = ['landing', 'login', 'register', 'payment', 'paymentReceived', 'activation', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'generalKnowledge']
 
   if (checkingAuth) {
     return (
@@ -124,7 +122,6 @@ export default function App() {
           {page === 'account' && <Account setActivePage={setPage} />}
           {page === 'practiceHistory' && <PracticeHistory setActivePage={setPage} />}
           {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={setPage} setTestConfig={setTestConfig} examId={testConfig.examId || testConfig.customExamId} />}
-          {page === 'admin' && <AdminAny setActivePage={setPage} />}
         </main>
       </div>
     </AuthProvider>

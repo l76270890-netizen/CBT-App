@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Home, FileText, BookOpen, History, User, LogOut, Settings, Bell, Menu, X, ChevronRight, Edit2, CheckCheck, Trash2, Search, Funnel, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import './Navbar.css'
-import { API_URL } from '../config'
+import { ADMIN_APP_URL, API_URL } from '../config'
 import { apiRequest, asArray } from '../api'
 
 type Notif = { id: string; title: string; message: string; time: string; read: boolean; type: 'success'|'info'|'warning' }
@@ -119,6 +119,12 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
   const handleNavClick = async (id: string) => {
     if (demoMode) {
       onDemoNavigate?.(id)
+      setMenuOpen(false)
+      setShowNotif(false)
+      return
+    }
+    if (id === 'admin') {
+      window.location.assign(ADMIN_APP_URL)
       setMenuOpen(false)
       setShowNotif(false)
       return
