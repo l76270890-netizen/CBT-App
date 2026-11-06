@@ -1,0 +1,1853 @@
+"""School-scoped CBT API.
+
+Authentication uses an opaque, database-backed session in an HttpOnly cookie.
+The cookie value is never included in JSON responses; each request resolves the
+session and current user/role from the database.
+"""
+import calendar
+from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
+from functools import wraps
+import csv
+import hashlib
+import hmac
+import io
+import json
+import math
+import os
+import secrets
+import stat
+import time
+import tempfile
+import re
+from urllib.parse import urlsplit
+import smtplib
+import zipfile
+import zlib
+
+from flask import Flask, jsonify, request, send_from_directory, make_response, g
+from flask_cors import CORS
+from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import func, or_
+from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.datastructures import FileStorage
+from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
+
+try:
+    import cloudinary
+    import cloudinary.uploader
+    HAS_CLOUDINARY = True
+    if os.environ.get("CLOUDINARY_CLOUD_NAME"):
+        cloudinary.config(
+            cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+            api_key=os.environ.get("CLOUDINARY_API_KEY"),
+            api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
+        )
+except ImportError:
+    HAS_CLOUDINARY = False
+
+
+app = Flask(__name__)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+    "DATABASE_URL", f"sqlite:///{os.path.join(os.path.abspath(os.path.dirname(__file__)), 'examcore.db')}"
+).replace("postgres://", "postgresql://", 1)
+app.config["SESSION_COOKIE_NAME"] = os.environ.get(
+    "SESSION_COOKIE_NAME", "school_admin_session")
+is_production = (os.environ.get("APP_ENV") == "production" or
+                 os.environ.get("VERCEL_ENV") == "production")
+is_vercel = os.environ.get("VERCEL") == "1"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get(
+    "COOKIE_SECURE", "true" if is_production or is_vercel else "false"
+).lower() == "true"
+app.config["SESSION_COOKIE_SAMESITE"] = os.environ.get(
+    "COOKIE_SAMESITE", "None" if is_production or is_vercel else "Lax"
+)
+app.config["SESSION_TTL_HOURS"] = int(
+    os.environ.get("SESSION_TTL_HOURS", "24"))
+
+configured_origins = os.environ.get(
+    "FRONTEND_ORIGINS", os.environ.get(
+        "FRONTEND_ORIGIN", "http://localhost:3000")
+)
+FRONTEND_ORIGINS = [origin.strip()
+                    for origin in configured_origins.split(",") if origin.strip()]
+CORS(app, resources={r"/api/*": {"origins": FRONTEND_ORIGINS}},
+     supports_credentials=True)
+
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+
+BASEDIR = os.path.abspath(os.path.dirname(__file__))
+is_serverless = is_vercel or bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER") or os.path.join(
+    tempfile.gettempdir() if is_serverless else BASEDIR,
+    "examcore-uploads" if is_serverless else "uploads",
+)
+QUESTION_STORAGE_IS_PERSISTENT = not is_serverless or bool(os.environ.get("UPLOAD_FOLDER"))
+AVATAR_FOLDER = os.path.join(UPLOAD_FOLDER, "avatars")
+QUESTION_FOLDER = os.path.join(UPLOAD_FOLDER, "questions")
+os.makedirs(AVATAR_FOLDER, exist_ok=True)
+os.makedirs(QUESTION_FOLDER, exist_ok=True)
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "jfif"}
+MAX_QUESTION_ARCHIVE_BYTES = 25 * 1024 * 1024
+MAX_QUESTION_ARCHIVE_TOTAL_BYTES = 50 * 1024 * 1024
+MAX_QUESTION_CSV_BYTES = 5 * 1024 * 1024
+MAX_QUESTION_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_QUESTION_README_BYTES = 128 * 1024
+MAX_QUESTION_IMPORT_ROWS = 500
+QUESTION_IMPORT_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
+VALID_ROLES = {"school_admin", "teacher", "exam_officer", "student"}
+ADMIN_ROLES = {"school_admin", "teacher", "exam_officer"}
+SUBSCRIPTION_PLANS = {
+    "daily": {"amount": 10000, "price": 100, "duration_days": 1},
+    "weekly": {"amount": 30000, "price": 300, "duration_days": 7},
+    "monthly": {"amount": 500000, "price": 5000, "duration_months": 1},
+    "yearly": {"amount": 2500000, "price": 25000, "duration_months": 12},
+}
+
+
+def utcnow():
+    return datetime.utcnow()
+
+
+def iso_utc(value):
+    return value.isoformat(timespec="seconds") + "Z" if value else None
+
+
+def parse_scheduled_at(value):
+    if value is None:
+        return None, None
+    if not isinstance(value, str) or not value.strip():
+        return None, "scheduledAt must be an ISO 8601 date or datetime."
+    try:
+        scheduled_at = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None, "scheduledAt must be an ISO 8601 date or datetime."
+    if scheduled_at.tzinfo is not None:
+        scheduled_at = scheduled_at.astimezone(timezone.utc).replace(tzinfo=None)
+    return scheduled_at, None
+
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def valid_question_import_image(filename, contents):
+    extension = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
+    if extension == "png":
+        return contents.startswith(b"\x89PNG\r\n\x1a\n")
+    if extension in {"jpg", "jpeg"}:
+        return contents.startswith(b"\xff\xd8\xff")
+    return False
+
+
+def upload_to_cloudinary(file, folder):
+    if HAS_CLOUDINARY and os.environ.get("CLOUDINARY_CLOUD_NAME"):
+        try:
+            result = cloudinary.uploader.upload(file, folder=folder)
+            return result["secure_url"]
+        except Exception:
+            app.logger.exception("Cloud image upload failed")
+    return None
+
+
+def get_image_url(path):
+    if not path:
+        return None
+    if path.startswith("http"):
+        return path
+    return f"/uploads/{path}"
+
+
+def store_question_image(file):
+    cloud_url = upload_to_cloudinary(file, "examcore/questions")
+    if cloud_url:
+        return cloud_url, None
+    if not QUESTION_STORAGE_IS_PERSISTENT:
+        return None, "Permanent image storage is unavailable. Configure Cloudinary or set UPLOAD_FOLDER to a persistent volume."
+
+    filename = f"q_{secrets.token_hex(12)}_{secure_filename(file.filename)}"
+    try:
+        file.save(os.path.join(QUESTION_FOLDER, filename))
+    except OSError:
+        app.logger.exception("Question image could not be saved")
+        return None, "Question image could not be saved to permanent storage."
+    return f"questions/{filename}", None
+
+
+def read_question_import_archive(file):
+    archive_data = file.read(MAX_QUESTION_ARCHIVE_BYTES + 1)
+    if len(archive_data) > MAX_QUESTION_ARCHIVE_BYTES:
+        return None, None, "ZIP files must be 25 MB or smaller.", 413
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive_data)) as archive:
+            members = archive.infolist()
+            if len(members) > MAX_QUESTION_IMPORT_ROWS + 3:
+                return None, None, "The ZIP contains too many files.", 400
+            if sum(member.file_size for member in members) > MAX_QUESTION_ARCHIVE_TOTAL_BYTES:
+                return None, None, "The uncompressed ZIP contents exceed 50 MB.", 400
+
+            csv_info = None
+            image_infos = {}
+            seen_names = set()
+            for member in members:
+                name = member.filename
+                if (not name or "\\" in name or name.startswith("/") or
+                        any(part in {"", ".", ".."} for part in name.rstrip("/").split("/"))):
+                    return None, None, "The ZIP contains an invalid file path.", 400
+                if name in seen_names:
+                    return None, None, f"The ZIP contains a duplicate path: {name}.", 400
+                seen_names.add(name)
+
+                unix_mode = member.external_attr >> 16
+                if stat.S_ISLNK(unix_mode) or member.flag_bits & 0x1:
+                    return None, None, "The ZIP cannot contain links or encrypted files.", 400
+                if member.is_dir():
+                    if name != "images/":
+                        return None, None, "Only the images/ directory is allowed in the ZIP.", 400
+                    continue
+                if name == "README.txt":
+                    if member.file_size > MAX_QUESTION_README_BYTES:
+                        return None, None, "README.txt must be 128 KB or smaller.", 400
+                    continue
+                if name.lower() == "questions.csv":
+                    if name != "questions.csv" or csv_info is not None:
+                        return None, None, "The ZIP must contain one root-level questions.csv file.", 400
+                    if member.file_size > MAX_QUESTION_CSV_BYTES:
+                        return None, None, "questions.csv must be 5 MB or smaller.", 400
+                    csv_info = member
+                    continue
+                if name.startswith("images/") and name.count("/") == 1:
+                    filename = name[len("images/"):]
+                    extension = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
+                    if not filename or extension not in QUESTION_IMPORT_IMAGE_EXTENSIONS:
+                        return None, None, f"Image {name} must be a PNG, JPG, or JPEG file.", 400
+                    if member.file_size > MAX_QUESTION_IMAGE_BYTES:
+                        return None, None, f"Image {filename} must be 10 MB or smaller.", 400
+                    image_infos[name] = member
+                    continue
+                return None, None, f"Unsupported file in ZIP: {name}.", 400
+
+            if csv_info is None:
+                return None, None, "The ZIP must contain a root-level questions.csv file.", 400
+            if len(image_infos) > MAX_QUESTION_IMPORT_ROWS:
+                return None, None, "The ZIP can contain at most 500 question images.", 400
+
+            expanded_size = 0
+
+            def read_member(member, limit):
+                nonlocal expanded_size
+                with archive.open(member) as stream:
+                    contents = stream.read(limit + 1)
+                if len(contents) > limit:
+                    return None, "A ZIP file exceeds its allowed size."
+                expanded_size += len(contents)
+                if expanded_size > MAX_QUESTION_ARCHIVE_TOTAL_BYTES:
+                    return None, "The uncompressed ZIP contents exceed 50 MB."
+                if len(contents) != member.file_size:
+                    return None, "A ZIP file has an invalid declared size."
+                return contents, None
+
+            csv_data, error = read_member(csv_info, MAX_QUESTION_CSV_BYTES)
+            if error:
+                return None, None, error, 400
+            images = {}
+            for name, member in image_infos.items():
+                image_data, error = read_member(member, MAX_QUESTION_IMAGE_BYTES)
+                if error:
+                    return None, None, error, 400
+                if not valid_question_import_image(name, image_data):
+                    return None, None, f"Image {name} is not a valid PNG, JPG, or JPEG file.", 400
+                images[name] = image_data
+            return csv_data, images, None, None
+    except (zipfile.BadZipFile, EOFError, OSError, RuntimeError, NotImplementedError, zlib.error):
+        return None, None, "The uploaded file is not a valid, readable ZIP archive.", 400
+
+
+def parse_question_import_csv(contents, images, exam):
+    try:
+        text = contents.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return None, "questions.csv must use UTF-8 encoding."
+
+    try:
+        try:
+            delimiter = csv.Sniffer().sniff(text[:8192], delimiters=",;\t").delimiter
+        except csv.Error:
+            delimiter = ","
+        reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=delimiter)
+        if not reader.fieldnames:
+            return None, "questions.csv must include a header row."
+        headers = [re.sub(r"[^a-z0-9]", "", header.strip().lower())
+                   for header in reader.fieldnames]
+        if len(headers) != len(set(headers)):
+            return None, "questions.csv contains duplicate column names."
+        required_headers = {
+            "question", "optiona", "optionb", "optionc", "optiond",
+            "correctanswer", "subject", "explanation",
+        }
+        missing_headers = sorted(required_headers - set(headers))
+        if missing_headers:
+            return None, f"questions.csv is missing required columns: {', '.join(missing_headers)}."
+
+        prepared = []
+        seen_questions = set()
+        for row_number, raw_row in enumerate(reader, start=2):
+            if None in raw_row:
+                return None, f"Question row {row_number} has more values than the header."
+            row = {header: (raw_row.get(original) or "").strip()
+                   for header, original in zip(headers, reader.fieldnames)}
+            if not any(row.values()):
+                continue
+            if len(prepared) >= MAX_QUESTION_IMPORT_ROWS:
+                return None, "Import up to 500 questions at a time."
+
+            image_reference = row.get("imageurl", "")
+            data = {
+                "subject": row.get("subject", ""),
+                "question": row.get("question", ""),
+                "options": {
+                    "A": row.get("optiona", ""),
+                    "B": row.get("optionb", ""),
+                    "C": row.get("optionc", ""),
+                    "D": row.get("optiond", ""),
+                },
+                "correctAnswer": row.get("correctanswer", "").upper(),
+                "explanation": row.get("explanation", ""),
+            }
+            image_member = None
+            if image_reference.lower().startswith(("http://", "https://")):
+                data["imageUrl"] = image_reference
+            elif image_reference:
+                filename = image_reference[len("images/"):] if image_reference.startswith("images/") else image_reference
+                if (not filename or "/" in filename or "\\" in filename or
+                        filename in {".", ".."} or
+                        filename.rsplit(".", 1)[-1].lower() not in QUESTION_IMPORT_IMAGE_EXTENSIONS):
+                    return None, f"Question row {row_number} has an invalid image filename."
+                image_member = f"images/{filename}"
+                if image_member not in images:
+                    return None, f"Question row {row_number} references missing image {filename}."
+
+            validated, error = validate_question_payload(data, exam)
+            if error:
+                return None, f"Question row {row_number}: {error}"
+            question_key = (validated["subject"].casefold(),
+                            " ".join(validated["question"].casefold().split()))
+            if question_key in seen_questions:
+                return None, f"Question row {row_number} duplicates an earlier question."
+            seen_questions.add(question_key)
+            prepared.append((validated, image_member))
+
+        if not prepared:
+            return None, "questions.csv does not contain any question rows."
+        return prepared, None
+    except csv.Error:
+        return None, "Could not parse questions.csv. Check its delimiter and quoting."
+
+
+class School(db.Model):
+    __tablename__ = "schools"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+class SchoolClass(db.Model):
+    __tablename__ = "school_classes"
+    id = db.Column(db.Integer, primary_key=True)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    __table_args__ = (db.UniqueConstraint(
+        "school_id", "name", name="uq_school_class_name"),)
+
+
+class User(db.Model):
+    __tablename__ = "users"
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    password = db.Column(db.String(200), nullable=False)
+    profile_image = db.Column(db.String(1000), nullable=True)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=True, index=True)
+    role = db.Column(db.String(32), nullable=False,
+                     default="student", index=True)
+    class_id = db.Column(db.Integer, db.ForeignKey(
+        "school_classes.id"), nullable=True, index=True)
+    account_status = db.Column(
+        db.String(20), nullable=False, default="active", index=True)
+    last_seen_at = db.Column(db.DateTime, nullable=True, index=True)
+    subscription_plan = db.Column(db.String(16), nullable=True)
+    subscription_expires_at = db.Column(db.DateTime, nullable=True, index=True)
+
+
+class Exam(db.Model):
+    __tablename__ = "exams"
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200))
+    examType = db.Column(db.String(80))
+    # Retained for compatibility with existing records and frontend payloads.
+    subject = db.Column(db.String(500))
+    year = db.Column(db.Integer)
+    duration = db.Column(db.Integer)
+    scheduled_at = db.Column(db.DateTime, nullable=True, index=True)
+    totalQuestions = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=True, index=True)
+
+
+class ExamSubject(db.Model):
+    __tablename__ = "exam_subjects"
+    id = db.Column(db.Integer, primary_key=True)
+    exam_id = db.Column(db.Integer, db.ForeignKey(
+        "exams.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    __table_args__ = (db.UniqueConstraint(
+        "exam_id", "name", name="uq_exam_subject_name"),)
+
+
+class Question(db.Model):
+    __tablename__ = "questions"
+    id = db.Column(db.Integer, primary_key=True)
+    examId = db.Column(db.Integer, db.ForeignKey(
+        "exams.id"), nullable=True, index=True)
+    examType = db.Column(db.String(80))
+    subject = db.Column(db.String(100))
+    question = db.Column(db.Text)
+    options = db.Column(db.JSON)
+    answer = db.Column(db.String(10))
+    explanation = db.Column(db.Text)
+    year = db.Column(db.Integer, default=2024)
+    image_path = db.Column(db.String(1000), nullable=True)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=True, index=True)
+
+
+class CBTResult(db.Model):
+    """Legacy personal history record; only visible to its authenticated owner."""
+    __tablename__ = "results"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey(
+        "users.id"), nullable=True, index=True)
+    email = db.Column(db.String(120))
+    title = db.Column(db.String(200), default="Practice Test")
+    score = db.Column(db.Float)
+    total = db.Column(db.Float)
+    duration = db.Column(db.String(20), default="0m")
+    status = db.Column(db.String(20), default="Failed")
+    mode = db.Column(db.String(20), default="exam")
+    examType = db.Column(db.String(80))
+    date = db.Column(db.DateTime, default=utcnow)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=True, index=True)
+    exam_id = db.Column(db.Integer, db.ForeignKey(
+        "exams.id"), nullable=True, index=True)
+    subject_name = db.Column(db.String(120), nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True, index=True)
+
+
+class Attempt(db.Model):
+    __tablename__ = "attempts"
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(db.Integer, db.ForeignKey(
+        "users.id"), nullable=False, index=True)
+    school_id = db.Column(db.Integer, db.ForeignKey(
+        "schools.id"), nullable=False, index=True)
+    exam_id = db.Column(db.Integer, db.ForeignKey(
+        "exams.id"), nullable=False, index=True)
+    subject = db.Column(db.String(120), nullable=False, index=True)
+    score = db.Column(db.Float, nullable=False)
+    total = db.Column(db.Float, nullable=False)
+    completed_at = db.Column(db.DateTime, nullable=False,
+                             default=utcnow, index=True)
+
+    @property
+    def percentage(self):
+        return round((self.score / self.total) * 100, 2) if self.total else None
+
+
+class AuthToken(db.Model):
+    __tablename__ = "auth_tokens"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey(
+        "users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = db.Column(db.String(64), unique=True,
+                           nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+
+
+class PaystackPayment(db.Model):
+    __tablename__ = "paystack_payments"
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    email = db.Column(db.String(254), nullable=False, index=True)
+    plan = db.Column(db.String(16), nullable=False)
+    amount = db.Column(db.Integer, nullable=False)
+    currency = db.Column(db.String(3), nullable=False)
+    pin_hash = db.Column(db.String(255), nullable=True)
+    pin_expires_at = db.Column(db.DateTime, nullable=True, index=True)
+    pin_attempts = db.Column(db.Integer, nullable=False, default=0)
+    pin_used_at = db.Column(db.DateTime, nullable=True)
+    email_sent_at = db.Column(db.DateTime, nullable=True)
+    verified_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+def api_error(message, status=400, code=None):
+    payload = {"success": False, "error": message}
+    if code:
+        payload["code"] = code
+    return jsonify(payload), status
+
+
+def json_body():
+    return request.get_json(silent=True) or {}
+
+
+def require_auth(fn):
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        raw_token = request.cookies.get(app.config["SESSION_COOKIE_NAME"])
+        if not raw_token:
+            return api_error("Authentication required.", 401, "unauthenticated")
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        session = AuthToken.query.filter_by(
+            token_hash=token_hash, revoked_at=None).first()
+        if not session or session.expires_at <= utcnow():
+            return api_error("Session is invalid or expired. Please sign in again.", 401, "invalid_session")
+        user = db.session.get(User, session.user_id)
+        if not user or user.account_status != "active" or not user.school_id:
+            return api_error("This account is not active or assigned to a school.", 403, "account_unavailable")
+        g.current_user = user
+        g.auth_session = session
+        return fn(*args, **kwargs)
+    return wrapped
+
+
+def roles_required(*roles):
+    def decorate(fn):
+        @wraps(fn)
+        @require_auth
+        def wrapped(*args, **kwargs):
+            if g.current_user.role not in roles:
+                return api_error("Your account role cannot access this endpoint.", 403, "forbidden")
+            return fn(*args, **kwargs)
+        return wrapped
+    return decorate
+
+
+def cookie_response(payload, raw_token=None, clear=False):
+    response = make_response(jsonify(payload))
+    cookie_name = app.config["SESSION_COOKIE_NAME"]
+    if clear:
+        response.delete_cookie(cookie_name, path="/", secure=app.config["SESSION_COOKIE_SECURE"], httponly=True,
+                               samesite=app.config["SESSION_COOKIE_SAMESITE"])
+    elif raw_token:
+        response.set_cookie(cookie_name, raw_token, max_age=app.config["SESSION_TTL_HOURS"] * 3600,
+                            httponly=True, secure=app.config["SESSION_COOKIE_SECURE"],
+                            samesite=app.config["SESSION_COOKIE_SAMESITE"], path="/")
+    return response
+
+
+def issue_session(user):
+    raw = secrets.token_urlsafe(40)
+    db.session.add(AuthToken(user_id=user.id, token_hash=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                             expires_at=utcnow() + timedelta(hours=app.config["SESSION_TTL_HOURS"])))
+    db.session.commit()
+    return raw
+
+
+def student_payload(user):
+    class_row = db.session.get(
+        SchoolClass, user.class_id) if user.class_id else None
+    return {"id": user.id, "displayName": user.username, "email": user.email,
+            "class": class_row.name if class_row and class_row.school_id == user.school_id else None,
+            "accountStatus": user.account_status, "lastSeenAt": iso_utc(user.last_seen_at)}
+
+
+def subjects_for_exam(exam):
+    names = [row.name for row in ExamSubject.query.filter_by(
+        exam_id=exam.id).order_by(ExamSubject.name).all()]
+    if not names and exam.subject:
+        names = [value.strip()
+                 for value in exam.subject.split(",") if value.strip()]
+    return names
+
+
+@app.before_request
+def enforce_cookie_origin_for_writes():
+    # Cookie authentication on cross-origin requests is only accepted from the
+    # configured frontend origins. Requests without Origin remain usable by CLI clients.
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.cookies.get(app.config["SESSION_COOKIE_NAME"]):
+        origin = request.headers.get("Origin")
+        if origin and origin not in FRONTEND_ORIGINS:
+            return api_error("Request origin is not allowed.", 403, "invalid_origin")
+
+
+@app.errorhandler(404)
+def not_found(_error):
+    return api_error("Resource not found.", 404, "not_found")
+
+
+@app.errorhandler(500)
+def internal_error(_error):
+    db.session.rollback()
+    return api_error("An internal server error occurred.", 500, "internal_error")
+
+
+@app.route("/")
+def home():
+    return jsonify(message="CBT Backend is LIVE", status="ok", cloudinary=HAS_CLOUDINARY)
+
+
+@app.route("/uploads/<path:filename>")
+def serve_upload(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
+
+@app.route("/api/register", methods=["POST"])
+def register():
+    data = json_body()
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password")
+    school_id = data.get("schoolId") or os.environ.get("DEFAULT_SCHOOL_ID")
+    if not email or not isinstance(password, str) or len(password) < 8:
+        return api_error("email and a password of at least 8 characters are required.")
+    # The student client has no school picker. In a single-school deployment it
+    # is safe to infer the only available school; multi-school deployments must
+    # set DEFAULT_SCHOOL_ID or pass schoolId explicitly.
+    if not school_id:
+        schools = School.query.order_by(School.id.asc()).limit(2).all()
+        if len(schools) == 1:
+            school_id = schools[0].id
+        else:
+            return api_error("schoolId is required when more than one school is configured.")
+    try:
+        school_id = int(school_id)
+    except (TypeError, ValueError):
+        return api_error("schoolId must be an integer.")
+    if not db.session.get(School, school_id):
+        return api_error("School not found.", 404, "school_not_found")
+    if User.query.filter(func.lower(User.email) == email).first():
+        return api_error("Email already exists.", 409, "email_exists")
+    class_id = data.get("classId")
+    if class_id:
+        try:
+            class_id = int(class_id)
+            class_row = db.session.get(SchoolClass, class_id)
+        except (TypeError, ValueError):
+            class_row = None
+        if not class_row or class_row.school_id != school_id:
+            return api_error("classId must refer to a class in the selected school.")
+    user = User(username=(data.get("name") or data.get("username") or email.split("@")[0]).strip(),
+                email=email, password=generate_password_hash(password), school_id=school_id,
+                role="student", class_id=class_id, account_status="active")
+    db.session.add(user)
+    db.session.commit()
+    raw_token = issue_session(user)
+    return cookie_response({"success": True, "user_id": user.id,
+                            "username": user.username, "email": user.email,
+                            "role": user.role, "profile_image": user.profile_image},
+                           raw_token=raw_token), 201
+
+
+def authenticate(data, admins_only=False):
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    user = User.query.filter(func.lower(User.email) ==
+                             email).first() if email else None
+    if not user or not check_password_hash(user.password, password):
+        return api_error("Invalid email or password.", 401, "invalid_credentials")
+    if user.account_status != "active" or not user.school_id:
+        return api_error("This account is not active or assigned to a school.", 403, "account_unavailable")
+    if admins_only and user.role not in ADMIN_ROLES:
+        return api_error("This account does not have an admin workspace role.", 403, "forbidden")
+    raw = issue_session(user)
+    return cookie_response({"success": True, "user_id": user.id, "username": user.username,
+                            "email": user.email, "role": user.role,
+                            "profile_image": user.profile_image}, raw_token=raw)
+
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    return authenticate(json_body())
+
+
+@app.route("/api/admin/login", methods=["POST"])
+def admin_login():
+    # The former hardcoded admin password has been removed. Admin users are provisioned
+    # with the Flask CLI and authenticate with their own hashed account password.
+    return authenticate(json_body(), admins_only=True)
+
+
+@app.route("/api/payments/paystack/initialize", methods=["POST"])
+def initialize_paystack_checkout():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return api_error("A JSON request body is required.")
+
+    plan = data.get("plan")
+    if not isinstance(plan, str) or plan not in SUBSCRIPTION_PLANS:
+        available_plans = ", ".join(SUBSCRIPTION_PLANS)
+        return api_error(f"plan must be one of: {available_plans}.")
+
+    payment_url_key = f"PAYSTACK_{plan.upper()}_PAYMENT_URL"
+    authorization_url = os.environ.get(payment_url_key, "").strip()
+    if not authorization_url:
+        app.logger.error("Paystack payment link is missing %s.", payment_url_key)
+        return api_error(
+            f"The {plan} payment link is not configured on the server.",
+            503,
+            "payment_not_configured",
+        )
+    try:
+        checkout_url = urlsplit(authorization_url)
+        checkout_host = checkout_url.hostname
+    except ValueError:
+        checkout_url = None
+        checkout_host = None
+    if (not checkout_url or checkout_url.scheme != "https" or
+            not checkout_host or
+            (checkout_host not in {"paystack.com", "paystack.shop"} and
+             not checkout_host.endswith(".paystack.com")) or
+            checkout_url.username or checkout_url.password):
+        app.logger.error(
+            "Paystack payment link has an invalid URL configured in %s.",
+            payment_url_key,
+        )
+        return api_error(
+            "The configured Paystack payment link is invalid.",
+            503,
+            "payment_not_configured",
+        )
+    return jsonify(authorization_url=authorization_url)
+
+
+@app.route("/api/payments/plans", methods=["GET"])
+def get_payment_plans():
+    return jsonify({
+        "currency": "NGN",
+        "plans": [
+            {
+                "id": plan,
+                "price": details["price"],
+                "currency": "NGN",
+                "durationDays": details.get("duration_days"),
+                "durationMonths": details.get("duration_months"),
+                "checkoutAvailable": bool(
+                    os.environ.get(f"PAYSTACK_{plan.upper()}_PAYMENT_URL", "").strip()
+                ),
+            }
+            for plan, details in SUBSCRIPTION_PLANS.items()
+        ],
+    })
+
+
+def send_activation_pin(email, pin, plan):
+    host = os.environ.get("SMTP_HOST", "").strip()
+    username = os.environ.get("SMTP_USERNAME", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "")
+    sender = os.environ.get("MAIL_FROM_EMAIL", "").strip()
+    try:
+        port = int(os.environ.get("SMTP_PORT", "587"))
+    except ValueError as error:
+        raise ValueError("SMTP_PORT must be an integer.") from error
+    if not host or not username or not password or not sender:
+        raise ValueError(
+            "SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, and MAIL_FROM_EMAIL are required.")
+
+    message = EmailMessage()
+    message["Subject"] = "Your CBT account activation PIN"
+    message["From"] = sender
+    message["To"] = email
+    message.set_content(
+        f"Your {plan} plan payment was verified.\n\n"
+        f"Your single-use activation PIN is: {pin}\n\n"
+        "Enter this PIN on the CBT app to activate your account. "
+        "It expires in 24 hours. If you did not make this payment, ignore this email."
+    )
+    if port == 465:
+        with smtplib.SMTP_SSL(host, port, timeout=15) as server:
+            server.login(username, password)
+            refused = server.send_message(message)
+    else:
+        with smtplib.SMTP(host, port, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(username, password)
+            refused = server.send_message(message)
+    if refused:
+        raise smtplib.SMTPRecipientsRefused(refused)
+
+
+def add_subscription_period(start, plan):
+    plan_details = SUBSCRIPTION_PLANS[plan]
+    if "duration_days" in plan_details:
+        return start + timedelta(days=plan_details["duration_days"])
+    months = plan_details["duration_months"]
+    month_index = start.month - 1 + months
+    year = start.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(start.day, calendar.monthrange(year, month)[1])
+    return start.replace(year=year, month=month, day=day)
+
+
+@app.route("/api/payments/paystack/webhook", methods=["POST"])
+def paystack_webhook():
+    secret_key = os.environ.get("PAYSTACK_SECRET_KEY", "").strip()
+    if not secret_key:
+        app.logger.error("Paystack webhook is missing PAYSTACK_SECRET_KEY.")
+        return api_error("Payment verification is not configured.", 503, "payment_not_configured")
+
+    raw_body = request.get_data(cache=True)
+    signature = request.headers.get("x-paystack-signature", "")
+    expected_signature = hmac.new(
+        secret_key.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+    if not signature or not hmac.compare_digest(signature, expected_signature):
+        return api_error("Invalid Paystack webhook signature.", 401, "invalid_signature")
+    try:
+        event_body = json.loads(raw_body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return api_error("Invalid webhook JSON.")
+    if not isinstance(event_body, dict):
+        return api_error("Invalid webhook event.")
+    if event_body.get("event") != "charge.success":
+        return jsonify(success=True, ignored=True)
+
+    event_data = event_body.get("data")
+    reference = event_data.get("reference") if isinstance(event_data, dict) else None
+    if not isinstance(reference, str) or not reference.strip() or len(reference) > 120:
+        return api_error("Webhook transaction reference is invalid.")
+    transaction = event_data
+    customer = transaction.get("customer")
+    verified_email = customer.get("email") if isinstance(customer, dict) else None
+    verified_reference = transaction.get("reference")
+    amount = transaction.get("amount")
+    currency = transaction.get("currency")
+    if (transaction.get("status") != "success" or verified_reference != reference or
+            currency != "NGN" or type(amount) is not int or
+            not isinstance(verified_email, str) or
+            not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", verified_email.strip())):
+        app.logger.warning(
+            "Signed Paystack webhook failed status, reference, currency, amount, or email validation.")
+        return api_error("Payment event details are invalid.", 400, "invalid_payment")
+
+    matching_plans = [plan for plan, details in SUBSCRIPTION_PLANS.items()
+                      if amount == details["amount"]]
+    if len(matching_plans) != 1:
+        app.logger.warning("Signed Paystack transaction amount does not match an available plan.")
+        return api_error("Payment amount does not match an available plan.", 400, "plan_amount_mismatch")
+    plan = matching_plans[0]
+    email = verified_email.strip().lower()
+    now = utcnow()
+
+    payment = PaystackPayment.query.filter_by(reference=reference).with_for_update().first()
+    if payment:
+        if (payment.email != email or payment.plan != plan or
+                payment.amount != amount or payment.currency != currency):
+            app.logger.error("Paystack reference was received with conflicting verified transaction details.")
+            return api_error("Payment reference conflicts with a previously processed transaction.", 409, "payment_conflict")
+        if payment.email_sent_at:
+            return jsonify(success=True, duplicate=True)
+    else:
+        PaystackPayment.query.filter(
+            PaystackPayment.email == email,
+            PaystackPayment.pin_used_at.is_(None),
+            PaystackPayment.pin_expires_at > now,
+        ).update({"pin_expires_at": now}, synchronize_session=False)
+        payment = PaystackPayment(
+            reference=reference,
+            email=email,
+            plan=plan,
+            amount=amount,
+            currency=currency,
+            verified_at=now,
+        )
+        db.session.add(payment)
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            app.logger.exception("Could not record verified Paystack transaction.")
+            return api_error("Could not record the verified payment.", 500, "payment_record_failed")
+
+    payment = PaystackPayment.query.filter_by(reference=reference).with_for_update().first()
+    if payment.email_sent_at:
+        return jsonify(success=True, duplicate=True)
+    pin = f"{secrets.randbelow(100_000_000):08d}"
+    payment.pin_hash = generate_password_hash(pin)
+    payment.pin_expires_at = now + timedelta(hours=24)
+    payment.pin_attempts = 0
+    try:
+        send_activation_pin(email, pin, plan)
+        payment.email_sent_at = utcnow()
+        db.session.commit()
+    except (OSError, ValueError, smtplib.SMTPException, SQLAlchemyError) as error:
+        db.session.rollback()
+        app.logger.error("Could not email the verified-payment activation PIN: %s", error)
+        return api_error("Could not email the activation PIN. Please retry the webhook.", 503, "activation_email_failed")
+    return jsonify(success=True, message="Payment verified and activation PIN emailed.")
+
+
+@app.route("/api/payments/paystack/redeem", methods=["POST"])
+def redeem_paystack_activation_pin():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return api_error("A JSON request body is required.")
+    email = data.get("email")
+    pin = data.get("pin")
+    if (not isinstance(email, str) or len(email.strip()) > 254 or
+            not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip())):
+        return api_error("A valid email address is required.")
+    if not isinstance(pin, str) or not re.fullmatch(r"\d{8}", pin.strip()):
+        return api_error("pin must be the 8-digit code sent to your email.")
+    email = email.strip().lower()
+    now = utcnow()
+    payment = PaystackPayment.query.filter(
+        PaystackPayment.email == email,
+        PaystackPayment.email_sent_at.isnot(None),
+        PaystackPayment.pin_used_at.is_(None),
+        PaystackPayment.pin_expires_at > now,
+    ).order_by(PaystackPayment.created_at.desc()).with_for_update().first()
+    if not payment:
+        return api_error("PIN is invalid, expired, or already used.", 400, "invalid_pin")
+    if payment.pin_attempts >= 5:
+        return api_error("Too many PIN attempts. Request a new payment PIN.", 429, "pin_attempts_exceeded")
+    if not check_password_hash(payment.pin_hash, pin.strip()):
+        payment.pin_attempts += 1
+        db.session.commit()
+        if payment.pin_attempts >= 5:
+            return api_error("Too many PIN attempts. Request a new payment PIN.", 429, "pin_attempts_exceeded")
+        return api_error("PIN is invalid, expired, or already used.", 400, "invalid_pin")
+
+    user = User.query.filter(func.lower(User.email) == email).first()
+    is_new_user = user is None
+    if user and user.role != "student":
+        return api_error("This email belongs to a non-student account.", 409, "account_role_conflict")
+    if not user:
+        name = data.get("name")
+        password = data.get("password")
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+            return api_error("name is required and must be 80 characters or fewer.")
+        if not isinstance(password, str) or len(password) < 8:
+            return api_error("password must be at least 8 characters.")
+        school_id = data.get("schoolId") or os.environ.get("DEFAULT_SCHOOL_ID")
+        if not school_id:
+            schools = School.query.order_by(School.id.asc()).limit(2).all()
+            if len(schools) == 1:
+                school_id = schools[0].id
+            else:
+                return api_error("schoolId is required when more than one school is configured.")
+        try:
+            school_id = int(school_id)
+        except (TypeError, ValueError):
+            return api_error("schoolId must be an integer.")
+        if not db.session.get(School, school_id):
+            return api_error("School not found.", 404, "school_not_found")
+        user = User(
+            username=name.strip(),
+            email=email,
+            password=generate_password_hash(password),
+            school_id=school_id,
+            role="student",
+            account_status="active",
+        )
+        db.session.add(user)
+
+    subscription_start = now
+    if user.subscription_expires_at and user.subscription_expires_at > now:
+        subscription_start = user.subscription_expires_at
+    user.subscription_plan = payment.plan
+    user.subscription_expires_at = add_subscription_period(subscription_start, payment.plan)
+    user.account_status = "active"
+    payment.pin_used_at = now
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        app.logger.exception("Could not redeem payment activation PIN.")
+        return api_error("Could not activate this account. Please try again.", 500, "activation_failed")
+    raw_token = issue_session(user)
+    return cookie_response({
+        "success": True,
+        "user_id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+        "subscription_plan": user.subscription_plan,
+        "subscription_expires_at": iso_utc(user.subscription_expires_at),
+    }, raw_token=raw_token), 201 if is_new_user else 200
+
+
+@app.route("/api/logout", methods=["POST"])
+@require_auth
+def logout():
+    g.auth_session.revoked_at = utcnow()
+    db.session.commit()
+    return cookie_response({"success": True}, clear=True)
+
+
+
+@app.route("/api/user/delete-account", methods=["DELETE"])
+@require_auth
+def delete_account():
+    user = g.current_user
+    data = json_body()
+
+    # Require the current password to confirm deletion.
+    password = data.get("password")
+    if not isinstance(password, str) or not check_password_hash(
+        user.password, password
+    ):
+        return api_error(
+            "Incorrect password. Account was not deleted.",
+            401,
+            "invalid_credentials",
+        )
+
+    user_id = user.id
+
+    try:
+        # Delete the user's personal history.
+        CBTResult.query.filter_by(user_id=user_id).delete(
+            synchronize_session=False
+        )
+
+        # Delete the user's exam attempts.
+        Attempt.query.filter_by(student_id=user_id).delete(
+            synchronize_session=False
+        )
+
+        # Delete all sessions belonging to this account.
+        AuthToken.query.filter_by(user_id=user_id).delete(
+            synchronize_session=False
+        )
+
+        # Permanently delete the account itself.
+        db.session.delete(user)
+        db.session.commit()
+
+    except Exception:
+        db.session.rollback()
+        app.logger.exception(
+            "Account deletion failed for user %s", user_id
+        )
+        return api_error(
+            "Failed to delete account. Please try again.",
+            500,
+            "deletion_failed",
+        )
+
+    # Clear the browser's authentication cookie.
+    return cookie_response(
+        {
+            "success": True,
+            "message": "Account deleted successfully."
+        },
+        clear=True,
+    )
+
+
+
+@app.route("/api/user/upload-avatar/<int:user_id>", methods=["POST"])
+@require_auth
+def upload_avatar(user_id):
+    if user_id != g.current_user.id:
+        return api_error("You can only update your own profile image.", 403, "forbidden")
+    file = request.files.get("avatar")
+    if not file or not file.filename:
+        return api_error("No image file was provided.")
+    if not allowed_file(file.filename):
+        return api_error("Invalid image type.")
+    user = g.current_user
+    cloud_url = upload_to_cloudinary(file, "examcore/avatars")
+    if cloud_url:
+        user.profile_image = cloud_url
+    else:
+        file.seek(0)
+        filename = f"avatar_{user.id}_{int(time.time())}_{secure_filename(file.filename)}"
+        file.save(os.path.join(AVATAR_FOLDER, filename))
+        user.profile_image = f"avatars/{filename}"
+    db.session.commit()
+    return jsonify(success=True, profile_image=user.profile_image, url=get_image_url(user.profile_image))
+
+
+@app.route("/api/update-user/<int:user_id>", methods=["PUT"])
+@require_auth
+def update_user(user_id):
+    if user_id != g.current_user.id:
+        return api_error("You can only update your own account.", 403, "forbidden")
+    username = json_body().get("username")
+    if username:
+        g.current_user.username = str(username).strip()[:80]
+        db.session.commit()
+    return jsonify(success=True, username=g.current_user.username)
+
+
+@app.route("/api/exams", methods=["GET"])
+@require_auth
+def get_exams():
+    exams = Exam.query.filter_by(school_id=g.current_user.school_id).order_by(
+        Exam.created_at.desc()).all()
+    result = []
+    for exam in exams:
+        actual_questions = Question.query.filter_by(
+            examId=exam.id, school_id=g.current_user.school_id).count()
+        result.append({"id": exam.id, "title": exam.title, "examType": exam.examType,
+                       "year": exam.year, "duration": exam.duration,
+                       "scheduledAt": iso_utc(exam.scheduled_at),
+                       "subjects": subjects_for_exam(exam), "totalQuestions": actual_questions})
+    return jsonify(result)
+
+@app.route("/api/questions", methods=["GET"])
+@require_auth
+def get_questions():
+    exam_id = request.args.get("examId", type=int)
+    subject = (request.args.get("subject") or "").strip()
+
+    if not exam_id or not subject:
+        return api_error("Both examId and subject are required.")
+
+    exam = Exam.query.filter_by(
+        id=exam_id,
+        school_id=g.current_user.school_id
+    ).first()
+
+    if not exam:
+        return api_error("Exam not found.", 404, "exam_not_found")
+
+    if subject not in subjects_for_exam(exam):
+        return api_error(
+            "Subject does not belong to this exam.",
+            404,
+            "subject_not_found"
+        )
+
+    questions = (
+        Question.query
+        .filter_by(
+            examId=exam.id,
+            school_id=g.current_user.school_id,
+            subject=subject
+        )
+        .order_by(Question.id)
+        .all()
+    )
+
+    is_admin = g.current_user.role in ADMIN_ROLES
+    result = []
+
+    for q in questions:
+        item = {
+            "id": q.id,
+            "examId": q.examId,
+            "examType": q.examType,
+            "subject": q.subject,
+            "question": q.question,
+            "options": q.options,
+            "year": q.year,
+            "image_path": q.image_path,
+            "image_url": get_image_url(q.image_path),
+        }
+
+        if is_admin:
+            item["answer"] = q.answer
+            item["explanation"] = q.explanation
+
+        result.append(item)
+
+    return jsonify(result)
+
+
+def validate_exam_payload(data):
+    title = data.get("title")
+    exam_type = data.get("examType")
+    subjects = data.get("subjects")
+    if not isinstance(title, str) or not title.strip() or not isinstance(exam_type, str) or not exam_type.strip():
+        return None, "title and examType are required."
+    if not isinstance(subjects, list) or not subjects or any(not isinstance(x, str) or not x.strip() for x in subjects):
+        return None, "subjects must be a non-empty list of subject names."
+    subjects = list(dict.fromkeys(x.strip() for x in subjects))
+    try:
+        year = int(data.get("year", datetime.utcnow().year))
+        duration = int(data.get("duration", 60))
+        if duration <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return None, "year and positive duration must be valid integers."
+    scheduled_at, error = parse_scheduled_at(data.get("scheduledAt"))
+    if error:
+        return None, error
+    return {"title": title.strip(), "examType": exam_type.strip(), "subjects": subjects,
+            "year": year, "duration": duration, "scheduled_at": scheduled_at}, None
+
+
+@app.route("/api/admin/create-exam", methods=["POST"])
+@roles_required("school_admin", "exam_officer")
+def create_exam():
+    incoming = json_body()
+    data, error = validate_exam_payload(incoming)
+    if error:
+        return api_error(error)
+    initial_questions = incoming.get("questions", [])
+    if not isinstance(initial_questions, list):
+        return api_error("questions must be a list when provided.")
+    prepared_questions = []
+    # Validate the whole payload before writing anything, so a bad CSV-like row
+    # cannot leave a half-created exam behind.
+    shell_exam = Exam(
+        id=-1, title=data["title"], examType=data["examType"], subject=",".join(data["subjects"]))
+    for index, question_data in enumerate(initial_questions, start=1):
+        if not isinstance(question_data, dict):
+            return api_error(f"Question {index} must be an object.")
+        question_data = dict(question_data)
+        opts = question_data.get("options")
+        if isinstance(opts, list) and len(opts) == 4:
+            question_data["options"] = dict(zip("ABCD", opts))
+        validated, question_error = validate_question_payload(
+            question_data, shell_exam)
+        if question_error:
+            return api_error(f"Question {index}: {question_error}")
+        prepared_questions.append(validated)
+    school_id = g.current_user.school_id
+    exam = Exam(title=data["title"], examType=data["examType"], subject=",".join(data["subjects"]),
+                year=data["year"], duration=data["duration"], scheduled_at=data["scheduled_at"],
+                totalQuestions=len(prepared_questions), school_id=school_id)
+    db.session.add(exam)
+    db.session.flush()
+    for subject in data["subjects"]:
+        db.session.add(ExamSubject(exam_id=exam.id, name=subject))
+    for question in prepared_questions:
+        db.session.add(Question(examId=exam.id, school_id=school_id, examType=exam.examType,
+                                subject=question["subject"], question=question["question"],
+                                options=question["options"], answer=question["answer"],
+                                explanation=question["explanation"], year=exam.year,
+                                image_path=question["image_path"]))
+    db.session.commit()
+    return jsonify(success=True, exam_id=exam.id, message=f"{exam.title} saved"), 201
+
+
+@app.route("/api/admin/exam/<int:exam_id>", methods=["PUT", "DELETE"])
+@roles_required("school_admin", "exam_officer")
+def manage_exam(exam_id):
+    exam = Exam.query.filter_by(
+        id=exam_id, school_id=g.current_user.school_id).first()
+    if not exam:
+        return api_error("Exam not found.", 404, "exam_not_found")
+    if request.method == "DELETE":
+        Question.query.filter_by(examId=exam.id, school_id=g.current_user.school_id).delete(
+            synchronize_session=False)
+        ExamSubject.query.filter_by(exam_id=exam.id).delete(
+            synchronize_session=False)
+        db.session.delete(exam)
+        db.session.commit()
+        return jsonify(success=True, message="Exam deleted.")
+    data = json_body()
+    if "title" in data and isinstance(data["title"], str) and data["title"].strip():
+        exam.title = data["title"].strip()
+    if "examType" in data and isinstance(data["examType"], str) and data["examType"].strip():
+        exam.examType = data["examType"].strip()
+    for key in ("year", "duration"):
+        if key in data:
+            try:
+                value = int(data[key])
+                if key == "duration" and value <= 0:
+                    raise ValueError
+                setattr(exam, key, value)
+            except (TypeError, ValueError):
+                return api_error(f"{key} must be a valid integer" + (" greater than zero." if key == "duration" else "."))
+    if "scheduledAt" in data:
+        scheduled_at, error = parse_scheduled_at(data["scheduledAt"])
+        if error:
+            return api_error(error)
+        exam.scheduled_at = scheduled_at
+    if "subjects" in data:
+        if not isinstance(data["subjects"], list) or not data["subjects"] or any(not isinstance(x, str) or not x.strip() for x in data["subjects"]):
+            return api_error("subjects must be a non-empty list of subject names.")
+        names = list(dict.fromkeys(x.strip() for x in data["subjects"]))
+        old_names = set(subjects_for_exam(exam))
+        if old_names != set(names) and Question.query.filter_by(examId=exam.id, school_id=exam.school_id).count():
+            return api_error("Subjects cannot be changed after questions have been added.")
+        ExamSubject.query.filter_by(exam_id=exam.id).delete(
+            synchronize_session=False)
+        for name in names:
+            db.session.add(ExamSubject(exam_id=exam.id, name=name))
+        exam.subject = ",".join(names)
+    db.session.commit()
+    return jsonify(success=True)
+
+
+def validate_question_payload(data, exam):
+    subject = data.get("subject")
+    question = data.get("question")
+    options = data.get("options")
+    answer = data.get("correctAnswer")
+    if not isinstance(subject, str) or not subject.strip() or subject.strip() not in subjects_for_exam(exam):
+        return None, "subject must be configured for this exam."
+    if not isinstance(question, str) or not question.strip():
+        return None, "question is required."
+    if not isinstance(options, dict) or set(options.keys()) != {"A", "B", "C", "D"} or any(
+        not isinstance(options.get(letter), str) or not options[letter].strip() for letter in "ABCD"
+    ):
+        return None, "options must contain non-empty A, B, C, and D values."
+    if answer not in {"A", "B", "C", "D"}:
+        return None, "correctAnswer must be A, B, C, or D."
+    image_url = data.get("imageUrl")
+    if image_url not in (None, ""):
+        if not isinstance(image_url, str) or len(image_url) > 1000 or re.search(r"%(?![0-9a-fA-F]{2})", image_url):
+            return None, "imageUrl must be a valid HTTP or HTTPS URL."
+        try:
+            parsed_image_url = urlsplit(image_url)
+            valid_image_url = (
+                parsed_image_url.scheme.lower() in {"http", "https"}
+                and bool(parsed_image_url.hostname)
+                and not parsed_image_url.username
+                and not parsed_image_url.password
+                and not any(character.isspace() for character in image_url)
+            )
+            parsed_image_url.port
+        except ValueError:
+            valid_image_url = False
+        if not valid_image_url:
+            return None, "imageUrl must be a valid HTTP or HTTPS URL."
+        image_path = image_url
+    else:
+        image_path = data.get("image_path")
+    return {"subject": subject.strip(), "question": question.strip(),
+            "options": {key: options[key].strip() for key in "ABCD"}, "answer": answer,
+            "explanation": data.get("explanation", "") or "", "image_path": image_path}, None
+
+
+@app.route("/api/admin/add-question", methods=["POST"])
+@roles_required("school_admin", "exam_officer")
+def add_question():
+    multipart = request.mimetype == "multipart/form-data"
+    data = request.form.to_dict() if multipart else json_body()
+    if multipart and isinstance(data.get("options"), str):
+        try:
+            data["options"] = json.loads(data["options"])
+        except (TypeError, ValueError):
+            return api_error("options must be valid JSON containing A, B, C, and D.")
+    try:
+        exam_id = int(data.get("examId"))
+    except (TypeError, ValueError):
+        return api_error("examId must be a valid integer.")
+    exam = Exam.query.filter_by(
+        id=exam_id, school_id=g.current_user.school_id).first()
+    if not exam:
+        return api_error("Exam not found in your school.", 404, "exam_not_found")
+    validated, error = validate_question_payload(data, exam)
+    if error:
+        return api_error(error)
+
+    file = request.files.get("image") if multipart else None
+    if file and file.filename:
+        if not allowed_file(file.filename):
+            return api_error("Invalid image file type.")
+        image_path, storage_error = store_question_image(file)
+        if storage_error:
+            return api_error(storage_error, 503, "image_storage_unavailable")
+        validated["image_path"] = image_path
+    row = Question(examId=exam.id, school_id=exam.school_id, examType=exam.examType,
+                   subject=validated["subject"], question=validated["question"],
+                   options=validated["options"], answer=validated["answer"],
+                   explanation=validated["explanation"], year=exam.year, image_path=validated["image_path"])
+    db.session.add(row)
+    db.session.flush()
+    exam.totalQuestions = Question.query.filter_by(
+        examId=exam.id, school_id=exam.school_id).count()
+    db.session.commit()
+    return jsonify(success=True, id=row.id, examId=exam.id, subject=row.subject,
+                   image_path=row.image_path, image_url=get_image_url(row.image_path)), 201
+
+
+@app.route("/api/admin/import-questions-zip", methods=["POST"])
+@roles_required("school_admin", "exam_officer")
+def import_questions_zip():
+    if request.content_length and request.content_length > MAX_QUESTION_ARCHIVE_BYTES + 1024 * 1024:
+        return api_error("ZIP files must be 25 MB or smaller.", 413, "file_too_large")
+
+    try:
+        exam_id = int(request.form.get("examId", ""))
+    except (TypeError, ValueError):
+        return api_error("examId must be a valid integer.")
+    exam = Exam.query.filter_by(
+        id=exam_id, school_id=g.current_user.school_id).first()
+    if not exam:
+        return api_error("Exam not found in your school.", 404, "exam_not_found")
+
+    archive_file = request.files.get("file")
+    if not archive_file or not archive_file.filename:
+        return api_error("Upload a ZIP file in the file field.")
+
+    csv_contents, images, archive_error, status = read_question_import_archive(archive_file)
+    if archive_error:
+        return api_error(archive_error, status)
+    prepared, csv_error = parse_question_import_csv(csv_contents, images, exam)
+    if csv_error:
+        return api_error(csv_error)
+
+    stored_images = {}
+    for _, image_member in prepared:
+        if image_member and image_member not in stored_images:
+            image_file = FileStorage(
+                stream=io.BytesIO(images[image_member]),
+                filename=image_member.rsplit("/", 1)[-1],
+            )
+            image_path, storage_error = store_question_image(image_file)
+            if storage_error:
+                return api_error(storage_error, 503, "image_storage_unavailable")
+            stored_images[image_member] = image_path
+
+    try:
+        for question, image_member in prepared:
+            image_path = stored_images.get(image_member) if image_member else question["image_path"]
+            db.session.add(Question(
+                examId=exam.id,
+                school_id=exam.school_id,
+                examType=exam.examType,
+                subject=question["subject"],
+                question=question["question"],
+                options=question["options"],
+                answer=question["answer"],
+                explanation=question["explanation"],
+                year=exam.year,
+                image_path=image_path,
+            ))
+        db.session.flush()
+        exam.totalQuestions = Question.query.filter_by(
+            examId=exam.id, school_id=exam.school_id).count()
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Bulk question import failed for exam %s", exam.id)
+        return api_error("Could not save the imported questions.", 500, "question_import_failed")
+
+    return jsonify(
+        success=True,
+        exam_id=exam.id,
+        imported=len(prepared),
+        message=f"Imported {len(prepared)} questions.",
+    ), 201
+
+
+@app.route("/api/upload/question-image", methods=["POST"])
+@roles_required("school_admin", "exam_officer")
+def upload_question_image():
+    file = request.files.get("image")
+    if not file or not file.filename:
+        return api_error("No image file was provided.")
+    if not allowed_file(file.filename):
+        return api_error("Invalid image type.")
+    path, storage_error = store_question_image(file)
+    if storage_error:
+        return api_error(storage_error, 503, "image_storage_unavailable")
+    return jsonify(success=True, image_path=path, image_url=get_image_url(path))
+
+
+@app.route("/api/admin/overview", methods=["GET"])
+@roles_required("school_admin", "teacher", "exam_officer")
+def admin_overview():
+    school_id = g.current_user.school_id
+    now = utcnow()
+    exam_ids = db.session.query(Exam.id).filter_by(
+        school_id=school_id).subquery()
+    exams_count = Exam.query.filter_by(school_id=school_id).count()
+    subjects_count = ExamSubject.query.filter(
+        ExamSubject.exam_id.in_(exam_ids)).count()
+    questions_count = Question.query.filter_by(school_id=school_id).count()
+    students = User.query.filter_by(school_id=school_id, role="student")
+    enrolled = students.count()
+    active = students.filter(User.account_status == "active",
+                             User.last_seen_at >= now - timedelta(minutes=5)).count()
+    attempts = Attempt.query.filter_by(school_id=school_id)
+    attempt_count = attempts.count()
+    average_score = db.session.query(func.avg((Attempt.score * 100.0) / Attempt.total)).filter(
+        Attempt.school_id == school_id, Attempt.total > 0
+    ).scalar() if attempt_count else None
+    recent = []
+    if attempt_count:
+        rows = attempts.order_by(Attempt.completed_at.desc()).limit(10).all()
+        for row in rows:
+            exam = db.session.get(Exam, row.exam_id)
+            student = db.session.get(User, row.student_id)
+            if exam and exam.school_id == school_id and student and student.school_id == school_id:
+                recent.append({"attemptId": row.id, "studentId": row.student_id,
+                               "studentName": student.username, "examId": exam.id,
+                               "examTitle": exam.title, "subject": row.subject,
+                               "score": row.score, "total": row.total,
+                               "percentage": row.percentage, "completedAt": iso_utc(row.completed_at)})
+    return jsonify({"counts": {"exams": exams_count, "configuredSubjects": subjects_count,
+                               "questions": questions_count, "enrolledStudents": enrolled,
+                               "activeStudents": active},
+                    "performance": {"averageScore": round(float(average_score), 2) if average_score is not None else None,
+                                    "attemptCount": attempt_count,
+                                    "available": attempt_count > 0},
+                    "recentExamActivity": recent if attempt_count else None})
+
+
+@app.route("/api/admin/upcoming-exams", methods=["GET"])
+@roles_required("school_admin", "teacher", "exam_officer")
+def admin_upcoming_exams():
+    try:
+        limit = min(100, max(1, int(request.args.get("limit", "10"))))
+    except ValueError:
+        return api_error("limit must be an integer.")
+    query = Exam.query.filter(
+        Exam.school_id == g.current_user.school_id,
+        Exam.scheduled_at >= utcnow(),
+    )
+    total = query.count()
+    exams = query.order_by(Exam.scheduled_at.asc(), Exam.id.asc()).limit(limit).all()
+    result = []
+    for exam in exams:
+        question_count = Question.query.filter_by(
+            examId=exam.id, school_id=g.current_user.school_id).count()
+        result.append({
+            "id": exam.id,
+            "title": exam.title,
+            "examType": exam.examType,
+            "scheduledAt": iso_utc(exam.scheduled_at),
+            "duration": exam.duration,
+            "subjects": subjects_for_exam(exam),
+            "totalQuestions": question_count,
+        })
+    return jsonify({"exams": result, "total": total})
+
+
+@app.route("/api/admin/students", methods=["GET"])
+@roles_required("school_admin", "teacher", "exam_officer")
+def admin_students():
+    try:
+        page = max(1, int(request.args.get("page", "1")))
+        limit = min(200, max(1, int(request.args.get("limit", "50"))))
+    except ValueError:
+        return api_error("page and limit must be integers.")
+    query = User.query.filter_by(
+        school_id=g.current_user.school_id, role="student")
+    search = (request.args.get("search") or "").strip()
+    if search:
+        needle = f"%{search}%"
+        query = query.filter(
+            or_(User.username.ilike(needle), User.email.ilike(needle)))
+    class_id = request.args.get("classId")
+    if class_id:
+        try:
+            class_id = int(class_id)
+        except ValueError:
+            return api_error("classId must be an integer.")
+        school_class = SchoolClass.query.filter_by(
+            id=class_id, school_id=g.current_user.school_id).first()
+        if not school_class:
+            return api_error("Class not found.", 404, "class_not_found")
+        query = query.filter(User.class_id == class_id)
+    total = query.count()
+    pages = max(1, (total + limit - 1) // limit)
+    page = min(page, pages)
+    rows = query.order_by(User.username.asc(), User.id.asc()).offset(
+        (page - 1) * limit).limit(limit).all()
+    return jsonify({"students": [student_payload(row) for row in rows],
+                    "pagination": {"page": page, "limit": limit, "total": total,
+                                   "pages": pages, "totalPages": pages}})
+
+
+def parse_iso_date(value, field):
+    if not value:
+        return None, None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None), None
+    except (TypeError, ValueError):
+        return None, f"{field} must be an ISO date or datetime."
+
+
+@app.route("/api/admin/students/<int:student_id>/performance", methods=["GET"])
+@roles_required("school_admin", "teacher", "exam_officer")
+def student_performance(student_id):
+    school_id = g.current_user.school_id
+    student = User.query.filter_by(
+        id=student_id, school_id=school_id, role="student").first()
+    if not student:
+        return api_error("Student not found.", 404, "student_not_found")
+    start, error = parse_iso_date(request.args.get("from"), "from")
+    if error:
+        return api_error(error)
+    end, error = parse_iso_date(request.args.get("to"), "to")
+    if error:
+        return api_error(error)
+    query = Attempt.query.filter_by(student_id=student.id, school_id=school_id)
+    if start:
+        query = query.filter(Attempt.completed_at >= start)
+    if end:
+        query = query.filter(Attempt.completed_at <= end)
+    rows = query.order_by(Attempt.completed_at.asc()).all()
+    history = []
+    grouped = {}
+    for row in rows:
+        exam = Exam.query.filter_by(
+            id=row.exam_id, school_id=school_id).first()
+        if not exam:
+            continue
+        history.append({"attemptId": row.id, "examId": exam.id, "examTitle": exam.title,
+                        "subject": row.subject, "score": row.score, "total": row.total,
+                        "percentage": row.percentage, "completedAt": iso_utc(row.completed_at)})
+        grouped.setdefault(row.subject, []).append(row)
+    by_subject = []
+    for subject, subject_rows in sorted(grouped.items()):
+        percentages = [
+            row.percentage for row in subject_rows if row.percentage is not None]
+        by_subject.append({"subject": subject, "completedAttempts": len(subject_rows),
+                           "averageScore": round(sum(percentages) / len(percentages), 2) if percentages else None,
+                           "scoreHistory": [{"score": row.score, "total": row.total,
+                                             "percentage": row.percentage,
+                                             "completedAt": iso_utc(row.completed_at)} for row in subject_rows]})
+    return jsonify({"student": student_payload(student), "completedAttempts": len(history),
+                    "scoreHistory": history, "resultsBySubject": by_subject})
+
+
+@app.route("/api/students/me/heartbeat", methods=["POST"])
+@roles_required("student")
+def student_heartbeat():
+    g.current_user.last_seen_at = utcnow()
+    db.session.commit()
+    return jsonify(success=True, lastSeenAt=iso_utc(g.current_user.last_seen_at))
+
+
+@app.route("/api/attempts", methods=["POST"])
+@roles_required("student")
+def submit_attempt():
+    data = json_body()
+    try:
+        exam_id = int(data.get("examId"))
+        score = float(data.get("score"))
+        total = float(data.get("total"))
+    except (TypeError, ValueError):
+        return api_error("examId, score, and total must be valid numbers.")
+    subject = data.get("subject")
+    if not (math.isfinite(score) and math.isfinite(total)) or total <= 0 or score < 0 or score > total:
+        return api_error("score must be between zero and a positive total.")
+    exam = Exam.query.filter_by(
+        id=exam_id, school_id=g.current_user.school_id).first()
+    if not exam:
+        return api_error("Exam not found.", 404, "exam_not_found")
+    if not isinstance(subject, str) or subject.strip() not in subjects_for_exam(exam):
+        return api_error("subject must be configured for this exam.")
+    completed_at = utcnow()
+    row = Attempt(student_id=g.current_user.id, school_id=g.current_user.school_id,
+                  exam_id=exam.id, subject=subject.strip(), score=score, total=total,
+                  completed_at=completed_at)
+    # Reportable attempts feed the school dashboard. The result screen writes
+    # the single aggregate row to the student's personal history endpoint.
+    db.session.add(row)
+    db.session.commit()
+    return jsonify(success=True, attempt={"id": row.id, "examId": row.exam_id,
+                                          "subject": row.subject, "score": row.score,
+                                          "total": row.total, "percentage": row.percentage,
+                                          "completedAt": iso_utc(row.completed_at)}), 201
+
+
+# Legacy history routes are retained for the existing student client, but every read/write
+# is tied to the current user. Only /api/attempts creates reportable exam attempts.
+@app.route("/api/save-result", methods=["POST"])
+@app.route("/api/history", methods=["POST"])
+@roles_required("student")
+def save_history_alias():
+    data = json_body()
+    try:
+        score = float(data.get("score"))
+        total = float(data.get("total"))
+        if not (math.isfinite(score) and math.isfinite(total) and 0 <= score <= total and total > 0):
+            raise ValueError
+    except (TypeError, ValueError):
+        return api_error("score and positive total must be valid; score cannot exceed total.")
+    attempt = None
+    exam = None
+    subject = None
+    if data.get("examId") is not None or data.get("subject") is not None:
+        try:
+            exam_id = int(data.get("examId"))
+        except (TypeError, ValueError):
+            return api_error("examId must be a valid integer when recording an exam attempt.")
+        exam = Exam.query.filter_by(
+            id=exam_id, school_id=g.current_user.school_id).first()
+        if not exam:
+            return api_error("Exam not found.", 404, "exam_not_found")
+        subject = data.get("subject")
+        if not isinstance(subject, str) or subject.strip() not in subjects_for_exam(exam):
+            return api_error("subject must be configured for this exam.")
+        subject = subject.strip()
+        attempt = Attempt(student_id=g.current_user.id, school_id=g.current_user.school_id,
+                          exam_id=exam.id, subject=subject, score=score, total=total,
+                          completed_at=utcnow())
+    completed_at = attempt.completed_at if attempt else utcnow()
+    row = CBTResult(user_id=g.current_user.id, email=g.current_user.email,
+                    title=str(data.get("title", "Practice Test"))[
+                        :200], score=score, total=total,
+                    duration=str(data.get("duration", "0m"))[:20], status=str(
+                        data.get("status", "Failed"))[:20],
+                    mode=str(data.get("mode", "exam"))[:20], examType=str(
+                        data.get("examType", "JAMB"))[:80],
+                    school_id=g.current_user.school_id, date=completed_at,
+                    exam_id=exam.id if exam else None,
+                    subject_name=subject,
+                    completed_at=completed_at if exam else None)
+    db.session.add(row)
+    if attempt:
+        db.session.add(attempt)
+    db.session.commit()
+    return jsonify(success=True, id=row.id, attemptId=attempt.id if attempt else None), 201
+
+
+@app.route("/api/history/<int:user_id>", methods=["GET"])
+@roles_required("student")
+def history(user_id):
+    if user_id != g.current_user.id:
+        return api_error("You can only read your own history.", 403, "forbidden")
+    rows = CBTResult.query.filter_by(
+        user_id=g.current_user.id, school_id=g.current_user.school_id).order_by(CBTResult.date.desc()).all()
+    return jsonify([{"id": row.id, "title": row.title, "score": row.score, "total": row.total,
+                     "duration": row.duration, "status": row.status, "mode": row.mode,
+                     "examType": row.examType, "examId": row.exam_id,
+                     "subject": row.subject_name,
+                     "date": iso_utc(row.completed_at or row.date)} for row in rows])
+
+
+@app.route("/api/history/<int:result_id>", methods=["DELETE"])
+@roles_required("student")
+def delete_history(result_id):
+    row = CBTResult.query.filter_by(id=result_id, user_id=g.current_user.id,
+                                    school_id=g.current_user.school_id).first()
+    if not row:
+        return api_error("History record not found.", 404, "not_found")
+    db.session.delete(row)
+    db.session.commit()
+    return jsonify(success=True)
+
+
+@app.route("/api/history/clear/<int:user_id>", methods=["DELETE"])
+@roles_required("student")
+def clear_history(user_id):
+    if user_id != g.current_user.id:
+        return api_error("You can only clear your own history.", 403, "forbidden")
+    CBTResult.query.filter_by(
+        user_id=g.current_user.id, school_id=g.current_user.school_id).delete()
+    db.session.commit()
+    return jsonify(success=True)
+
+
+@app.cli.command("create-school-admin")
+def create_school_admin_command():
+    """Create a school and its first administrator without seeding fake data."""
+    import click
+    name = click.prompt("School name")
+    email = click.prompt("Admin email").strip().lower()
+    username = click.prompt("Admin display name")
+    password = click.prompt(
+        "Admin password", hide_input=True, confirmation_prompt=True)
+    if len(password) < 8 or User.query.filter(func.lower(User.email) == email).first():
+        raise click.ClickException(
+            "Use a password of at least 8 characters and a new email address.")
+    school = School(name=name.strip())
+    db.session.add(school)
+    db.session.flush()
+    admin = User(username=username.strip(), email=email, password=generate_password_hash(password),
+                 school_id=school.id, role="school_admin", account_status="active")
+    db.session.add(admin)
+    db.session.commit()
+    click.echo(
+        f"Created school {school.id} and school_admin account {admin.id}.")
+
+
+@app.cli.command("create-school-user")
+def create_school_user_command():
+    """Create a teacher or exam officer in an existing school."""
+    import click
+    school_id = click.prompt("School ID", type=int)
+    role = click.prompt("Role", type=click.Choice(
+        ["teacher", "exam_officer", "student"], case_sensitive=False)).lower()
+    email = click.prompt("Email").strip().lower()
+    username = click.prompt("Display name")
+    password = click.prompt("Password", hide_input=True,
+                            confirmation_prompt=True)
+    if not db.session.get(School, school_id):
+        raise click.ClickException("School not found.")
+    if len(password) < 8 or User.query.filter(func.lower(User.email) == email).first():
+        raise click.ClickException(
+            "Use a password of at least 8 characters and a new email address.")
+    user = User(username=username.strip(), email=email, password=generate_password_hash(password),
+                school_id=school_id, role=role, account_status="active")
+    db.session.add(user)
+    db.session.commit()
+    click.echo(f"Created {role} account {user.id} for school {school_id}.")
+
+
+@app.cli.command("create-school-class")
+def create_school_class_command():
+    """Create a class in a school for enrollment and roster filtering."""
+    import click
+    school_id = click.prompt("School ID", type=int)
+    name = click.prompt("Class name").strip()
+    if not db.session.get(School, school_id):
+        raise click.ClickException("School not found.")
+    if not name or SchoolClass.query.filter_by(school_id=school_id, name=name).first():
+        raise click.ClickException(
+            "Class name is empty or already exists in this school.")
+    row = SchoolClass(school_id=school_id, name=name)
+    db.session.add(row)
+    db.session.commit()
+    click.echo(f"Created class {row.id} for school {school_id}.")
+
+
+@app.cli.command("set-school-user-role")
+def set_school_user_role_command():
+    """Assign a provisioned account its school role from the command line."""
+    import click
+    user_id = click.prompt("User ID", type=int)
+    role = click.prompt("Role", type=click.Choice(
+        sorted(VALID_ROLES), case_sensitive=False)).lower()
+    user = db.session.get(User, user_id)
+    if not user:
+        raise click.ClickException("User not found.")
+    user.role = role
+    db.session.commit()
+    click.echo(f"Set account {user.id} to {role} in school {user.school_id}.")
+
+
+@app.cli.command("assign-legacy-data")
+def assign_legacy_data_command():
+    """Assign unscoped records from the old single-school schema to one school."""
+    import click
+    school_id = click.prompt("Target school ID", type=int)
+    if not db.session.get(School, school_id):
+        raise click.ClickException("School not found.")
+    if not click.confirm("Assign all currently unscoped users, exams, questions, and results to this school?"):
+        click.echo("No records changed.")
+        return
+    User.query.filter_by(school_id=None).update(
+        {"school_id": school_id}, synchronize_session=False)
+    Exam.query.filter_by(school_id=None).update(
+        {"school_id": school_id}, synchronize_session=False)
+    Question.query.filter_by(school_id=None).update(
+        {"school_id": school_id}, synchronize_session=False)
+    CBTResult.query.filter_by(school_id=None).update(
+        {"school_id": school_id}, synchronize_session=False)
+    for exam in Exam.query.filter_by(school_id=school_id).all():
+        for subject in [s.strip() for s in (exam.subject or "").split(",") if s.strip()]:
+            if not ExamSubject.query.filter_by(exam_id=exam.id, name=subject).first():
+                db.session.add(ExamSubject(exam_id=exam.id, name=subject))
+        exam.totalQuestions = Question.query.filter_by(
+            examId=exam.id, school_id=school_id).count()
+    db.session.commit()
+    click.echo(
+        "Legacy records assigned. Review memberships and account roles before enabling sign-in.")
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5000")))

@@ -1,0 +1,16 @@
+**/.git
+**/.vercel
+**/.idea
+**/.vscode
+**/.env
+**/.env.*
+**/node_modules
+**/dist
+**/.venv
+**/.venv*/
+**/venv
+**/__pycache__
+**/*.pyc
+**/*.db
+**/uploads
+**/*.tsbuildinfo
