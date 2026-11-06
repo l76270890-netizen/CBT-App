@@ -715,7 +715,7 @@ def initialize_paystack_checkout():
         checkout_host = None
     if (not checkout_url or checkout_url.scheme != "https" or
             not checkout_host or
-            (checkout_host != "paystack.com" and
+            (checkout_host not in {"paystack.com", "paystack.shop"} and
              not checkout_host.endswith(".paystack.com")) or
             checkout_url.username or checkout_url.password):
         app.logger.error(
