@@ -87,6 +87,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [csvImageFiles, setCsvImageFiles] = useState<Map<string, File>>(new Map());
   const [csvUploadFile, setCsvUploadFile] = useState<File | null>(null);
   const [csvSelectedImages, setCsvSelectedImages] = useState<File[]>([]);
+  const csvImagesInput = useRef<HTMLInputElement>(null);
   const [csvImageError, setCsvImageError] = useState("");
   const [csvFileName, setCsvFileName] = useState("");
   const [csvExamId, setCsvExamId] = useState("");
@@ -327,6 +328,9 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setCsvRows([]);
     setCsvImageFiles(new Map());
     setCsvUploadFile(null);
+    setCsvSelectedImages([]);
+    setCsvImageError("");
+    if (csvImagesInput.current) csvImagesInput.current.value = "";
     setCsvFileName("");
     setCsvExamId("");
     setCsvError("");
@@ -394,7 +398,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     const errors: string[] = [];
     for (const file of files) {
       if (!isSupportedQuestionImage(file)) {
-        errors.push(`${file.name}: choose a PNG, JPG, or JPEG image.`);
+        errors.push(`${file.name}: choose a PNG, JPG, JPEG, or WEBP image.`);
       } else if (file.size > maxQuestionImageBytes) {
         errors.push(`${file.name}: image files must be 5 MB or smaller.`);
       } else {
@@ -448,7 +452,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
       formData.append("examId", selectedExam);
       for (const image of csvSelectedImages) formData.append("images", image, image.name);
 
-      const response = await apiRequest<unknown>("/api/admin/bulk-import-questions", {
+      const response = await apiRequest<unknown>("/api/admin/import-questions", {
         method: "POST",
         body: formData,
       });
@@ -720,7 +724,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           <div className="csv-import-heading">
             <div>
               <h3 id="csv-import-title"><FileSpreadsheet size={18} /> Bulk import questions</h3>
-              <p>Choose a CSV and optional PNG/JPG/JPEG images, or a ZIP with one <code>questions.csv</code> and an optional <code>images/</code> folder. Reference image filenames in the <code>imageUrl</code> column. Up to 500 questions per file.</p>
+              <p>Choose a CSV and optional PNG/JPG/JPEG/WEBP images, or a ZIP with one <code>questions.csv</code> and an optional <code>images/</code> folder. Reference image filenames in the <code>imageUrl</code> column. Up to 500 questions per file.</p>
             </div>
             <button type="button" className="csv-template-btn" onClick={downloadCsvTemplate}>
               <Download size={16} /> Download template
@@ -737,15 +741,16 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
             <label className="csv-upload-btn" htmlFor="csv-question-images">
               <ImagePlus size={16} /> Choose Multiple Images
               <input
+                ref={csvImagesInput}
                 id="csv-question-images"
                 type="file"
-                accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
                 multiple
                 onChange={handleCsvImagesChange}
                 disabled={csvImporting}
               />
             </label>
-            <small>PNG, JPG, or JPEG; maximum 5 MB each. Match filenames in the CSV imageUrl column.</small>
+            <small>PNG, JPG, JPEG, or WEBP; maximum 5 MB each. Match filenames in the CSV imageUrl column.</small>
             {csvImageError && <p className="csv-error" role="alert">{csvImageError}</p>}
             {csvSelectedImages.length > 0 && (
               <ul className="csv-image-list" aria-label="Selected question images">
@@ -766,6 +771,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
               setCsvImageFiles(new Map());
               setCsvUploadFile(null);
               setCsvSelectedImages([]);
+              if (csvImagesInput.current) csvImagesInput.current.value = "";
               setCsvFileName("");
               setCsvExamId("");
               setCsvError("");

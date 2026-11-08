@@ -16,6 +16,19 @@ async function createZip(image?: Uint8Array): Promise<File> {
   return new File([data], "questions.zip", { type: "application/zip" });
 }
 
+test("extracts referenced WEBP images from a ZIP", async () => {
+  const webpCsv = csv.replace("triangle.png", "triangle.webp");
+  const zip = new JSZip();
+  zip.file("questions.csv", webpCsv);
+  zip.file("images/triangle.webp", new Uint8Array([82, 73, 70, 70]));
+  const data = await zip.generateAsync({ type: "nodebuffer" });
+  const file = new File([data], "questions.zip", { type: "application/zip" });
+
+  const { rows, images } = await loadQuestionZip(file, ["Mathematics"]);
+  assert.deepEqual(rows[0].errors, []);
+  assert.equal(images.get("triangle.webp")?.type, "image/webp");
+});
+
 test("extracts referenced question images from a ZIP and keeps the question row", async () => {
   const { rows, images } = await loadQuestionZip(await createZip(new Uint8Array([137, 80, 78, 71])), ["Mathematics"]);
   assert.deepEqual(rows[0].errors, []);
