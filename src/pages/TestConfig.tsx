@@ -34,9 +34,9 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
       topic,
       showAnswers: mode === 'practice',
       // keep firebase exam id if present
-      examId: selectedExam?.id || (testConfig as any).examId || (testConfig as any).customExamId || '',
-      examTitle: selectedExam?.title || (testConfig as any).examTitle || (testConfig as any).customTitle || '',
-    } as any
+      examId: selectedExam?.id || testConfig.examId || testConfig.customExamId || '',
+      examTitle: selectedExam?.title || testConfig.examTitle || testConfig.customTitle || '',
+    }
     setTestConfig(finalConfig)
     setActivePage('testInstructions')
   }

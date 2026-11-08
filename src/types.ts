@@ -18,6 +18,10 @@ export type TestConfigType = {
   difficulty: string
   showAnswers: boolean
   topic: string
+  examId?: string
+  customExamId?: string
+  customTitle?: string
+  fromStudy?: boolean
   title?: string
   examTitle?: string
   subject?: string

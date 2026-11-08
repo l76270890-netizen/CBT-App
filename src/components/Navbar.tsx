@@ -7,7 +7,7 @@ import { apiRequest, asArray } from '../api'
 
 type Notif = { id: string; title: string; message: string; time: string; read: boolean; type: 'success'|'info'|'warning' }
 
-export default function Navbar({ activePage, setActivePage, sidebarCollapsed, setSidebarCollapsed, searchQuery, setSearchQuery }: any) {
+export default function Navbar({ activePage, setActivePage, sidebarCollapsed, setSidebarCollapsed, searchQuery, setSearchQuery, demoMode = false, onDemoNavigate }: any) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [showNotif, setShowNotif] = useState(false)
   const [notifications, setNotifications] = useState<Notif[]>([])
@@ -15,7 +15,7 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
   const { user, logout } = useAuth()
 
   useEffect(() => {
-    if(!user?.user_id) return
+    if(demoMode || !user?.user_id) return
     apiRequest<unknown>(`/api/history/${encodeURIComponent(user.user_id)}`).then(payload=> {
       const data = asArray<any>(payload);
       const onlyExams = data.filter((h:any)=>h.mode!=='study')
@@ -34,10 +34,10 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
         setNotifications([autoNotif])
       }
    }).catch(()=>{})
-  }, [user])
+  }, [user, demoMode])
 
   useEffect(() => {
-    if(!user?.user_id) return
+    if(demoMode || !user?.user_id) return
     const saved = localStorage.getItem(`notifs_${user.user_id}`)
     if(saved){
       try{ setNotifications(JSON.parse(saved)) }catch{}
@@ -52,14 +52,15 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
       }]
       setNotifications(welcome)
     }
-  }, [user?.user_id])
+  }, [user?.user_id, demoMode])
 
   useEffect(() => {
-    if(!user?.user_id) return
+    if(demoMode || !user?.user_id) return
     localStorage.setItem(`notifs_${user.user_id}`, JSON.stringify(notifications))
-  }, [notifications, user?.user_id])
+  }, [notifications, user?.user_id, demoMode])
 
   useEffect(() => {
+    if (demoMode) return
     const handleNewResult = () => {
       const lastResult = localStorage.getItem('lastTestResult')
       if(!lastResult) return
@@ -83,33 +84,45 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
     window.addEventListener('storage', handleNewResult)
     const interval = setInterval(handleNewResult, 2000)
     return ()=>{ window.removeEventListener('storage', handleNewResult); clearInterval(interval)}
-  }, [])
+  }, [demoMode])
 
-  const navItems = [
+  const navItems = demoMode ? [
+    { id: 'home', label: 'Home', icon: Home, mobileLabel: 'Home' },
+    { id: 'exams', label: 'Exams', icon: FileText, mobileLabel: 'Exams' },
+    { id: 'classroom', label: 'Study', icon: BookOpen, mobileLabel: 'Study' },
+    { id: 'practiceHistory', label: 'History', icon: History, mobileLabel: 'History' },
+  ] : [
     { id: 'home', label: 'Home', icon: Home, mobileLabel: 'Home' },
     { id: 'exams', label: 'Exams', icon: FileText, mobileLabel: 'Exams' },
     { id: 'classroom', label: 'Study', icon: BookOpen, mobileLabel: 'Study' },
     { id: 'practiceHistory', label: 'History', icon: History, mobileLabel: 'History' },
     { id: 'account', label: 'Account', icon: User, mobileLabel: 'Account' },
   ]
-  const extraItems = [
+  const extraItems = demoMode ? [] : [
     { id: 'admin', label: 'Admin Dashboard', icon: Settings },
     { id: 'logout', label: 'Log out', icon: LogOut, danger: true },
   ]
 
   // === FIXED PERMANENT AVATAR URL ===
   const avatarUrl = useMemo(() => {
+    if (demoMode) return '/icons/examcore-192.png'
     const img = user?.profile_image
     if (!img) return `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.username || user?.email || 'User')}&background=1d4be3&color=fff&bold=true`
     if (img.startsWith('http')) return img
     if (img.startsWith('/uploads')) return `${API_URL}${img}`
     if (img.startsWith('avatars/') || img.startsWith('questions/')) return `${API_URL}/uploads/${img}`
     return `${API_URL}/uploads/avatars/${img}`
-  }, [user?.profile_image, user?.username, user?.email])
+  }, [demoMode, user?.profile_image, user?.username, user?.email])
 
   const unreadCount = useMemo(() => notifications.filter(n =>!n.read).length, [notifications])
 
   const handleNavClick = async (id: string) => {
+    if (demoMode) {
+      onDemoNavigate?.(id)
+      setMenuOpen(false)
+      setShowNotif(false)
+      return
+    }
     if (id === 'logout') {
       if (confirm("Logout?")) { logout(); setActivePage('landing') }
       return
@@ -150,7 +163,9 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
             </div>
           )}
           <div className="navbar-right">
-            {user && (
+            {demoMode ? (
+              <span className="demo-mode-chip">DEMO MODE</span>
+            ) : user && (
               <div className="navbar-user">
                 <img src={avatarUrl} alt="avatar" />
                 <div className="navbar-user-info">
@@ -159,7 +174,7 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
                 </div>
               </div>
             )}
-            <div style={{position:'relative'}}>
+            {!demoMode && <div style={{position:'relative'}}>
               <button className="bell-btn" onClick={() => setShowNotif(!showNotif)}><Bell size={20} />{unreadCount>0 && <span className="bell-dot">{unreadCount>9? '9+': unreadCount}</span>}</button>
               {showNotif && (
                 <div className="notif-dropdown" style={{position:'absolute', right:0, top:'45px', width:'360px', maxWidth:'90vw', background:'#111827', color:'#f9fafb', borderRadius:'16px', boxShadow:'0 20px 60px rgba(0,0,0,0.15)', border:'1px solid #e5e7eb', zIndex:100, overflow:'hidden'}}>
@@ -193,7 +208,7 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         </div>
       </header>
@@ -204,11 +219,11 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
           <div className="profile-section">
             <div className="avatar"><img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} /></div>
             <div className="profile-text">
-              <h3>{user?.username || 'User'}</h3>
-              <span style={{ fontSize: 12, opacity: 0.7, wordBreak:'break-all' }}>{user?.email || 'Not logged in'}</span>
-              <span>Free Plan • {historyCount} Exams • {unreadCount} new</span>
+              <h3>{demoMode ? 'Demo Learner' : user?.username || 'User'}</h3>
+              <span style={{ fontSize: 12, opacity: 0.7, wordBreak:'break-all' }}>{demoMode ? 'Sample account' : user?.email || 'Not logged in'}</span>
+              <span>{demoMode ? 'Demo • Sample data only' : `Free Plan • ${historyCount} Exams • ${unreadCount} new`}</span>
             </div>
-            <button className="edit-profile" onClick={() => handleNavClick('account')}><Edit2 size={12} /> Edit</button>
+            {!demoMode && <button className="edit-profile" onClick={() => handleNavClick('account')}><Edit2 size={12} /> Edit</button>}
           </div>
           <button className="close-btn" onClick={() => setMenuOpen(false)}><X size={20} /></button>
           <button
@@ -223,12 +238,12 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
         </div>
         <nav className="sidebar-links">
           {navItems.map(item => { const Icon = item.icon; return <button key={item.id} aria-label={sidebarCollapsed ? item.label : undefined} title={sidebarCollapsed ? item.label : undefined} className={`sidebar-link ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><span className="sidebar-icon"><Icon size={18} /></span><span className="sidebar-link-label">{item.label}</span><ChevronRight size={16} className="chevron" /></button> })}
-          <div className="sidebar-divider"></div>
+          {!demoMode && <div className="sidebar-divider"></div>}
           {extraItems.map(item => { const Icon = item.icon; return <button key={item.id} aria-label={sidebarCollapsed ? item.label : undefined} title={sidebarCollapsed ? item.label : undefined} className={`sidebar-link ${item.danger? 'danger' : 'muted'}`} onClick={() => handleNavClick(item.id)}><span className="sidebar-icon"><Icon size={18} /></span><span className="sidebar-link-label">{item.label}</span></button> })}
         </nav>
-        <div className="sidebar-footer">EXAMCORE v1.0 • {user?.email} • {historyCount} Tests 🇳🇬</div>
+        <div className="sidebar-footer">{demoMode ? 'DEMO MODE • SAMPLE DATA ONLY' : `EXAMCORE v1.0 • ${user?.email} • ${historyCount} Tests 🇳🇬`}</div>
       </aside>
-      <nav className="bottom-nav" aria-label="Primary navigation">
+      <nav className={`bottom-nav${demoMode ? ' demo-bottom-nav' : ''}`} aria-label="Primary navigation">
         {navItems.map(item => { const Icon = item.icon; return <button key={item.id} type="button" aria-current={activePage === item.id ? 'page' : undefined} className={`nav-item ${activePage === item.id? 'active' : ''}`} onClick={() => handleNavClick(item.id)}><span className="nav-icon-wrap"><Icon size={22} strokeWidth={activePage === item.id ? 2.5 : 1.9} /></span><span className="nav-label">{item.mobileLabel}</span></button> })}
       </nav>
     </>

@@ -43,6 +43,21 @@ body {
   gap: 10px;
 }
 
+.demo-mode-chip {
+  padding: 7px 10px;
+  border: 1px solid rgba(29, 75, 227, 0.4);
+  border-radius: 9px;
+  background: rgba(29, 75, 227, 0.12);
+  color: #a5b4fc;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.bottom-nav.demo-bottom-nav {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 /* NEW - USER EMAIL IN NAVBAR */
 .navbar-user {
   display: flex;
