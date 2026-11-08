@@ -3,7 +3,7 @@ import { Activity, ArrowRight, BookOpen, Download, FileSpreadsheet, ImagePlus, L
 import "./AdminDashboard.css";
 import { apiRequest, asArray, uploadQuestionImage } from "../api";
 import QuestionImage from "../components/QuestionImage";
-import { csvTemplateHeaders, normalizeImageReference, parseQuestionCsv, type CsvQuestionRow } from "../adminQuestionCsv";
+import { csvTemplateHeaders, isSupportedQuestionImage, normalizeImageReference, parseQuestionCsv, summarizeQuestionImageMatches, type CsvQuestionRow } from "../adminQuestionCsv";
 import { loadQuestionZip } from "../questionZip";
 
 const defaultSubjects = ["Mathematics","English","Physics","Chemistry","Biology","Government","Economics","Literature","CRS","Geography"];
@@ -17,6 +17,7 @@ type OverviewData = { counts?: Record<string, number | null> | null; performance
 const maxCsvFileBytes = 5 * 1024 * 1024;
 const maxQuestionZipBytes = 25 * 1024 * 1024;
 const maxCsvRows = 500;
+const maxQuestionImageBytes = 5 * 1024 * 1024;
 
 const formatExamDate = (value: string) => {
   const dateOnlyParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -84,11 +85,16 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [explanation, setExplanation] = useState("");
   const [csvRows, setCsvRows] = useState<CsvQuestionRow[]>([]);
   const [csvImageFiles, setCsvImageFiles] = useState<Map<string, File>>(new Map());
+  const [csvUploadFile, setCsvUploadFile] = useState<File | null>(null);
+  const [csvSelectedImages, setCsvSelectedImages] = useState<File[]>([]);
+  const [csvImageError, setCsvImageError] = useState("");
   const [csvFileName, setCsvFileName] = useState("");
   const [csvExamId, setCsvExamId] = useState("");
   const [csvError, setCsvError] = useState("");
   const [csvImporting, setCsvImporting] = useState(false);
   const [csvProgress, setCsvProgress] = useState({ completed: 0, total: 0 });
+  const [bulkPreviewReady, setBulkPreviewReady] = useState(false);
+  const [bulkImportResult, setBulkImportResult] = useState<Record<string, unknown> | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -319,10 +325,13 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     event.target.value = "";
     setCsvRows([]);
     setCsvImageFiles(new Map());
+    setCsvUploadFile(null);
     setCsvFileName("");
     setCsvExamId("");
     setCsvError("");
     setCsvProgress({ completed: 0, total: 0 });
+    setBulkPreviewReady(false);
+    setBulkImportResult(null);
     if (!file) return;
     const extension = file.name.toLowerCase().split(".").pop();
     if (extension !== "csv" && extension !== "zip") {
@@ -355,7 +364,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         parsedRows = zipContents.rows;
         setCsvImageFiles(zipContents.images);
       } else {
-        parsedRows = parseQuestionCsv(await file.text(), exam.subjects);
+        parsedRows = parseQuestionCsv(await file.text(), exam.subjects, { allowImageReferences: true });
       }
       if (parsedRows.length > maxCsvRows) {
         setCsvError(`This file has ${parsedRows.length} rows. Import up to ${maxCsvRows} questions at a time.`);
@@ -363,6 +372,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         return;
       }
 
+      if (extension === "csv") setCsvUploadFile(file);
       setCsvFileName(file.name);
       setCsvExamId(selectedExam);
       setCsvRows(parsedRows);
@@ -372,7 +382,108 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     }
   };
 
+  const handleCsvImagesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    setCsvImageError("");
+    setBulkPreviewReady(false);
+    setBulkImportResult(null);
+
+    const accepted: File[] = [];
+    const errors: string[] = [];
+    for (const file of files) {
+      if (!isSupportedQuestionImage(file)) {
+        errors.push(`${file.name}: choose a PNG, JPG, or JPEG image.`);
+      } else if (file.size > maxQuestionImageBytes) {
+        errors.push(`${file.name}: image files must be 5 MB or smaller.`);
+      } else {
+        accepted.push(file);
+      }
+    }
+
+    setCsvSelectedImages(current => {
+      const selected = [...current];
+      for (const file of accepted) {
+        if (!selected.some(item => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified)) {
+          selected.push(file);
+        }
+      }
+      return selected;
+    });
+    if (errors.length) setCsvImageError(errors.join(" "));
+  };
+
+  const removeCsvImage = (index: number) => {
+    setCsvSelectedImages(current => current.filter((_, fileIndex) => fileIndex !== index));
+    setBulkPreviewReady(false);
+    setBulkImportResult(null);
+  };
+
+  const previewBulkImport = () => {
+    setCsvError("");
+    setBulkImportResult(null);
+    setBulkPreviewReady(true);
+  };
+
+  const importBulkCsvQuestions = async () => {
+    if (!csvUploadFile || !selectedExam || selectedExam !== csvExamId) {
+      setCsvError("Select the same exam used for this CSV preview.");
+      return;
+    }
+
+    const imageSummary = summarizeQuestionImageMatches(csvRows, csvSelectedImages);
+    const invalidRows = csvRows.filter(row => row.errors.length > 0);
+    if (invalidRows.length || imageSummary.missingImages > 0) {
+      setCsvError("Resolve the CSV validation errors and match every referenced image before importing.");
+      return;
+    }
+
+    setCsvError("");
+    setCsvImporting(true);
+    setBulkImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("csv", csvUploadFile, csvUploadFile.name);
+      formData.append("examId", selectedExam);
+      for (const image of csvSelectedImages) formData.append("images", image, image.name);
+
+      const response = await apiRequest<unknown>("/api/admin/bulk-import-questions", {
+        method: "POST",
+        body: formData,
+      });
+      const body = response && typeof response === "object" ? response as Record<string, unknown> : {};
+      if (body.success === false || typeof body.error === "string") {
+        const message = body.message ?? body.error;
+        throw new Error(typeof message === "string" ? message : "The bulk import was rejected by the server.");
+      }
+      const result = body.summary && typeof body.summary === "object"
+        ? body.summary as Record<string, unknown>
+        : body;
+      setBulkImportResult(result);
+      const message = typeof body.message === "string" ? body.message : result.message;
+      const failedCount = typeof result.failed === "number" ? result.failed : 0;
+      const hasValidationErrors = Array.isArray(result.validationErrors) && result.validationErrors.length > 0;
+      const fallbackMessage = failedCount > 0
+        ? `Import completed: ${typeof result.imported === "number" ? result.imported : "Some"} added, ${failedCount} failed.`
+        : hasValidationErrors ? "Import completed with validation errors." : "Questions imported successfully.";
+      setMsg(typeof message === "string" ? message : fallbackMessage);
+      if (failedCount === 0 && !hasValidationErrors) {
+        setCsvRows(current => current.map(row => ({ ...row, status: "imported", importError: undefined })));
+      }
+      await fetchQuestions();
+      setTimeout(() => setMsg(""), 5000);
+    } catch (error) {
+      setCsvError(error instanceof Error ? error.message : "Could not import these questions.");
+    } finally {
+      setCsvImporting(false);
+    }
+  };
+
   const importCsvQuestions = async () => {
+    if (csvUploadFile && csvSelectedImages.length > 0) {
+      await importBulkCsvQuestions();
+      return;
+    }
     if (!selectedExam || !csvExamId) {
       setCsvError("Select an exam before importing.");
       return;
@@ -428,6 +539,16 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setCsvImporting(false);
     setMsg(`Question import finished: ${imported} added, ${failed} failed.`);
     setTimeout(() => setMsg(""), 5000);
+  };
+
+  const imageMatchSummary = summarizeQuestionImageMatches(csvRows, csvSelectedImages);
+  const bulkValidationErrors = [
+    ...csvRows.flatMap(row => row.errors.map(error => `Row ${row.rowNumber}: ${error}`)),
+    ...imageMatchSummary.missingReferences.map(reference => `No unique selected image matches "${reference}".`),
+  ];
+  const bulkResultValue = (key: string, fallback: number): number => {
+    const value = bulkImportResult?.[key];
+    return typeof value === "number" ? value : fallback;
   };
 
   if (authState === "checking") return <div className="admin-wrap"><div className="admin-login-card"><h2>Checking admin session...</h2></div></div>;
@@ -598,7 +719,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           <div className="csv-import-heading">
             <div>
               <h3 id="csv-import-title"><FileSpreadsheet size={18} /> Bulk import questions</h3>
-              <p>Choose a CSV, or a ZIP with one <code>questions.csv</code> and an optional <code>images/</code> folder. Reference image filenames in the <code>imageUrl</code> column. Up to 500 questions per file.</p>
+              <p>Choose a CSV and optional PNG/JPG/JPEG images, or a ZIP with one <code>questions.csv</code> and an optional <code>images/</code> folder. Reference image filenames in the <code>imageUrl</code> column. Up to 500 questions per file.</p>
             </div>
             <button type="button" className="csv-template-btn" onClick={downloadCsvTemplate}>
               <Download size={16} /> Download template
@@ -610,8 +731,48 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
             <input type="file" accept=".csv,.zip,text/csv,application/zip" onChange={handleCsvFileChange} disabled={csvImporting} />
           </label>
           {csvFileName && <span className="csv-file-name">{csvFileName}</span>}
+          <div className="csv-images-field">
+            <label htmlFor="csv-question-images">Upload Question Images (Optional)</label>
+            <label className="csv-upload-btn" htmlFor="csv-question-images">
+              <ImagePlus size={16} /> Choose Multiple Images
+              <input
+                id="csv-question-images"
+                type="file"
+                accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                multiple
+                onChange={handleCsvImagesChange}
+                disabled={csvImporting}
+              />
+            </label>
+            <small>PNG, JPG, or JPEG; maximum 5 MB each. Match filenames in the CSV imageUrl column.</small>
+            {csvImageError && <p className="csv-error" role="alert">{csvImageError}</p>}
+            {csvSelectedImages.length > 0 && (
+              <ul className="csv-image-list" aria-label="Selected question images">
+                {csvSelectedImages.map((file, index) => (
+                  <li key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
+                    <span>{file.name}</span>
+                    <button type="button" onClick={() => removeCsvImage(index)} disabled={csvImporting} aria-label={`Remove ${file.name}`}>
+                      <Trash2 size={14} /> Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           {csvRows.length > 0 && (
-            <button type="button" className="csv-clear-btn" onClick={() => { setCsvRows([]); setCsvImageFiles(new Map()); setCsvFileName(""); setCsvExamId(""); setCsvError(""); setCsvProgress({ completed: 0, total: 0 }); }} disabled={csvImporting}>
+            <button type="button" className="csv-clear-btn" onClick={() => {
+              setCsvRows([]);
+              setCsvImageFiles(new Map());
+              setCsvUploadFile(null);
+              setCsvSelectedImages([]);
+              setCsvFileName("");
+              setCsvExamId("");
+              setCsvError("");
+              setCsvImageError("");
+              setCsvProgress({ completed: 0, total: 0 });
+              setBulkPreviewReady(false);
+              setBulkImportResult(null);
+            }} disabled={csvImporting}>
               Clear file
             </button>
           )}
@@ -619,12 +780,43 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
 
           {csvRows.length > 0 && (
             <div className="csv-preview">
+              {csvUploadFile && (
+                <button type="button" className="admin-btn primary csv-import-btn" onClick={previewBulkImport} disabled={csvImporting}>
+                  Preview Import
+                </button>
+              )}
+              {bulkPreviewReady && csvUploadFile && (
+                <>
+                  <div className="csv-preview-summary bulk-preview-summary" aria-live="polite">
+                    <span>Questions found: {bulkResultValue("questionsFound", csvRows.length)}</span>
+                    <span>Images selected: {bulkResultValue("imagesSelected", imageMatchSummary.imagesSelected)}</span>
+                    <span>Images matched: {bulkResultValue("imagesMatched", imageMatchSummary.imagesMatched)}</span>
+                    <span>Missing images: {bulkResultValue("missingImages", imageMatchSummary.missingImages)}</span>
+                  </div>
+                  {bulkValidationErrors.length > 0 && (
+                    <div className="csv-bulk-validation" role="alert">
+                      <strong>Validation errors</strong>
+                      <ul>{bulkValidationErrors.map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}</ul>
+                    </div>
+                  )}
+                  {Array.isArray(bulkImportResult?.validationErrors) && bulkImportResult.validationErrors.length > 0 && (
+                    <div className="csv-bulk-validation" role="alert">
+                      <strong>Backend validation errors</strong>
+                      <ul>{bulkImportResult.validationErrors.map((error, index) => (
+                        <li key={index}>{typeof error === "string" ? error : JSON.stringify(error)}</li>
+                      ))}</ul>
+                    </div>
+                  )}
+                </>
+              )}
               <div className="csv-preview-summary">
                 <span>{csvRows.filter(row => row.errors.length === 0 && row.status !== "imported").length} ready</span>
                 <span>{csvRows.filter(row => row.errors.length > 0).length} need attention</span>
                 <span>{csvRows.filter(row => row.status === "imported").length} imported</span>
               </div>
-              {csvImporting && <p className="csv-progress" aria-live="polite">Importing {csvProgress.completed} of {csvProgress.total} questions...</p>}
+              {csvImporting && <p className="csv-progress" aria-live="polite">{csvUploadFile && csvSelectedImages.length > 0
+                ? "Uploading the CSV and selected images..."
+                : `Importing ${csvProgress.completed} of ${csvProgress.total} questions...`}</p>}
               <div className="csv-preview-table-wrap">
                 <table className="csv-preview-table">
                   <thead>
@@ -653,9 +845,15 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
                 type="button"
                 className="admin-btn primary csv-import-btn"
                 onClick={importCsvQuestions}
-                disabled={csvImporting || loading || !csvRows.some(row => row.errors.length === 0 && row.status !== "imported")}
+                disabled={csvImporting || loading || (csvUploadFile
+                  ? !bulkPreviewReady
+                    || (csvSelectedImages.length > 0 ? bulkValidationErrors.length > 0 : imageMatchSummary.missingImages > 0)
+                    || !csvRows.some(row => row.errors.length === 0 && row.status !== "imported")
+                  : !csvRows.some(row => row.errors.length === 0 && row.status !== "imported"))}
               >
-                {csvImporting ? "Importing..." : `Import ${csvRows.filter(row => row.errors.length === 0 && row.status !== "imported").length} valid questions`}
+                {csvImporting ? "Uploading and importing..." : csvUploadFile && csvSelectedImages.length > 0
+                  ? "Import Questions"
+                  : `Import ${csvRows.filter(row => row.errors.length === 0 && row.status !== "imported").length} valid questions`}
               </button>
             </div>
           )}

@@ -24,6 +24,39 @@ export function normalizeImageReference(value: string): string {
   return value.trim().replace(/\\/g, "/").replace(/^\.\/+/, "").toLowerCase();
 }
 
+export function summarizeQuestionImageMatches(rows: CsvQuestionRow[], files: File[]) {
+  const filesByName = new Map<string, number>();
+  for (const file of files) {
+    const name = normalizeImageReference(file.name.split(/[\\/]/).pop() || file.name);
+    filesByName.set(name, (filesByName.get(name) || 0) + 1);
+  }
+
+  const references = new Set(rows
+    .map(row => row.imageUrl?.trim())
+    .filter((reference): reference is string => !!reference && isSafeImageReference(reference))
+    .map(reference => normalizeImageReference(reference.split(/[\\/]/).pop() || reference)));
+  const matchedReferences: string[] = [];
+  const missingReferences: string[] = [];
+  for (const reference of references) {
+    if (filesByName.get(reference) === 1) matchedReferences.push(reference);
+    else missingReferences.push(reference);
+  }
+
+  return {
+    imagesSelected: files.length,
+    imagesMatched: matchedReferences.length,
+    missingImages: missingReferences.length,
+    missingReferences,
+  };
+}
+
+export function isSupportedQuestionImage(file: File): boolean {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  const supportedExtension = ["png", "jpg", "jpeg"].includes(extension || "");
+  const supportedType = !file.type || ["image/png", "image/jpeg"].includes(file.type.toLowerCase());
+  return supportedExtension && supportedType;
+}
+
 export function isSafeImageReference(value: string): boolean {
   const reference = value.trim().replace(/\\/g, "/");
   const parts = reference.split("/");

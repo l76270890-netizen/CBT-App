@@ -26,6 +26,18 @@ uploads each referenced image through the permanent question-image endpoint
 before saving its question, so ZIP image imports require that endpoint to be
 available.
 
+For separate CSV and multi-image uploads, the admin previews and validates the
+CSV locally, then (when images are selected) sends one authenticated multipart request to
+`POST /api/admin/bulk-import-questions`. The request uses `csv` for the CSV
+file, repeats `images` for each selected PNG/JPG/JPEG file, and includes
+`examId`. The backend should match images by filename against the CSV
+`imageUrl` column and return JSON; optional summary fields are
+`questionsFound`, `imagesSelected`, `imagesMatched`, `missingImages`, and
+`validationErrors` (at the top level or under `summary`). This bulk endpoint is
+expected from the backend; it is not implemented in this frontend repository.
+CSV files without selected images continue to use the existing per-question
+import flow.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:

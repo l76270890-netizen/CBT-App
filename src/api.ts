@@ -42,7 +42,8 @@ export async function apiRequest<T = unknown>(path: string, init: RequestInit = 
   if (!API_URL) throw new Error("Set VITE_API_URL to the backend origin in the frontend environment.");
 
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
+  if (init.body && !isFormData && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     credentials: "include",
