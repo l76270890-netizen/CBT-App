@@ -8,6 +8,7 @@ const imageTypeByExtension: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
+  webp: "image/webp",
 };
 
 type ZipFileData = { uncompressedSize?: number };
