@@ -20,8 +20,10 @@ import stat
 import time
 import tempfile
 import re
+import unicodedata
 from urllib.parse import urlsplit
 import smtplib
+import warnings
 import zipfile
 import zlib
 
@@ -29,6 +31,7 @@ from flask import Flask, jsonify, request, send_from_directory, make_response, g
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
+from PIL import Image, UnidentifiedImageError
 from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.datastructures import FileStorage
@@ -86,7 +89,8 @@ UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER") or os.path.join(
     tempfile.gettempdir() if is_serverless else BASEDIR,
     "examcore-uploads" if is_serverless else "uploads",
 )
-QUESTION_STORAGE_IS_PERSISTENT = not is_serverless or bool(os.environ.get("UPLOAD_FOLDER"))
+QUESTION_STORAGE_IS_PERSISTENT = not is_serverless or bool(
+    os.environ.get("UPLOAD_FOLDER"))
 AVATAR_FOLDER = os.path.join(UPLOAD_FOLDER, "avatars")
 QUESTION_FOLDER = os.path.join(UPLOAD_FOLDER, "questions")
 os.makedirs(AVATAR_FOLDER, exist_ok=True)
@@ -96,9 +100,14 @@ MAX_QUESTION_ARCHIVE_BYTES = 25 * 1024 * 1024
 MAX_QUESTION_ARCHIVE_TOTAL_BYTES = 50 * 1024 * 1024
 MAX_QUESTION_CSV_BYTES = 5 * 1024 * 1024
 MAX_QUESTION_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_QUESTION_IMPORT_IMAGES = 50
+MAX_QUESTION_IMPORT_IMAGE_TOTAL_BYTES = 50 * 1024 * 1024
+MAX_QUESTION_IMPORT_REQUEST_BYTES = 56 * 1024 * 1024
+MAX_QUESTION_IMAGE_PIXELS = 16_000_000
 MAX_QUESTION_README_BYTES = 128 * 1024
 MAX_QUESTION_IMPORT_ROWS = 500
-QUESTION_IMPORT_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
+QUESTION_IMPORT_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
+app.config["MAX_CONTENT_LENGTH"] = MAX_QUESTION_IMPORT_REQUEST_BYTES
 VALID_ROLES = {"school_admin", "teacher", "exam_officer", "student"}
 ADMIN_ROLES = {"school_admin", "teacher", "exam_officer"}
 SUBSCRIPTION_PLANS = {
@@ -123,11 +132,13 @@ def parse_scheduled_at(value):
     if not isinstance(value, str) or not value.strip():
         return None, "scheduledAt must be an ISO 8601 date or datetime."
     try:
-        scheduled_at = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        scheduled_at = datetime.fromisoformat(
+            value.strip().replace("Z", "+00:00"))
     except ValueError:
         return None, "scheduledAt must be an ISO 8601 date or datetime."
     if scheduled_at.tzinfo is not None:
-        scheduled_at = scheduled_at.astimezone(timezone.utc).replace(tzinfo=None)
+        scheduled_at = scheduled_at.astimezone(
+            timezone.utc).replace(tzinfo=None)
     return scheduled_at, None
 
 
@@ -137,11 +148,77 @@ def allowed_file(filename):
 
 def valid_question_import_image(filename, contents):
     extension = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
-    if extension == "png":
-        return contents.startswith(b"\x89PNG\r\n\x1a\n")
-    if extension in {"jpg", "jpeg"}:
-        return contents.startswith(b"\xff\xd8\xff")
-    return False
+    expected_format = {
+        "png": "PNG",
+        "jpg": "JPEG",
+        "jpeg": "JPEG",
+        "webp": "WEBP",
+    }.get(extension)
+    if expected_format is None:
+        return False
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(contents)) as image:
+                if (image.format != expected_format or image.width <= 0
+                        or image.height <= 0
+                        or image.width * image.height > MAX_QUESTION_IMAGE_PIXELS):
+                    return False
+                image.load()
+        return True
+    except (UnidentifiedImageError, OSError, ValueError,
+            Image.DecompressionBombError, Image.DecompressionBombWarning):
+        return False
+
+
+def normalize_question_image_filename(filename):
+    if not isinstance(filename, str) or "\x00" in filename:
+        return None
+    normalized_name = unicodedata.normalize(
+        "NFKC", filename).replace("\\", "/")
+    basename = normalized_name.rsplit("/", 1)[-1].strip()
+    stem, extension = os.path.splitext(basename)
+    extension = extension.lstrip(".").strip().casefold()
+    stem = " ".join(stem.split()).strip().casefold()
+    if (not stem or extension not in QUESTION_IMPORT_IMAGE_EXTENSIONS
+            or not secure_filename(basename)):
+        return None
+    return f"{stem}.{extension}"
+
+
+def read_question_import_upload(csv_file, image_files):
+    csv_contents = csv_file.read(MAX_QUESTION_CSV_BYTES + 1)
+    if len(csv_contents) > MAX_QUESTION_CSV_BYTES:
+        return None, None, "questions.csv must be 5 MB or smaller.", 413
+    if len(image_files) > MAX_QUESTION_IMPORT_IMAGES:
+        return None, None, "Upload at most 50 images per import.", 400
+
+    images = {}
+    normalized_names = {}
+    total_image_bytes = 0
+    for image_file in image_files:
+        if not image_file or not image_file.filename:
+            continue
+        image_contents = image_file.read(MAX_QUESTION_IMAGE_BYTES + 1)
+        if len(image_contents) > MAX_QUESTION_IMAGE_BYTES:
+            return None, None, f"Image {secure_filename(image_file.filename)} must be 10 MB or smaller.", 413
+        total_image_bytes += len(image_contents)
+        if total_image_bytes > MAX_QUESTION_IMPORT_IMAGE_TOTAL_BYTES:
+            return None, None, "Uploaded images must total 50 MB or less.", 413
+
+        filename_key = normalize_question_image_filename(image_file.filename)
+        if filename_key is None:
+            return None, None, f"Image {secure_filename(image_file.filename) or 'upload'} must have a PNG, JPG, JPEG, or WEBP filename.", 400
+        previous_name = normalized_names.get(filename_key)
+        if previous_name is not None:
+            return None, None, f"Uploaded images {previous_name} and {image_file.filename} have duplicate or ambiguous filenames.", 400
+        if not valid_question_import_image(filename_key, image_contents):
+            return None, None, f"Image {secure_filename(image_file.filename)} is not a valid PNG, JPG, JPEG, or WEBP file.", 400
+        normalized_names[filename_key] = image_file.filename
+        images[image_file.filename] = image_contents
+
+    return csv_contents, images, None, None
 
 
 def upload_to_cloudinary(file, folder):
@@ -169,13 +246,30 @@ def store_question_image(file):
     if not QUESTION_STORAGE_IS_PERSISTENT:
         return None, "Permanent image storage is unavailable. Configure Cloudinary or set UPLOAD_FOLDER to a persistent volume."
 
-    filename = f"q_{secrets.token_hex(12)}_{secure_filename(file.filename)}"
+    original_name = file.filename.replace("\\", "/").rsplit("/", 1)[-1]
+    filename = f"q_{secrets.token_hex(12)}_{secure_filename(original_name)}"
     try:
         file.save(os.path.join(QUESTION_FOLDER, filename))
     except OSError:
         app.logger.exception("Question image could not be saved")
         return None, "Question image could not be saved to permanent storage."
     return f"questions/{filename}", None
+
+
+def remove_stored_question_images(image_paths):
+    question_folder = os.path.abspath(QUESTION_FOLDER)
+    for image_path in image_paths:
+        if not image_path or image_path.startswith(("http://", "https://")):
+            continue
+        stored_path = os.path.abspath(os.path.join(UPLOAD_FOLDER, image_path))
+        if os.path.commonpath((question_folder, stored_path)) != question_folder:
+            continue
+        try:
+            os.remove(stored_path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            app.logger.exception("Could not remove an unused question image")
 
 
 def read_question_import_archive(file):
@@ -223,9 +317,10 @@ def read_question_import_archive(file):
                     continue
                 if name.startswith("images/") and name.count("/") == 1:
                     filename = name[len("images/"):]
-                    extension = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
+                    extension = filename.rsplit(
+                        ".", 1)[1].lower() if "." in filename else ""
                     if not filename or extension not in QUESTION_IMPORT_IMAGE_EXTENSIONS:
-                        return None, None, f"Image {name} must be a PNG, JPG, or JPEG file.", 400
+                        return None, None, f"Image {name} must be a PNG, JPG, JPEG, or WEBP file.", 400
                     if member.file_size > MAX_QUESTION_IMAGE_BYTES:
                         return None, None, f"Image {filename} must be 10 MB or smaller.", 400
                     image_infos[name] = member
@@ -257,11 +352,12 @@ def read_question_import_archive(file):
                 return None, None, error, 400
             images = {}
             for name, member in image_infos.items():
-                image_data, error = read_member(member, MAX_QUESTION_IMAGE_BYTES)
+                image_data, error = read_member(
+                    member, MAX_QUESTION_IMAGE_BYTES)
                 if error:
                     return None, None, error, 400
                 if not valid_question_import_image(name, image_data):
-                    return None, None, f"Image {name} is not a valid PNG, JPG, or JPEG file.", 400
+                    return None, None, f"Image {name} is not a valid PNG, JPG, JPEG, or WEBP file.", 400
                 images[name] = image_data
             return csv_data, images, None, None
     except (zipfile.BadZipFile, EOFError, OSError, RuntimeError, NotImplementedError, zlib.error):
@@ -275,11 +371,22 @@ def parse_question_import_csv(contents, images, exam):
         return None, "questions.csv must use UTF-8 encoding."
 
     try:
+        image_names = {}
+        for image_name in images:
+            filename_key = normalize_question_image_filename(image_name)
+            if filename_key is None:
+                return None, f"Uploaded image {image_name} has an invalid filename."
+            if filename_key in image_names:
+                return None, f"Uploaded images {image_names[filename_key]} and {image_name} have duplicate or ambiguous filenames."
+            image_names[filename_key] = image_name
+
         try:
-            delimiter = csv.Sniffer().sniff(text[:8192], delimiters=",;\t").delimiter
+            delimiter = csv.Sniffer().sniff(
+                text[:8192], delimiters=",;\t").delimiter
         except csv.Error:
             delimiter = ","
-        reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=delimiter)
+        reader = csv.DictReader(io.StringIO(
+            text, newline=""), delimiter=delimiter)
         if not reader.fieldnames:
             return None, "questions.csv must include a header row."
         headers = [re.sub(r"[^a-z0-9]", "", header.strip().lower())
@@ -323,13 +430,14 @@ def parse_question_import_csv(contents, images, exam):
             if image_reference.lower().startswith(("http://", "https://")):
                 data["imageUrl"] = image_reference
             elif image_reference:
-                filename = image_reference[len("images/"):] if image_reference.startswith("images/") else image_reference
-                if (not filename or "/" in filename or "\\" in filename or
-                        filename in {".", ".."} or
-                        filename.rsplit(".", 1)[-1].lower() not in QUESTION_IMPORT_IMAGE_EXTENSIONS):
+                filename_key = normalize_question_image_filename(
+                    image_reference)
+                if filename_key is None:
                     return None, f"Question row {row_number} has an invalid image filename."
-                image_member = f"images/{filename}"
-                if image_member not in images:
+                image_member = image_names.get(filename_key)
+                if image_member is None:
+                    filename = image_reference.replace(
+                        "\\", "/").rsplit("/", 1)[-1].strip()
                     return None, f"Question row {row_number} references missing image {filename}."
 
             validated, error = validate_question_payload(data, exam)
@@ -486,7 +594,8 @@ class AuthToken(db.Model):
 class PaystackPayment(db.Model):
     __tablename__ = "paystack_payments"
     id = db.Column(db.Integer, primary_key=True)
-    reference = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    reference = db.Column(db.String(120), nullable=False,
+                          unique=True, index=True)
     email = db.Column(db.String(254), nullable=False, index=True)
     plan = db.Column(db.String(16), nullable=False)
     amount = db.Column(db.Integer, nullable=False)
@@ -596,6 +705,14 @@ def not_found(_error):
     return api_error("Resource not found.", 404, "not_found")
 
 
+@app.errorhandler(413)
+def request_too_large(_error):
+    message = "Request payloads must be 56 MB or smaller."
+    if request.path.startswith("/api/admin/import-questions"):
+        return jsonify(success=False, error=message, errors=[message]), 413
+    return api_error(message, 413, "file_too_large")
+
+
 @app.errorhandler(500)
 def internal_error(_error):
     db.session.rollback()
@@ -701,7 +818,8 @@ def initialize_paystack_checkout():
     payment_url_key = f"PAYSTACK_{plan.upper()}_PAYMENT_URL"
     authorization_url = os.environ.get(payment_url_key, "").strip()
     if not authorization_url:
-        app.logger.error("Paystack payment link is missing %s.", payment_url_key)
+        app.logger.error(
+            "Paystack payment link is missing %s.", payment_url_key)
         return api_error(
             f"The {plan} payment link is not configured on the server.",
             503,
@@ -742,7 +860,8 @@ def get_payment_plans():
                 "durationDays": details.get("duration_days"),
                 "durationMonths": details.get("duration_months"),
                 "checkoutAvailable": bool(
-                    os.environ.get(f"PAYSTACK_{plan.upper()}_PAYMENT_URL", "").strip()
+                    os.environ.get(
+                        f"PAYSTACK_{plan.upper()}_PAYMENT_URL", "").strip()
                 ),
             }
             for plan, details in SUBSCRIPTION_PLANS.items()
@@ -823,12 +942,14 @@ def paystack_webhook():
         return jsonify(success=True, ignored=True)
 
     event_data = event_body.get("data")
-    reference = event_data.get("reference") if isinstance(event_data, dict) else None
+    reference = event_data.get("reference") if isinstance(
+        event_data, dict) else None
     if not isinstance(reference, str) or not reference.strip() or len(reference) > 120:
         return api_error("Webhook transaction reference is invalid.")
     transaction = event_data
     customer = transaction.get("customer")
-    verified_email = customer.get("email") if isinstance(customer, dict) else None
+    verified_email = customer.get(
+        "email") if isinstance(customer, dict) else None
     verified_reference = transaction.get("reference")
     amount = transaction.get("amount")
     currency = transaction.get("currency")
@@ -843,17 +964,20 @@ def paystack_webhook():
     matching_plans = [plan for plan, details in SUBSCRIPTION_PLANS.items()
                       if amount == details["amount"]]
     if len(matching_plans) != 1:
-        app.logger.warning("Signed Paystack transaction amount does not match an available plan.")
+        app.logger.warning(
+            "Signed Paystack transaction amount does not match an available plan.")
         return api_error("Payment amount does not match an available plan.", 400, "plan_amount_mismatch")
     plan = matching_plans[0]
     email = verified_email.strip().lower()
     now = utcnow()
 
-    payment = PaystackPayment.query.filter_by(reference=reference).with_for_update().first()
+    payment = PaystackPayment.query.filter_by(
+        reference=reference).with_for_update().first()
     if payment:
         if (payment.email != email or payment.plan != plan or
                 payment.amount != amount or payment.currency != currency):
-            app.logger.error("Paystack reference was received with conflicting verified transaction details.")
+            app.logger.error(
+                "Paystack reference was received with conflicting verified transaction details.")
             return api_error("Payment reference conflicts with a previously processed transaction.", 409, "payment_conflict")
         if payment.email_sent_at:
             return jsonify(success=True, duplicate=True)
@@ -876,10 +1000,12 @@ def paystack_webhook():
             db.session.commit()
         except SQLAlchemyError:
             db.session.rollback()
-            app.logger.exception("Could not record verified Paystack transaction.")
+            app.logger.exception(
+                "Could not record verified Paystack transaction.")
             return api_error("Could not record the verified payment.", 500, "payment_record_failed")
 
-    payment = PaystackPayment.query.filter_by(reference=reference).with_for_update().first()
+    payment = PaystackPayment.query.filter_by(
+        reference=reference).with_for_update().first()
     if payment.email_sent_at:
         return jsonify(success=True, duplicate=True)
     pin = f"{secrets.randbelow(100_000_000):08d}"
@@ -892,7 +1018,8 @@ def paystack_webhook():
         db.session.commit()
     except (OSError, ValueError, smtplib.SMTPException, SQLAlchemyError) as error:
         db.session.rollback()
-        app.logger.error("Could not email the verified-payment activation PIN: %s", error)
+        app.logger.error(
+            "Could not email the verified-payment activation PIN: %s", error)
         return api_error("Could not email the activation PIN. Please retry the webhook.", 503, "activation_email_failed")
     return jsonify(success=True, message="Payment verified and activation PIN emailed.")
 
@@ -966,7 +1093,8 @@ def redeem_paystack_activation_pin():
     if user.subscription_expires_at and user.subscription_expires_at > now:
         subscription_start = user.subscription_expires_at
     user.subscription_plan = payment.plan
-    user.subscription_expires_at = add_subscription_period(subscription_start, payment.plan)
+    user.subscription_expires_at = add_subscription_period(
+        subscription_start, payment.plan)
     user.account_status = "active"
     payment.pin_used_at = now
     try:
@@ -993,7 +1121,6 @@ def logout():
     g.auth_session.revoked_at = utcnow()
     db.session.commit()
     return cookie_response({"success": True}, clear=True)
-
 
 
 @app.route("/api/user/delete-account", methods=["DELETE"])
@@ -1056,7 +1183,6 @@ def delete_account():
     )
 
 
-
 @app.route("/api/user/upload-avatar/<int:user_id>", methods=["POST"])
 @require_auth
 def upload_avatar(user_id):
@@ -1106,6 +1232,7 @@ def get_exams():
                        "scheduledAt": iso_utc(exam.scheduled_at),
                        "subjects": subjects_for_exam(exam), "totalQuestions": actual_questions})
     return jsonify(result)
+
 
 @app.route("/api/questions", methods=["GET"])
 @require_auth
@@ -1369,11 +1496,13 @@ def add_question():
                    image_path=row.image_path, image_url=get_image_url(row.image_path)), 201
 
 
+@app.route("/api/admin/import-questions", methods=["POST"])
 @app.route("/api/admin/import-questions-zip", methods=["POST"])
 @roles_required("school_admin", "exam_officer")
 def import_questions_zip():
-    if request.content_length and request.content_length > MAX_QUESTION_ARCHIVE_BYTES + 1024 * 1024:
-        return api_error("ZIP files must be 25 MB or smaller.", 413, "file_too_large")
+    if request.content_length and request.content_length > MAX_QUESTION_IMPORT_REQUEST_BYTES:
+        error = "The import request must be 56 MB or smaller."
+        return jsonify(success=False, error=error, errors=[error]), 413
 
     try:
         exam_id = int(request.form.get("examId", ""))
@@ -1384,11 +1513,85 @@ def import_questions_zip():
     if not exam:
         return api_error("Exam not found in your school.", 404, "exam_not_found")
 
+    csv_file = request.files.get("csv")
+    if csv_file:
+        csv_contents, images, import_error, status = read_question_import_upload(
+            csv_file, request.files.getlist("images"))
+        if import_error:
+            return jsonify(success=False, error=import_error, errors=[import_error]), status
+        prepared, csv_error = parse_question_import_csv(
+            csv_contents, images, exam)
+        if csv_error:
+            return jsonify(success=False, error=csv_error, errors=[csv_error]), 400
+
+        stored_images = {}
+        for _, image_name in prepared:
+            if not image_name or image_name in stored_images:
+                continue
+            image_file = FileStorage(
+                stream=io.BytesIO(images[image_name]),
+                filename=image_name.replace("\\", "/").rsplit("/", 1)[-1],
+            )
+            image_path, storage_error = store_question_image(image_file)
+            if storage_error:
+                remove_stored_question_images(stored_images.values())
+                return jsonify(
+                    success=False, error=storage_error, errors=[storage_error]
+                ), 503
+            stored_images[image_name] = image_path
+
+        try:
+            for question, image_name in prepared:
+                image_path = (
+                    stored_images[image_name] if image_name
+                    else question["image_path"]
+                )
+                db.session.add(Question(
+                    examId=exam.id,
+                    school_id=exam.school_id,
+                    examType=exam.examType,
+                    subject=question["subject"],
+                    question=question["question"],
+                    options=question["options"],
+                    answer=question["answer"],
+                    explanation=question["explanation"],
+                    year=exam.year,
+                    image_path=image_path,
+                ))
+            db.session.flush()
+            exam.totalQuestions = Question.query.filter_by(
+                examId=exam.id, school_id=exam.school_id).count()
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            remove_stored_question_images(stored_images.values())
+            app.logger.exception(
+                "Bulk question import failed for exam %s", exam.id)
+            error = "Could not save the imported questions."
+            return jsonify(success=False, error=error, errors=[error]), 500
+
+        matched_images = sum(1 for _, image_name in prepared if image_name)
+        return jsonify(
+            success=True,
+            exam_id=exam.id,
+            questionsFound=len(prepared),
+            questionsImported=len(prepared),
+            imagesUploaded=len(stored_images),
+            imagesMatched=matched_images,
+            errors=[],
+            message=f"Imported {len(prepared)} questions.",
+        ), 201
+
+    if request.path == "/api/admin/import-questions":
+        error = "Upload one CSV file in the csv field."
+        return jsonify(success=False, error=error, errors=[error]), 400
+
     archive_file = request.files.get("file")
     if not archive_file or not archive_file.filename:
         return api_error("Upload a ZIP file in the file field.")
 
-    csv_contents, images, archive_error, status = read_question_import_archive(archive_file)
+    csv_contents, images, archive_error, status = read_question_import_archive(
+        archive_file)
     if archive_error:
         return api_error(archive_error, status)
     prepared, csv_error = parse_question_import_csv(csv_contents, images, exam)
@@ -1409,7 +1612,8 @@ def import_questions_zip():
 
     try:
         for question, image_member in prepared:
-            image_path = stored_images.get(image_member) if image_member else question["image_path"]
+            image_path = stored_images.get(
+                image_member) if image_member else question["image_path"]
             db.session.add(Question(
                 examId=exam.id,
                 school_id=exam.school_id,
@@ -1428,7 +1632,8 @@ def import_questions_zip():
         db.session.commit()
     except Exception:
         db.session.rollback()
-        app.logger.exception("Bulk question import failed for exam %s", exam.id)
+        app.logger.exception(
+            "Bulk question import failed for exam %s", exam.id)
         return api_error("Could not save the imported questions.", 500, "question_import_failed")
 
     return jsonify(
@@ -1506,7 +1711,8 @@ def admin_upcoming_exams():
         Exam.scheduled_at >= utcnow(),
     )
     total = query.count()
-    exams = query.order_by(Exam.scheduled_at.asc(), Exam.id.asc()).limit(limit).all()
+    exams = query.order_by(Exam.scheduled_at.asc(),
+                           Exam.id.asc()).limit(limit).all()
     result = []
     for exam in exams:
         question_count = Question.query.filter_by(

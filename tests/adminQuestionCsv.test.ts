@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseQuestionCsv } from "../src/adminQuestionCsv.ts";
+import { isSupportedQuestionImage, parseQuestionCsv, summarizeQuestionImageMatches } from "../src/adminQuestionCsv.ts";
 
 const subjects = ["Mathematics"];
 
@@ -40,4 +40,30 @@ test("allows an empty optional image URL and rejects malformed image URLs", () =
     "What is 2 + 2?,3,4,5,6,B,Mathematics,Basic addition,javascript:alert(1)",
   ].join("\n"), subjects)[0];
   assert.ok(invalidImage.errors.includes("Image URL must be a valid HTTP(S) URL or a relative upload path"));
+});
+
+test("matches selected images by filename and reports missing or ambiguous references", () => {
+  const rows = parseQuestionCsv([
+    "subject,question,optionA,optionB,optionC,optionD,correctAnswer,explanation,imageUrl",
+    "Mathematics,First question,A,B,C,D,A,,images/Triangle.png",
+    "Mathematics,Second question,A,B,C,D,A,,missing.jpg",
+    "Mathematics,Third question,A,B,C,D,A,,duplicate.png",
+  ].join("\n"), subjects, { allowImageReferences: true });
+  const files = [
+    new File(["image"], "triangle.png", { type: "image/png" }),
+    new File(["image"], "duplicate.PNG", { type: "image/png" }),
+    new File(["image"], "duplicate.png", { type: "image/png" }),
+  ];
+
+  const summary = summarizeQuestionImageMatches(rows, files);
+  assert.equal(summary.imagesSelected, 3);
+  assert.equal(summary.imagesMatched, 1);
+  assert.equal(summary.missingImages, 2);
+  assert.deepEqual(summary.missingReferences, ["missing.jpg", "duplicate.png"]);
+});
+
+test("accepts supported image types and rejects unsupported extensions or MIME types", () => {
+  assert.equal(isSupportedQuestionImage(new File(["x"], "diagram.jpg", { type: "image/jpeg" })), true);
+  assert.equal(isSupportedQuestionImage(new File(["x"], "diagram.webp", { type: "image/webp" })), false);
+  assert.equal(isSupportedQuestionImage(new File(["x"], "diagram.png", { type: "image/gif" })), false);
 });
