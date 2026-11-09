@@ -1,6 +1,22 @@
-# Bulk question ZIP upload
+# Bulk question import
 
-The Admin question-import page accepts the existing CSV format and ZIP files.
+The Admin import API accepts a CSV with multiple image files, as well as the
+existing ZIP format. For a CSV import, submit multipart form data to
+`POST /api/admin/import-questions` with `examId`, one `csv` file, and zero or
+more `images` files:
+
+```text
+examId: 123
+csv: questions.csv
+images: triangle.png
+images: angles.png
+```
+
+`POST /api/admin/import-questions-csv` accepts the same `examId`, `csv`, and
+`images` fields for clients (such as the Admin dashboard) that use an explicit
+CSV-plus-images route.
+
+The existing `POST /api/admin/import-questions-zip` endpoint remains available.
 For a ZIP import, select an exam, then upload a ZIP containing:
 
 ```text
@@ -16,22 +32,37 @@ images/
 subject,question,optionA,optionB,optionC,optionD,correctAnswer,explanation,imageUrl
 ```
 
-Set `imageUrl` to the relative path in the archive, for example
-`images/triangle.png`. Leave it blank for a question without an image.
+For a CSV-plus-images import, set `imageUrl` to the image filename, such as
+`triangle.png`; an optional directory prefix is ignored. Uploaded names and CSV
+references are matched case-insensitively after whitespace normalization.
+Duplicate or ambiguous uploaded names are rejected. Leave `imageUrl` blank for
+a question without an image. ZIP imports continue to support `images/triangle.png`.
 Question subjects must match one of the exam's configured subjects, and
 `correctAnswer` must be `A`, `B`, `C`, or `D`. CSV files must be UTF-8 encoded.
 
-The ZIP may be at most 25 MB, with at most 500 questions, 50 MB of uncompressed
-contents, 5 MB per CSV, and 10 MB per image. Images must be PNG, JPG, or JPEG.
+Imports support up to 500 questions. CSVs are limited to 5 MB; each image is
+limited to 10 MB. CSV-plus-images requests allow at most 50 images and 50 MB
+total image data; the complete multipart request is limited to 56 MB. Images
+must be PNG, JPG, JPEG, or WEBP and their file signatures are checked. The
+legacy ZIP may be at most 25 MB, with 50 MB of uncompressed contents.
 Only `questions.csv`, an optional `README.txt`, and files directly inside
 `images/` are accepted. Paths are validated and files are never extracted to
-archive-controlled filesystem paths.
+archive-controlled filesystem paths. Each image is decoded and limited to
+16 megapixels to reject malformed uploads and decompression bombs.
+
+Single question images are uploaded to
+`POST /api/upload/question-image` (also served as
+`POST /api/admin/upload-question-image`) with an `image` field. Both paths return
+`success`, `image_path`, `image_url`, and `imageUrl` (an absolute URL or a
+`/uploads/...` path).
 
 Uploads require a successful Admin login and use
-`POST /api/admin/import-questions-zip` as multipart form data with `examId` and
-`file` fields. The endpoint validates all rows and image references before it
-stores images or inserts questions. Student question responses include the
-image URLs, which are served through `/uploads/...`.
+`examId` and either the `csv`/`images` fields or the legacy ZIP `file` field.
+The endpoint validates all rows and image references before it stores images
+or inserts questions. Successful CSV imports include `questionsFound`,
+`questionsImported`, `imagesUploaded` (unique images saved), and
+`imagesMatched` (CSV question references) counts. Student
+question responses include image URLs, which are served through `/uploads/...`.
 
 Images are stored locally under `uploads/questions/` by default. To retain them
 across redeployments, configure `UPLOAD_FOLDER` to a persistent mounted volume.
