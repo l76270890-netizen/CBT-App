@@ -106,6 +106,18 @@ class QuestionImportTests(unittest.TestCase):
             form_data.add("images", (io.BytesIO(contents), name))
         return self.client.post(endpoint, data=form_data)
 
+    def test_import_routes_are_registered_and_require_authentication(self):
+        client = backend.app.test_client()
+        for endpoint in (
+            "/api/admin/import-questions",
+            "/api/admin/import-questions-csv",
+        ):
+            with self.subTest(endpoint=endpoint):
+                response = client.post(endpoint)
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(
+                    response.get_json()["code"], "unauthenticated")
+
     @staticmethod
     def row(question, image=""):
         return [
