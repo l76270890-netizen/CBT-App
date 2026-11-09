@@ -32,6 +32,25 @@ def make_csv(rows):
 
 
 class QuestionImportTests(unittest.TestCase):
+    def test_admin_frontend_origins_are_combined(self):
+        origins = backend.configured_frontend_origins({
+            "FRONTEND_ORIGINS": "https://student.example, https://shared.example",
+            "ADMIN_FRONTEND_ORIGINS": "https://admin.example, https://shared.example",
+            "FRONTEND_ORIGIN": "https://legacy.example",
+        })
+        self.assertEqual(origins, [
+            "https://student.example",
+            "https://shared.example",
+            "https://admin.example",
+            "https://legacy.example",
+        ])
+
+    def test_local_frontend_origin_is_default_when_unconfigured(self):
+        self.assertEqual(
+            backend.configured_frontend_origins({}),
+            ["http://localhost:3000"],
+        )
+
     @classmethod
     def setUpClass(cls):
         cls.temp_dir = tempfile.mkdtemp(prefix="cbt-question-import-")
