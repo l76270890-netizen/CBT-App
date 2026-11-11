@@ -89,6 +89,31 @@ CORS(app, resources={r"/api/*": {"origins": FRONTEND_ORIGINS}},
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
+
+def ensure_user_columns():
+    """Add any missing columns to the users table so the app doesn't crash
+    on deployments where the database schema hasn't been migrated yet."""
+    inspector = db.inspect(db.engine)
+    existing_cols = {col["name"] for col in inspector.get_columns("users")}
+
+    missing = []
+    if "reset_token" not in existing_cols:
+        missing.append('ALTER TABLE users ADD COLUMN reset_token VARCHAR(200)')
+    if "reset_token_expires" not in existing_cols:
+        missing.append('ALTER TABLE users ADD COLUMN reset_token_expires TIMESTAMP')
+
+    if missing:
+        with db.engine.connect() as conn:
+            for stmt in missing:
+                conn.execute(db.text(stmt))
+            conn.commit()
+        app.logger.info("Added missing user columns: %s", ", ".join(missing))
+
+
+# Run once at import time so login and other routes don't 500 on missing columns.
+with app.app_context():
+    ensure_user_columns()
+
 BASEDIR = os.path.abspath(os.path.dirname(__file__))
 is_serverless = is_vercel or bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
 UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER") or os.path.join(
@@ -498,6 +523,8 @@ class User(db.Model):
     last_seen_at = db.Column(db.DateTime, nullable=True, index=True)
     subscription_plan = db.Column(db.String(16), nullable=True)
     subscription_expires_at = db.Column(db.DateTime, nullable=True, index=True)
+    reset_token = db.Column(db.String(200), nullable=True, index=True)
+    reset_token_expires = db.Column(db.DateTime, nullable=True)
 
 
 class Exam(db.Model):
@@ -624,6 +651,47 @@ def api_error(message, status=400, code=None):
 
 def json_body():
     return request.get_json(silent=True) or {}
+
+
+def subscription_is_active(user):
+    """Return True if the user has an active, non-expired subscription."""
+    if not user.subscription_expires_at:
+        return False
+    return user.subscription_expires_at > utcnow()
+
+
+def subscription_hours_until_expiry(user):
+    """Return hours until subscription expires, or None if no expiry is set."""
+    if not user.subscription_expires_at:
+        return None
+    delta = user.subscription_expires_at - utcnow()
+    return max(delta.total_seconds() / 3600, 0)
+
+
+def subscription_expiring_soon(user, threshold_hours=5):
+    """Return True if the subscription is active but expires within threshold hours."""
+    if not subscription_is_active(user):
+        return False
+    hours = subscription_hours_until_expiry(user)
+    if hours is None:
+        return False
+    return hours <= threshold_hours
+
+
+def enforce_subscription_expiry(user):
+    """If a user's subscription has expired, mark account as expired and return False.
+    Returns True if the subscription is still active (or no subscription required)."""
+    now = utcnow()
+    if (user.subscription_expires_at and user.subscription_expires_at <= now
+            and user.account_status == "active"):
+        user.account_status = "expired"
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            app.logger.exception("Could not mark subscription as expired")
+        return False
+    return True
 
 
 def require_auth(fn):
@@ -810,6 +878,48 @@ def admin_login():
     return authenticate(json_body(), admins_only=True)
 
 
+@app.route("/api/auth/forgot-password", methods=["POST"])
+def forgot_password():
+    data = json_body()
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        return api_error("Email is required.", 400, "email_required")
+    user = User.query.filter(func.lower(User.email) == email).first()
+    if not user:
+        # Do not reveal whether the email exists.
+        return jsonify(success=True, message="If an account exists, a reset link has been sent."), 200
+    try:
+        token = secrets.token_urlsafe(32)
+        user.reset_token = token
+        user.reset_token_expires = utcnow() + timedelta(hours=1)
+        db.session.commit()
+        reset_url = f"{os.environ.get('FRONTEND_RESET_URL', 'https://cbt-app-back.vercel.app')}/reset-password?token={token}"
+        send_reset_email(user.email, reset_url)
+    except Exception:
+        app.logger.exception("Forgot password email failed")
+        return api_error("Could not send reset email. Try again later.", 500, "email_failed")
+    return jsonify(success=True, message="If an account exists, a reset link has been sent."), 200
+
+
+@app.route("/api/auth/reset-password", methods=["POST"])
+def reset_password():
+    data = json_body()
+    token = data.get("token") or ""
+    new_password = data.get("password") or ""
+    if not token or not new_password:
+        return api_error("Token and password are required.", 400, "missing_fields")
+    if len(new_password) < 8:
+        return api_error("Password must be at least 8 characters.", 400, "weak_password")
+    user = User.query.filter_by(reset_token=token).first()
+    if not user or not user.reset_token_expires or user.reset_token_expires < utcnow():
+        return api_error("Invalid or expired reset token.", 400, "invalid_token")
+    user.password = generate_password_hash(new_password)
+    user.reset_token = None
+    user.reset_token_expires = None
+    db.session.commit()
+    return jsonify(success=True, message="Password reset successfully."), 200
+
+
 @app.route("/api/payments/paystack/initialize", methods=["POST"])
 def initialize_paystack_checkout():
     data = request.get_json(silent=True)
@@ -897,6 +1007,44 @@ def send_activation_pin(email, pin, plan):
         f"Your single-use activation PIN is: {pin}\n\n"
         "Enter this PIN on the CBT app to activate your account. "
         "It expires in 24 hours. If you did not make this payment, ignore this email."
+    )
+    if port == 465:
+        with smtplib.SMTP_SSL(host, port, timeout=15) as server:
+            server.login(username, password)
+            refused = server.send_message(message)
+    else:
+        with smtplib.SMTP(host, port, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(username, password)
+            refused = server.send_message(message)
+    if refused:
+        raise smtplib.SMTPRecipientsRefused(refused)
+
+
+def send_reset_email(email, reset_url):
+    host = os.environ.get("SMTP_HOST", "").strip()
+    username = os.environ.get("SMTP_USERNAME", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "")
+    sender = os.environ.get("MAIL_FROM_EMAIL", "").strip()
+    try:
+        port = int(os.environ.get("SMTP_PORT", "587"))
+    except ValueError as error:
+        raise ValueError("SMTP_PORT must be an integer.") from error
+    if not host or not username or not password or not sender:
+        raise ValueError(
+            "SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, and MAIL_FROM_EMAIL are required."
+        )
+
+    message = EmailMessage()
+    message["Subject"] = "Reset your CBT account password"
+    message["From"] = sender
+    message["To"] = email
+    message.set_content(
+        f"You requested a password reset for your CBT account.\\n\\n"
+        f"Click the link below to set a new password:\\n{reset_url}\\n\\n"
+        f"This link expires in 1 hour. If you did not request this, ignore this email."
     )
     if port == 465:
         with smtplib.SMTP_SSL(host, port, timeout=15) as server:
@@ -1119,6 +1267,71 @@ def redeem_paystack_activation_pin():
         "subscription_plan": user.subscription_plan,
         "subscription_expires_at": iso_utc(user.subscription_expires_at),
     }, raw_token=raw_token), 201 if is_new_user else 200
+
+
+@app.route("/api/payments/paystack/resend-pin", methods=["POST"])
+def resend_paystack_activation_pin():
+    """Regenerate and resend the activation PIN for a verified payment
+    that already exists but whose email wasn't delivered (or was missed)."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return api_error("A JSON request body is required.")
+    email = (data.get("email") or "").strip().lower()
+    if not email or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        return api_error("A valid email address is required.")
+
+    now = utcnow()
+    payment = PaystackPayment.query.filter(
+        PaystackPayment.email == email,
+        PaystackPayment.email_sent_at.isnot(None),
+        PaystackPayment.pin_used_at.is_(None),
+        PaystackPayment.pin_expires_at > now,
+    ).order_by(PaystackPayment.created_at.desc()).first()
+
+    if not payment:
+        return api_error(
+            "No active unverified payment found for this email.",
+            404, "payment_not_found",
+        )
+
+    pin = f"{secrets.randbelow(100_000_000):08d}"
+    payment.pin_hash = generate_password_hash(pin)
+    payment.pin_expires_at = now + timedelta(hours=24)
+    payment.pin_attempts = 0
+
+    try:
+        send_activation_pin(email, pin, payment.plan)
+        payment.email_sent_at = utcnow()
+        db.session.commit()
+    except (OSError, ValueError, smtplib.SMTPException, SQLAlchemyError) as error:
+        db.session.rollback()
+        app.logger.error(
+            "Could not resend activation PIN: %s", error)
+        return api_error(
+            "Could not resend the activation PIN. Email is not configured.",
+            503, "activation_email_failed",
+        )
+
+    return jsonify({
+        "success": True,
+        "message": "A new activation PIN has been sent to your email.",
+    })
+
+
+@app.route("/api/subscription/status", methods=["GET"])
+@require_auth
+def subscription_status():
+    user = g.current_user
+    hours_left = subscription_hours_until_expiry(user)
+    return jsonify({
+        "success": True,
+        "subscription_plan": user.subscription_plan,
+        "subscription_expires_at": iso_utc(user.subscription_expires_at),
+        "hours_until_expiry": round(hours_left, 2) if hours_left is not None else None,
+        "expiring_soon": subscription_expiring_soon(user, threshold_hours=5),
+        "is_active": subscription_is_active(user),
+        "account_status": user.account_status,
+    })
 
 
 @app.route("/api/logout", methods=["POST"])
@@ -1380,6 +1593,8 @@ def manage_exam(exam_id):
             synchronize_session=False)
         ExamSubject.query.filter_by(exam_id=exam.id).delete(
             synchronize_session=False)
+        Attempt.query.filter_by(exam_id=exam.id).delete(synchronize_session=False)
+        CBTResult.query.filter_by(exam_id=exam.id).delete(synchronize_session=False)
         db.session.delete(exam)
         db.session.commit()
         return jsonify(success=True, message="Exam deleted.")
