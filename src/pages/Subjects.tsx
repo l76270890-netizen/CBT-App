@@ -19,11 +19,15 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
 
+  // When an admin has imported questions (selectedExamId is set), all subjects
+  // are shown and any number can be selected.
+
   const iconMap: any = {
     'Use of English': BookOpen, 'English Language': BookOpen, 'English': BookOpen,
     'Mathematics': Calculator, 'Maths': Calculator,
     'Biology': Atom, 'Chemistry': Beaker, 'Physics': Zap,
-    'Government': Landmark, 'Economics': DollarSign, 'Literature': Library
+    'Government': Landmark, 'Economics': DollarSign, 'Literature': Library,
+    'Literature in English': Library,
   }
 
   useEffect(() => {
@@ -53,6 +57,11 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
               if (question.year) map[name].years.add(String(question.year))
             })
           }))
+          // Imported subjects with no questions must not show a misleading
+          // "40 Questions" count — report the real number instead.
+          Object.values(map).forEach(info => {
+            if (info.count === 0) info.years.add('No questions yet')
+          })
         }
 
         const grouped: SubjectItem[] = Object.entries(map).map(([subject, info]) => ({
@@ -61,20 +70,26 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
           years: Array.from(info.years).join(', ') || '2024',
           required: subject.toLowerCase().includes('english')
         }))
-        if (grouped.length === 0) {
-          const fallback = selectedExam === 'JAMB'
-          ? [{subject:'Use of English',questions:40,years:'2024',required:true},{subject:'Mathematics',questions:40,years:'2024'},{subject:'Biology',questions:40,years:'2024'},{subject:'Chemistry',questions:40,years:'2024'}]
-            : [{subject:'Mathematics',questions:20,years:'2024'}]
-          setSubjects(fallback)
-        } else {
+        if (grouped.length > 0) {
           setSubjects(grouped)
+        } else {
+          // No imported questions for any subject — show nothing rather than
+          // fake counts. The admin must import questions via the dashboard.
+          setSubjects([])
         }
-      } catch (e) { setLoadError(e instanceof Error ? e.message : "Could not load subjects."); setSubjects([]); } finally { setLoading(false) }
+      } catch (e) {
+        setLoadError(e instanceof Error ? e.message : "Could not load subjects.")
+        setSubjects([])
+      } finally {
+        setLoading(false)
+      }
     }
     fetchSubjects()
   }, [selectedExam, selectedExamId, configuredSubjects])
 
-  const maxSubjects = selectedExam === 'JAMB'? 4 : 6
+  // No artificial subject cap — the student may select any number of the
+  // imported subjects shown for this exam.
+  const maxSubjects = subjects.length
   useEffect(() => {
     const required = subjects.filter(s => s.required)
     if (required.length && selectedSubjects.length === 0) { setSelectedSubjects(required) }
@@ -87,6 +102,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
     else { if (selectedSubjects.length >= maxSubjects) return; setSelectedSubjects([...selectedSubjects, subjectData]) }
   }
   const handleContinue = () => {
+    if (selectedSubjects.length === 0) return
     const totalQuestions = selectedSubjects.reduce((sum, s) => sum + s.questions, 0)
     setTestConfig((prev: any) => ({...prev, examType: selectedExam, subjects: selectedSubjects, totalQuestions, year: '2024', duration: Math.ceil(totalQuestions * 1.2) || 60, mode: prev.mode || 'exam', difficulty: 'Normal', showAnswers: prev.mode === 'practice', topic: 'All Topics'}))
     setActivePage('testConfig')
@@ -99,8 +115,8 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
       <div className="exams-topbar">
         <div className="topbar-main">
           <button className="back-btn1" onClick={() => setActivePage('home')}><ArrowLeft size={18} /></button>
-          <div><h1>{selectedExam}</h1><p>Select {maxSubjects} subjects</p></div>
-          <div className="count-badge">{selectedSubjects.length}/{maxSubjects}</div>
+          <div><h1>{selectedExam}</h1><p>Select ${maxSubjects} subjects</p></div>
+          <div className="count-badge">{selectedSubjects.length}/${maxSubjects}</div>
         </div>
         <div className="search-wrapper small"><Search size={16} className="search-icon" /><input placeholder="Search subject..." value={search} onChange={e => setSearch(e.target.value)} /></div>
         <div className="alert-card"><div className="alert-icon">i</div><div className="alert-text">Subjects for {selectedExam}</div></div>
@@ -123,10 +139,8 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
       }
       {selectedSubjects.length > 0 && (
         <div className="sticky-continue">
-          <div className="selected-summary"><span>{selectedSubjects.map(s => s.subject.split(' ')[0]).join(' + ')}</span><b>{selectedSubjects.length}/{maxSubjects} • {totalQs} Qs</b></div>
-          <button className="btn-continue" onClick={handleContinue} disabled={selectedExam === 'JAMB' && selectedSubjects.length!==4}>
-            {selectedExam === 'JAMB' && selectedSubjects.length!==4? `Select ${4 - selectedSubjects.length} more` : 'CONTINUE TO SETUP'}
-          </button>
+          <div className="selected-summary"><span>{selectedSubjects.map(s => s.subject.split(' ')[0]).join(' + ')}</span><b>{selectedSubjects.length}/${maxSubjects} • ${totalQs} Qs</b></div>
+          <button className="btn-continue" onClick={handleContinue}>CONTINUE TO SETUP</button>
         </div>
       )}
     </div>

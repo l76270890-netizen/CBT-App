@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { ArrowRight, BookOpen, CalendarDays, Search, X, Funnel, Flame, Trophy, Target, BarChart3, ChevronLeft, ChevronRight, Clock3, Play, Zap } from 'lucide-react'
+import { ArrowRight, BookOpen, CalendarDays, Search, X, Funnel, Flame, Trophy, Target, BarChart3, ChevronLeft, ChevronRight, ChevronRight as ChevronRightIcon, Clock3, Play, Zap } from 'lucide-react'
+import { examTypes } from '../data/examTypes'
 import './Home.css'
 import { apiRequest, asArray } from '../api'
 
@@ -51,7 +52,6 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
   const [upcomingFromEndpoint, setUpcomingFromEndpoint] = useState<ExamData[] | null>(null)
   const [upcomingError, setUpcomingError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [examsError, setExamsError] = useState("")
   const [stats, setStats] = useState({ practiced: 0, avgScore: 0, bestScore: 0, streak: 3 })
 
   useEffect(() => {
@@ -72,8 +72,8 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
     apiRequest<unknown>("/api/exams").then(payload => {
         setExamsFromDb(mapExamRecords(payload))
       }).catch(loadError => {
-        setExamsError(loadError instanceof Error ? loadError.message : "Could not load exams.");
-        setExamsFromDb([]);
+        console.error(loadError instanceof Error ? loadError.message : "Could not load exams.")
+        setExamsFromDb([])
       }).finally(()=> setLoading(false))
   }, [user])
 
@@ -104,15 +104,6 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
     return () => window.clearInterval(intervalId)
   }, [heroPaused])
 
-  const filteredExams = useMemo(() => {
-    const clean = searchQuery.toLowerCase().trim()
-    if (!clean) return examsFromDb
-    return examsFromDb.filter((exam) => {
-      const allSub = exam.subjects?.join(",") || ""
-      return exam.title.toLowerCase().includes(clean) || exam.examType.toLowerCase().includes(clean) || allSub.toLowerCase().includes(clean)
-    })
-  }, [examsFromDb, searchQuery])
-
   const quickPracticeExams = examsFromDb.slice(0, 3)
   const upcomingExams = useMemo(() => {
     const today = new Date()
@@ -132,6 +123,32 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
       return scheduledDate >= today ? [{ ...exam, scheduledDate }] : []
     }).sort((a, b) => a.scheduledDate.getTime() - b.scheduledDate.getTime())
   }, [examsFromDb, upcomingFromEndpoint])
+
+  // Clicking one of the five exam cards opens that exam type's subjects.
+  // The subject picker then hands over to the existing Configure Test page.
+  // If the admin has imported this exam type on the backend, its exam ID is
+  // passed along so the imported questions are used (same as the Exams page).
+  const openExamType = (examKey: string) => {
+    const dbExam = examsFromDb.find(
+      exam => exam.examType.toLowerCase() === examKey.toLowerCase()
+    )
+    setSelectedExam(dbExam ? dbExam.examType : examKey)
+    setTestConfig((prev: any) => ({
+      ...prev,
+      examType: dbExam ? dbExam.examType : examKey,
+      examId: dbExam?.id || '',
+      customExamId: dbExam?.id || '',
+      examTitle: dbExam?.title || '',
+      customTitle: dbExam?.title || '',
+      subjects: dbExam?.subjects || [],
+      totalQuestions: 0,
+      year: dbExam ? String(dbExam.year) : '2024',
+      mode: 'exam',
+      showAnswers: false,
+      topic: 'All Topics',
+    }))
+    setActivePage('subjects')
+  }
 
   const handleExamClick = (exam: ExamData, mode: 'exam' | 'practice' = 'exam') => {
     setSelectedExam(exam.examType)
@@ -197,20 +214,28 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
         <div className="stats-card"><div className="stat-icon gold"><Trophy size={18} /></div><h2>{stats.bestScore}%</h2><span>Best Score</span></div>
         <div className="stats-card"><div className="stat-icon red"><Flame size={18} /></div><h2>{stats.streak} days</h2><span>Study Streak</span></div>
       </div>
-      <div className="section-header"><h3>Featured Exams {examsFromDb.length>0 && `(${examsFromDb.length})`}</h3><p onClick={() => setActivePage('exams')}>see more ›</p></div>
-      {examsError && <p role="alert" style={{color:'#fca5a5'}}>{examsError}</p>}
-      {loading? <div className="no-result">Loading exams...</div> :
-        filteredExams.length>0? (
-          <div className="exam-list">
-            {filteredExams.map((exam) => (
-              <div key={exam.id} className="exam-card1" onClick={() => handleExamClick(exam)} style={{cursor:'pointer'}}>
-                <div className="exam-icon-wrap1"><span><BookOpen size={22} /></span></div>
-                <div className="exam-info"><h4>{exam.title}</h4><p>{exam.examType} • {exam.subjects?.join(', ')} • {exam.year}</p><p style={{fontSize:11,color:'#888',marginTop:4}}>{exam.totalQuestions ?? '—'} Qs • {exam.duration}min</p></div><span className="chevron">›</span>
-              </div>
-            ))}
+      <div className="section-header"><h3>Choose your examination</h3><p onClick={() => setActivePage('exams')}>see more ›</p></div>
+      <div className="exam-type-grid">
+        {examTypes.map(exam => (
+          <div
+            key={exam.key}
+            className="exam-card1 exam-type-card"
+            role="button"
+            tabIndex={0}
+            onClick={() => openExamType(exam.key)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openExamType(exam.key) } }}
+            style={{ '--exam-accent': exam.accent, '--exam-accent-soft': exam.accentSoft } as React.CSSProperties}
+          >
+            <div className="exam-icon-wrap1"><BookOpen size={22} /></div>
+            <div className="exam-info">
+              <h4>{exam.label}</h4>
+              <p>{exam.fullName}</p>
+              <p className="exam-meta">{exam.subjects.length} subjects available</p>
+            </div>
+            <span className="exam-type-chevron"><ChevronRightIcon size={20} className="chevron" /></span>
           </div>
-        ) : <div className="no-result">{examsFromDb.length===0? "No exams yet - Add in Admin." : `No exam for "${searchQuery}"`}</div>
-      }
+        ))}
+      </div>
       <div className="home-extra-sections">
         <section className="home-extra-section" aria-labelledby="quick-practice-title">
           <div className="home-extra-heading">

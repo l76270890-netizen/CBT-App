@@ -4,7 +4,6 @@ import './TestPage.css'
 import { API_URL } from '../config'
 import { apiRequest } from '../api'
 import QuestionImage from '../components/QuestionImage'
-import { questionsBank } from '../data/questionsBank'
 
 type Props = { setActivePage: (page: string) => void; testConfig: TestConfigType }
 type Question = { id: string; subject: string; question: string; imageUrl?: string; options: string[]; answer: number; explanation?: string; topic?: string }
@@ -64,18 +63,25 @@ export default function Test({ setActivePage, testConfig }: Props) {
               const query = new URLSearchParams({ examId: String(examId), subject: sub })
               const res = await fetch(`${API_URL}/api/questions?${query}`, { credentials: 'include' })
               if (res.ok) {
-                const data = await res.json()
-                if (Array.isArray(data) && data.length > 0) {
+                const payload = await res.json()
+                // The backend may answer with a bare array or { questions: [...] }
+                const data = Array.isArray(payload) ? payload : Array.isArray((payload as any)?.questions) ? (payload as any).questions : []
+                if (data.length > 0) {
                   const mapped = data.map((d: any) => ({
                     id: d.id,
                     subject: d.subject || sub,
                     question: d.question,
                     imageUrl: d.imageUrl || d.image_url || undefined,
-                    options: Array.isArray(d.options)? d.options : Object.values(d.options),
-                    answer: typeof d.answer === 'string'? ['A','B','C','D'].indexOf(d.answer) : d.answer?? 0,
+                    options: Array.isArray(d.options)? d.options : Object.values(d.options || {}),
+                    // Imported questions use correctAnswer: "A"; the test uses index numbers
+                    answer: typeof d.answer === 'string'
+                      ? ['A','B','C','D'].indexOf(d.answer.toUpperCase())
+                      : typeof d.answer === 'number'
+                        ? d.answer
+                        : Math.max(0, ['A','B','C','D'].indexOf(String(d.correctAnswer || 'A').toUpperCase())),
                     explanation: d.explanation || '',
                     topic: d.topic || ''
-                  }))
+                  })).filter((d: any) => d.question && Array.isArray(d.options) && d.options.length > 0)
                   allFetched = [...allFetched,...mapped]
                 }
               }
@@ -84,67 +90,13 @@ export default function Test({ setActivePage, testConfig }: Props) {
 
           fetched = allFetched
           console.log(`✅ Backend collected: ${fetched.length} Qs from [${subjectsList.join(', ')}]`)
-        } catch (e) { console.log("API failed, using local bank", e) }
+        } catch (e) { console.log("API failed to load imported questions", e) }
       }
 
-      // 3. Fallback to Local Bank - COLLECT ALL SUBJECTS
+      // No fallback to fake/local question banks. Only real questions imported
+      // from the admin dashboard (via localStorage or the backend API) are used.
       if (fetched.length === 0) {
-        let combined: Question[] = []
-        if (subjectsList.length > 0) {
-          for (const sub of subjectsList) {
-            const bankKey = sub?.toLowerCase() || 'english'
-            let bankQs = (questionsBank as any)[bankKey] || []
-            if (filterTopic) {
-              const filtered = bankQs.filter((q: any) => q.topic?.toLowerCase() === filterTopic.toLowerCase())
-              if (filtered.length > 0) bankQs = filtered
-            }
-            const mapped = bankQs.map((q: any, i: number) => ({
-              id: `${bankKey}-${i}`,
-              subject: sub,
-              question: q.question,
-              options: q.options,
-              answer: q.answer,
-              explanation: q.explanation || '',
-              topic: q.topic || ''
-            }))
-            combined = [...combined,...mapped]
-          }
-        }
-        if (combined.length > 0) {
-          fetched = combined
-        } else {
-          const bankKey = singleSubject?.toLowerCase() || 'english'
-          let bankQs = (questionsBank as any)[bankKey] || (questionsBank as any)['english'] || []
-          if (filterTopic) {
-            const filtered = bankQs.filter((q: any) => q.topic?.toLowerCase() === filterTopic.toLowerCase())
-            if (filtered.length > 0) bankQs = filtered
-          }
-          fetched = bankQs.map((q: any, i: number) => ({
-            id: `${bankKey}-${i}`,
-            subject: singleSubject,
-            question: q.question,
-            options: q.options,
-            answer: q.answer,
-            explanation: q.explanation || '',
-            topic: q.topic || ''
-          }))
-        }
-      }
-
-      // 4. Final mock if everything empty
-      if (fetched.length === 0) {
-        const total = testConfig.totalQuestions || 40
-        const perSubject = Math.ceil(total / (subjectsList.length || 1))
-        fetched = subjectsList.flatMap((sub) =>
-          Array.from({ length: perSubject }).map((_, i) => ({
-            id: `mock-${sub}-${i}`,
-            subject: sub,
-            question: `${sub}: Question ${i + 1} - Add real questions in Admin Dashboard`,
-            options: ['Option A','Option B','Option C','Option D'],
-            answer: i % 4,
-            explanation: 'Add questions in Admin dashboard'
-          }))
-        )
+        fetched = []
       }
 
       const shuffled = fetched.sort(() => 0.5 - Math.random()).slice(0, testConfig.totalQuestions || fetched.length)
@@ -176,7 +128,8 @@ export default function Test({ setActivePage, testConfig }: Props) {
       examType: examType,
       answers,
       correctAnswers: questions.map(q=>q.answer),
-      questions
+      questions,
+      fromStudy: !!testConfig.fromStudy
     }
     localStorage.setItem('lastTestResult', JSON.stringify(result))
     if (examId && testConfig.mode === 'exam') {
@@ -198,7 +151,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
       }
     }
     setActivePage('result')
-  }, [answers, questions, setActivePage, calculateDuration, examType, subjectsList, titleVal, testConfig.mode, filterTopic, singleSubject])
+  }, [answers, questions, setActivePage, calculateDuration, examType, subjectsList, titleVal, testConfig.mode, testConfig.fromStudy, filterTopic, singleSubject])
 
   useEffect(() => { if(timeLeft<=0){handleSubmit(); return} const t=setInterval(()=>setTimeLeft(x=>x-1),1000); return()=>clearInterval(t)}, [timeLeft, handleSubmit])
   const formatTime = (s:number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`
@@ -209,6 +162,9 @@ export default function Test({ setActivePage, testConfig }: Props) {
 
   const q = questions[current]
   const answeredCount = answers.filter(a=>a!==null).length
+  // In Study mode (started from Study page or practice mode) show the answer + explanation right away
+  const studyMode = testConfig.mode === 'practice' || !!testConfig.fromStudy
+  const revealed = studyMode && answers[current] !== null
 
   return (
     <div className="test-page1">
@@ -222,7 +178,15 @@ export default function Test({ setActivePage, testConfig }: Props) {
           <h2 className="question-text">{q.question}</h2>
           {q.imageUrl && <QuestionImage key={q.imageUrl} className="question-diagram" imageUrl={q.imageUrl} />}
           <div className="options">{q.options.map((opt,i)=><button key={i} className={`option-btn ${answers[current]===i?'selected':''}`} onClick={()=>{const c=[...answers]; c[current]=i; setAnswers(c)}}><span className="option-label">{String.fromCharCode(65+i)}</span><span>{opt}</span></button>)}</div>
-          {testConfig.mode==='practice' && answers[current]!==null && <div style={{marginTop:16, padding:12, background:'#1e1e1e', borderRadius:10, color: answers[current]===q.answer?'#10B981':'#EF4444'}}>{answers[current]===q.answer?'✓ Correct':`✗ Correct: ${String.fromCharCode(65+q.answer)}`} {q.explanation && ` - ${q.explanation}`}</div>}
+          {revealed && (
+            <div className="explanation-box">
+              <div className={`answer-status ${answers[current]===q.answer ? 'correct' : 'wrong'}`}>
+                {answers[current]===q.answer ? '✓ Correct' : `✗ Correct answer: ${String.fromCharCode(65+q.answer)}. ${q.options[q.answer] ?? ''}`}
+              </div>
+              <div className="explanation-label">Explanation</div>
+              <p className="explanation-text">{q.explanation?.trim() || 'No explanation has been added for this question yet.'}</p>
+            </div>
+          )}
         </div>
       </div>
       <div className="test-footer">

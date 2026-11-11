@@ -313,50 +313,154 @@ body {
   gap: 12px;
 }
 
+/* Featured exam cards — mirrors the card style on the Exams page */
 .exam-card1 {
   display: flex;
   align-items: center;
-  background: #1e1e1e;
-  padding: 14px 16px;
+  background: #121212;
+  padding: 16px;
   border-radius: 16px;
-  border: 1px solid #2a2a2a;
+  border: 1.5px solid #38393a;
   cursor: pointer;
   transition: 0.15s;
 }
 
+.exam-card1:hover {
+  border-color: #1d4be3;
+  background: #171717;
+}
+
 .exam-card1:active {
   transform: scale(0.98);
+  background: #1a1a1a;
 }
 
 .exam-icon-wrap1 {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   background: #d6e2fc;
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 12px;
+  margin-right: 14px;
   color: #1d4be3;
+  flex-shrink: 0;
+}
+
+.exam-info {
+  flex: 1;
+  min-width: 0;
 }
 
 .exam-info h4 {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: #fff;
-  margin: 0;
+  margin: 0 0 4px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .exam-info p {
   font-size: 12px;
-  color: #919293;
-  margin: 2px 0 0;
+  color: #8f9091;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.chevron {
+.exam-info p.exam-meta {
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
+}
+
+.exam-card1 .chevron {
   margin-left: auto;
-  color: #4b5563;
-  font-size: 20px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+/* ---- Exam type cards (JAMB, WAEC, NECO, BECE, Post-UTME) ---- */
+.exam-type-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.exam-type-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #161618 0%, #121212 60%);
+  border: 1.5px solid #2f3033;
+  outline: none;
+}
+
+.exam-type-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--exam-accent, #1d4be3);
+  opacity: 0.9;
+}
+
+.exam-type-card::after {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: var(--exam-accent, #1d4be3);
+  opacity: 0.12;
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+.exam-type-card .exam-icon-wrap1 {
+  background: var(--exam-accent-soft, #d6e2fc);
+  color: var(--exam-accent, #1d4be3);
+  box-shadow: 0 6px 16px -8px var(--exam-accent, #1d4be3);
+}
+
+.exam-type-card .exam-info h4 {
+  letter-spacing: 0.2px;
+}
+
+.exam-type-card .exam-type-chevron {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  color: var(--exam-accent, #1d4be3);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.exam-type-card:hover,
+.exam-type-card:focus-visible {
+  border-color: var(--exam-accent, #1d4be3);
+  background: linear-gradient(135deg, #1b1b1e 0%, #141416 60%);
+  transform: translateY(-1px);
+}
+
+.exam-type-card:hover .exam-type-chevron,
+.exam-type-card:focus-visible .exam-type-chevron {
+  transform: translateX(3px);
+}
+
+.exam-type-card:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--exam-accent, #1d4be3) 35%, transparent);
+}
+
+@media (min-width: 700px) {
+  .exam-type-grid { grid-template-columns: 1fr 1fr; }
+  .exam-type-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
 
 .no-result {
