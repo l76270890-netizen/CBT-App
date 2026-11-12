@@ -41,11 +41,15 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
     setActivePage('testInstructions')
   }
 
+  const selectedSubjectNames = testConfig.subjects
+    .map((s: any) => (typeof s === 'string' ? s : s?.subject || s?.name))
+    .filter(Boolean)
+
   return (
     <div className="config-page">
       <div className="config-header">
         <button className="back-circle1" onClick={() => setActivePage('subjects')}><ArrowLeft size={18}/></button>
-        <div><h1>Configure Test</h1><p>{testConfig.examType} • {testConfig.totalQuestions} Questions {selectedExam?.title ? `• ${selectedExam.title}` : ''}</p></div>
+        <div><h1>Configure Test</h1><p>{testConfig.examType}{selectedSubjectNames.length ? ` • ${selectedSubjectNames.join(', ')}` : ''} • {testConfig.totalQuestions || 0} Questions{selectedExam?.title ? ` • ${selectedExam.title}` : ''}</p></div>
       </div>
 
       <div className="config-card highlight">

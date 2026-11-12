@@ -64,6 +64,21 @@ test("matches selected images by filename and reports missing or ambiguous refer
 
 test("accepts supported image types and rejects unsupported extensions or MIME types", () => {
   assert.equal(isSupportedQuestionImage(new File(["x"], "diagram.jpg", { type: "image/jpeg" })), true);
-  assert.equal(isSupportedQuestionImage(new File(["x"], "diagram.webp", { type: "image/webp" })), false);
+  assert.equal(isSupportedQuestionImage(new File(["x"], "diagram.webp", { type: "image/webp" })), true);
+  assert.equal(isSupportedQuestionImage(new File(["x"], "diagram.webp", { type: "image/png" })), false);
   assert.equal(isSupportedQuestionImage(new File(["x"], "diagram.png", { type: "image/gif" })), false);
+  assert.equal(isSupportedQuestionImage(new File(["x"], "diagram.webp")), true);
+});
+
+test("matches WEBP image references by filename", () => {
+  const rows = parseQuestionCsv([
+    "subject,question,optionA,optionB,optionC,optionD,correctAnswer,explanation,imageUrl",
+    "Mathematics,Question with image,A,B,C,D,A,,images/diagram.webp",
+  ].join("\n"), subjects, { allowImageReferences: true });
+
+  const summary = summarizeQuestionImageMatches(rows, [
+    new File(["image"], "diagram.webp", { type: "image/webp" }),
+  ]);
+  assert.equal(summary.imagesMatched, 1);
+  assert.equal(summary.missingImages, 0);
 });

@@ -22,11 +22,25 @@ import type { CheckoutDetails } from './pages/Register'
 import Activation from './pages/Activation'
 import PaymentReceived from './pages/PaymentReceived'
 import DemoExperience from './pages/DemoExperience'
+import Renew from './pages/Renew'
+import SubscriptionExpired from './pages/SubscriptionExpired'
+import SubscriptionBanner from './components/SubscriptionBanner'
 import type { TestConfigType } from './types'
 import { AuthProvider } from './context/AuthContext'
+import { SubscriptionProvider, useSubscription } from './context/SubscriptionContext'
 import './App.css'
 
 export default function App() {
+  return (
+    <AuthProvider>
+      <SubscriptionProvider>
+        <AppShell />
+      </SubscriptionProvider>
+    </AuthProvider>
+  )
+}
+
+function AppShell() {
   const [page, setPage] = useState(() => (
     window.location.pathname.replace(/\/+$/, '') === '/payment-received' ? 'paymentReceived' : 'landing'
   ))
@@ -67,8 +81,22 @@ export default function App() {
     setCheckingAuth(false)
   }, [])
 
-  const hideNavbarPages = ['landing', 'login', 'register', 'payment', 'paymentReceived', 'activation', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
+  const { blocked, clearBlocked } = useSubscription()
+
+  // A successful renewal/activation restores access without a reload.
+  useEffect(() => {
+    if (page === 'home') clearBlocked()
+  }, [page, clearBlocked])
+
+  const hideNavbarPages = ['landing', 'login', 'register', 'payment', 'paymentReceived', 'activation', 'renew', 'subscriptionExpired', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
   const AdminAny = AdminDashboard as any
+
+  // The backend answers 403 once the subscription lapses. Until it is renewed,
+  // every signed-in page is replaced by the blocked screen.
+  const isPublicPage = ['landing', 'login', 'register', 'payment', 'paymentReceived', 'activation', 'demo'].includes(page)
+  const showBlocked = blocked && !isPublicPage && page !== 'renew' && page !== 'subscriptionExpired'
+  const effectivePage = showBlocked ? 'subscriptionExpired' : page
+  const showNavbar = !hideNavbarPages.includes(effectivePage)
 
   if (checkingAuth) {
     return (
@@ -82,23 +110,27 @@ export default function App() {
   }
 
   return (
-    <AuthProvider>
-      <div className={`app-shell${!hideNavbarPages.includes(page) ? ' app-shell-workspace' : ''}`} style={{ background: '#121212', minHeight: '100vh' }}>
-        {!hideNavbarPages.includes(page) && (
-          <Navbar
-            activePage={page === 'demo' ? demoSection : page}
-            setActivePage={setPage}
-            sidebarCollapsed={sidebarCollapsed}
-            setSidebarCollapsed={setSidebarCollapsed}
-            searchQuery={homeSearchQuery}
-            setSearchQuery={setHomeSearchQuery}
-            demoMode={page === 'demo'}
-            onDemoNavigate={setDemoSection}
-          />
-        )}
+    <div className={`app-shell${showNavbar ? ' app-shell-workspace' : ''}`} style={{ background: '#121212', minHeight: '100vh' }}>
+      {showNavbar && (
+        <Navbar
+          activePage={page === 'demo' ? demoSection : page}
+          setActivePage={setPage}
+          sidebarCollapsed={sidebarCollapsed}
+          setSidebarCollapsed={setSidebarCollapsed}
+          searchQuery={homeSearchQuery}
+          setSearchQuery={setHomeSearchQuery}
+          demoMode={page === 'demo'}
+          onDemoNavigate={setDemoSection}
+        />
+      )}
 
-        <main className={`app-main${!hideNavbarPages.includes(page) ? ' app-main-sidebar' : ''}${['testConfig', 'testInstructions'].includes(page) ? ' app-main-setup' : ''}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-          {page === 'landing' && <LandingMobile setActivePage={setPage} />}
+      <main className={`app-main${showNavbar ? ' app-main-sidebar' : ''}${['testConfig', 'testInstructions'].includes(page) ? ' app-main-setup' : ''}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+        {showNavbar && <SubscriptionBanner onRenew={() => setPage('renew')} />}
+        {effectivePage === 'subscriptionExpired' && <SubscriptionExpired setActivePage={setPage} />}
+        {effectivePage === 'renew' && <Renew setActivePage={setPage} />}
+        {!showBlocked && (
+          <>
+            {page === 'landing' && <LandingMobile setActivePage={setPage} />}
           {page === 'login' && <Login setActivePage={setPage} />}
           {['register', 'payment'].includes(page) && (
             <Register
@@ -124,9 +156,10 @@ export default function App() {
           {page === 'account' && <Account setActivePage={setPage} />}
           {page === 'practiceHistory' && <PracticeHistory setActivePage={setPage} />}
           {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={setPage} setTestConfig={setTestConfig} examId={testConfig.examId || testConfig.customExamId} />}
-          {page === 'admin' && <AdminAny setActivePage={setPage} />}
-        </main>
-      </div>
-    </AuthProvider>
+            {page === 'admin' && <AdminAny setActivePage={setPage} />}
+          </>
+        )}
+      </main>
+    </div>
   )
 }

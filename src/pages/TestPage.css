@@ -4,7 +4,8 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  padding-bottom: 90px;
+  /* Clear the fixed footer so a long explanation is never hidden behind it */
+  padding-bottom: calc(120px + env(safe-area-inset-bottom));
   color: #fff;
   font-family: 'Inter', system-ui, sans-serif;
 }
@@ -135,6 +136,37 @@
   flex-shrink: 0;
 }
 .option-btn.selected .option-label { background: #6366F1; color: #fff; }
+
+/* STUDY MODE EXPLANATION */
+.explanation-box {
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: #1E1E22;
+  border: 1px solid #2A2A30;
+  border-radius: 14px;
+}
+.answer-status {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.answer-status.correct { color: #10B981; }
+.answer-status.wrong { color: #EF4444; }
+.explanation-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #A1A1AA;
+  margin-bottom: 6px;
+}
+.explanation-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #E4E4E7;
+  margin: 0;
+  white-space: pre-wrap;
+}
 
 /* FOOTER */
 .test-footer {

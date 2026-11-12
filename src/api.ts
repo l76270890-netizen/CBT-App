@@ -1,5 +1,15 @@
 import { API_URL } from "./config";
 
+// The backend enforces subscription expiry on every authenticated request and
+// answers 403 once it lapses. The subscription context registers a listener
+// here so any 403 can immediately block the UI, not just the status poll.
+type SubscriptionBlockedListener = () => void;
+let subscriptionBlockedListener: SubscriptionBlockedListener | null = null;
+
+export function setSubscriptionBlockedListener(listener: SubscriptionBlockedListener | null) {
+  subscriptionBlockedListener = listener;
+}
+
 export function resolveQuestionImageUrl(imageUrl: string): string {
   if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
   if (!API_URL) return imageUrl;
@@ -59,6 +69,7 @@ export async function apiRequest<T = unknown>(path: string, init: RequestInit = 
     }
   }
   if (!response.ok) {
+    if (response.status === 403) subscriptionBlockedListener?.();
     const message = body?.error ?? body?.message;
     const isHtml = response.headers.get("content-type")?.includes("text/html") || responseText.trimStart().startsWith("<!doctype html");
     const fallbackMessage = response.status === 404 && isHtml

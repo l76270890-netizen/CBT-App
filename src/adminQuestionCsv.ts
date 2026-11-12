@@ -52,8 +52,15 @@ export function summarizeQuestionImageMatches(rows: CsvQuestionRow[], files: Fil
 
 export function isSupportedQuestionImage(file: File): boolean {
   const extension = file.name.split(".").pop()?.toLowerCase();
-  const supportedExtension = ["png", "jpg", "jpeg"].includes(extension || "");
-  const supportedType = !file.type || ["image/png", "image/jpeg"].includes(file.type.toLowerCase());
+  const supportedTypes: Record<string, string[]> = {
+    png: ["image/png"],
+    jpg: ["image/jpeg"],
+    jpeg: ["image/jpeg"],
+    webp: ["image/webp"],
+  };
+  const expectedTypes = supportedTypes[extension || ""];
+  const supportedExtension = !!expectedTypes;
+  const supportedType = !file.type || expectedTypes?.includes(file.type.toLowerCase()) === true;
   return supportedExtension && supportedType;
 }
 
@@ -65,7 +72,7 @@ export function isSafeImageReference(value: string): boolean {
     && !reference.startsWith("/")
     && !reference.includes(":")
     && parts.every(part => part && part !== "." && part !== "..")
-    && ["png", "jpg", "jpeg"].includes(extension || "");
+    && ["png", "jpg", "jpeg", "webp"].includes(extension || "");
 }
 
 export function isValidQuestionImageUrl(value: string): boolean {

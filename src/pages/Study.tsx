@@ -6,6 +6,7 @@ type Props = {
 
 import { useState, useMemo } from 'react'
 import { BookOpen, Calculator, Atom, Beaker, Zap, Landmark, Search, X, ChevronRight, ArrowLeft, Play, Feather, Scale, ShoppingBag, Leaf, BarChart3 } from 'lucide-react'
+import { questionsBank } from '../data/questionsBank'
 import './Study.css'
 
 export default function Study({ setActivePage, selectedExam, setTestConfig }: Props) {
@@ -35,8 +36,9 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
     { id: 'business', name: 'Business Studies', icon: Scale, topics: 34, color: '#4338CA', questions: 40, dept: 'COMMERCIAL' },
   ]
 
+  // Topics mirror the topics used in src/data/questionsBank.ts
   const topics: Record<string, string[]> = {
-    english: ['Comprehension', 'Lexis & Structure', 'Oral English', 'Summary'],
+    english: ['Lexis & Structure', 'Oral English'],
     math: ['Algebra', 'Trigonometry', 'Probability', 'Calculus'],
     biology: ['Cell Biology', 'Genetics', 'Ecology', 'Human Anatomy'],
     chemistry: ['Atomic Structure', 'Organic Chemistry', 'Acids & Bases', 'Mole Concept'],
@@ -62,17 +64,20 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
     return list.filter(s => s.name.toLowerCase().includes(q) || s.id.includes(q))
   }, [searchQuery, activeDept])
 
-  const startSubjectTest = (subjectId: string) => {
+  const startSubjectTest = (subjectId: string, topic?: string) => {
     const subject = subjects.find(s => s.id === subjectId)!
+    const topicQuestions = topic ? questionsBank[subjectId]?.filter(q => q.topic === topic).length || 0 : 0
     setTestConfig({
       examType: selectedExam,
       subjects: [subjectId],
-      totalQuestions: subject.questions,
+      totalQuestions: topic ? topicQuestions : subject.questions,
       year: 'All',
       duration: subjectId === 'english'? 60 : 40,
-      mode: 'exam',
+      ...(topic ? { topic } : {}),
+      mode: 'practice',
       difficulty: 'Normal',
-      showAnswers: false
+      showAnswers: true,
+      fromStudy: true
     })
     setActivePage('test')
   }
@@ -101,12 +106,12 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
         </div>
         <div className="topic-list">
           {(topics[selectedSubject] || []).map(topic => (
-            <div key={topic} className="topic-card" onClick={() => startSubjectTest(selectedSubject)}>
+            <div key={topic} className="topic-card" onClick={() => startSubjectTest(selectedSubject, topic)}>
               <div className="topic-left">
                 <div className="topic-dot" style={{background: subject.color}}></div>
                 <div>
                   <div className="topic-title">{topic}</div>
-                  <div className="topic-meta">12 Questions • 15 min • {selectedExam}</div>
+                  <div className="topic-meta">{(questionsBank[selectedSubject] || []).filter(q => q.topic === topic).length} Questions • {selectedExam}</div>
                 </div>
               </div>
               <ChevronRight size={18} className="topic-chevron" />

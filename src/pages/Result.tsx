@@ -88,8 +88,8 @@ export default function Result({ setActivePage }: Props) {
         </div>
         <div className="result-actions">
           <button className="btn-primary" onClick={() => setActivePage('review')}>Review Answers</button>
-          <button className="btn-secondary" onClick={() => { sessionStorage.removeItem('historySaved'); setActivePage('testConfig') }}>Retake Test</button>
-          <button className="btn-ghost" onClick={() => { sessionStorage.removeItem('historySaved'); setActivePage('home') }}>Back to Home</button>
+          <button className="btn-secondary" onClick={() => { sessionStorage.removeItem('historySaved'); setActivePage(result.fromStudy ? 'study' : 'testConfig') }}>{result.fromStudy ? 'Study Again' : 'Retake Test'}</button>
+          <button className="btn-ghost" onClick={() => { sessionStorage.removeItem('historySaved'); setActivePage(result.fromStudy ? 'study' : 'home') }}>{result.fromStudy ? 'Back to Study' : 'Back to Home'}</button>
         </div>
       </div>
     </div>
