@@ -28,16 +28,3 @@ dist-ssr
 
 # TypeScript build cache
 *.tsbuildinfo
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-.venv*/
-venv/
-env/
-*.db
-instance/
-backend/.vercel/
-uploads/
