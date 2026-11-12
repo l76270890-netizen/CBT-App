@@ -75,8 +75,14 @@ test('formats the countdown as HH:MM:SS', () => {
   assert.equal(formatRemaining(-500), '00:00:00')
 })
 
-test('only a 403 counts as a subscription block', () => {
-  assert.equal(isSubscriptionBlockedError({ status: 403 }), true)
+test('only a subscription-expiry 403 counts as a subscription block', () => {
+  assert.equal(isSubscriptionBlockedError({ status: 403, code: 'subscription_expired' }), true)
+  assert.equal(isSubscriptionBlockedError({ status: 403, code: 'account_unavailable', message: 'Your subscription has expired.' }), true)
+  assert.equal(isSubscriptionBlockedError({ status: 403, message: 'Your subscription has expired. Please renew to continue.' }), true)
+  assert.equal(isSubscriptionBlockedError({ status: 403 }), false)
+  assert.equal(isSubscriptionBlockedError({ status: 403, code: 'forbidden' }), false)
+  assert.equal(isSubscriptionBlockedError({ status: 403, code: 'invalid_origin' }), false)
+  assert.equal(isSubscriptionBlockedError({ status: 403, message: 'You can only read your own history.' }), false)
   assert.equal(isSubscriptionBlockedError({ status: 401 }), false)
   assert.equal(isSubscriptionBlockedError(new Error('boom')), false)
 })

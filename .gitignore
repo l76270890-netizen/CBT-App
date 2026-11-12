@@ -7,10 +7,17 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
+node_modules/
+dist/
 dist-ssr
 *.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv*/
+venv/
 
 # Editor directories and files
 .vscode/*

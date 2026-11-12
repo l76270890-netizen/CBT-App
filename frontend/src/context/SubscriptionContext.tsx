@@ -20,7 +20,7 @@ type SubscriptionContextValue = {
   loading: boolean
   /** Set when the status check failed for a reason other than expiry (5xx, network). */
   error: string | null
-  refresh: () => Promise<void>
+  refresh: () => Promise<SubscriptionStatus | null>
   /** Called by the API layer whenever a request comes back 403. */
   reportBlocked: () => void
   /** Clears the block after a successful renewal/activation. */
@@ -45,14 +45,15 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     setStatus(next)
     // A fresh, active status means the renewal went through.
     setBlocked(next ? next.expired : false)
+    return next
   }, [])
 
-  const refresh = useCallback(async () => {
-    if (!userId) return
+  const refresh = useCallback(async (): Promise<SubscriptionStatus | null> => {
+    if (!userId) return null
     setLoading(true)
     try {
       const payload = await apiRequest<unknown>(STATUS_PATH)
-      applyStatus(parseSubscriptionStatus(payload))
+      return applyStatus(parseSubscriptionStatus(payload))
     } catch (requestError) {
       if (isSubscriptionBlockedError(requestError)) {
         setBlocked(true)
@@ -61,6 +62,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         // and surface the problem instead of silently showing nothing.
         setError(requestError instanceof Error ? requestError.message : 'Could not check your subscription status.')
       }
+      return null
     } finally {
       setLoading(false)
     }
@@ -73,15 +75,19 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     setStatus(current => (current?.expired ? null : current))
   }, [])
 
-  // Any 403 from an authenticated request means the backend has cut access off.
+// Any 403 from an authenticated request *may* indicate expired access, but not
+  // every 403 is a subscription expiry (e.g. origin/CSRF checks, ownership checks).
+  // Only block on explicit subscription-expiry signals from the backend/status.
   useEffect(() => {
     if (!userId) {
       setSubscriptionBlockedListener(null)
       return
     }
-    setSubscriptionBlockedListener(reportBlocked)
+    setSubscriptionBlockedListener((error) => {
+      if (isSubscriptionBlockedError(error)) setBlocked(true)
+    })
     return () => setSubscriptionBlockedListener(null)
-  }, [userId, reportBlocked])
+  }, [userId])
 
   // Reset whenever the signed-in user changes.
   useEffect(() => {

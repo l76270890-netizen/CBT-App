@@ -751,6 +751,9 @@ def require_auth(fn):
         if user.role == "student":
             sync_student_subscription_status(user)
         if user.account_status != "active":
+            if (user.role == "student" and user.subscription_expires_at
+                    and user.subscription_expires_at <= utcnow()):
+                return api_error("Your subscription has expired.", 403, "subscription_expired")
             return api_error("This account is not active or assigned to a school.", 403, "account_unavailable")
         g.current_user = user
         g.auth_session = session
@@ -917,6 +920,9 @@ def authenticate(data, admins_only=False):
         return api_error("This account is not active or assigned to a school.", 403, "account_unavailable")
     sync_student_subscription_status(user)
     if user.account_status != "active":
+        if (user.role == "student" and user.subscription_expires_at
+                and user.subscription_expires_at <= utcnow()):
+            return api_error("Your subscription has expired.", 403, "subscription_expired")
         return api_error("This account is not active or assigned to a school.", 403, "account_unavailable")
     if admins_only and user.role not in ADMIN_ROLES:
         return api_error("This account does not have an admin workspace role.", 403, "forbidden")

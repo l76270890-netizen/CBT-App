@@ -142,5 +142,10 @@ export function tickSubscriptionStatus(status: SubscriptionStatus, elapsedMs: nu
 
 /** True when an API error is the backend's "subscription expired" 403. */
 export function isSubscriptionBlockedError(error: unknown): boolean {
-  return (error as { status?: number } | null)?.status === 403
+  const e = error as { status?: number; code?: string; message?: string } | null
+  if (!e || e.status !== 403) return false
+  if (e.code === 'subscription_expired') return true
+  if (e.code && e.code !== 'account_unavailable') return false
+  const msg = typeof e.message === 'string' ? e.message.toLowerCase() : ''
+  return msg.includes('subscription') && msg.includes('expired')
 }

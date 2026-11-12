@@ -55,7 +55,6 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [adminView, setAdminView] = useState<"overview"|"students"|"exams">("overview");
   const [examTab, setExamTab] = useState<"exams"|"questions">("exams");
   const [exams, setExams] = useState<Exam[]>([]);
-  const [examTypes] = useState<string[]>(defaultExamTypes);
   const [allSubjects] = useState(defaultSubjects);
 
   const [eTitle, setETitle] = useState("");

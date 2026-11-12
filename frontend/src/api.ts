@@ -2,8 +2,8 @@ import { API_URL } from "./config";
 
 // The backend enforces subscription expiry on every authenticated request and
 // answers 403 once it lapses. The subscription context registers a listener
-// here so any 403 can immediately block the UI, not just the status poll.
-type SubscriptionBlockedListener = () => void;
+// here so any subscription-expiry 403 can immediately block the UI, not just the status poll.
+type SubscriptionBlockedListener = (error?: { status?: number; code?: string; message?: string }) => void;
 let subscriptionBlockedListener: SubscriptionBlockedListener | null = null;
 
 export function setSubscriptionBlockedListener(listener: SubscriptionBlockedListener | null) {
@@ -69,15 +69,20 @@ export async function apiRequest<T = unknown>(path: string, init: RequestInit = 
     }
   }
   if (!response.ok) {
-    if (response.status === 403) subscriptionBlockedListener?.();
     const message = body?.error ?? body?.message;
-    const isHtml = response.headers.get("content-type")?.includes("text/html") || responseText.trimStart().startsWith("<!doctype html");
-    const fallbackMessage = response.status === 404 && isHtml
-      ? `Backend route not found: ${path}. Check that VITE_API_URL points to the School Admin backend and that its API routes are deployed.`
-      : responseText.trim() || `Request failed (${response.status})`;
-    throw Object.assign(new Error(typeof message === "string" ? message : fallbackMessage), {
+    const code = typeof body?.code === "string" ? body.code : undefined;
+    const error = Object.assign(new Error(typeof message === "string" ? message : (responseText.trim() || `Request failed (${response.status})`)), {
       status: response.status,
+      code,
     });
+    if (response.status === 403) subscriptionBlockedListener?.(error as { status?: number; code?: string; message?: string });
+    if (response.status === 404) {
+      const isHtml = response.headers.get("content-type")?.includes("text/html") || responseText.trimStart().startsWith("<!doctype html");
+      if (isHtml) {
+        throw Object.assign(new Error(`Backend route not found: ${path}. Check that VITE_API_URL points to the School Admin backend and that its API routes are deployed.`), { status: response.status, code });
+      }
+    }
+    throw error;
   }
   return body as T;
 }

@@ -13,6 +13,16 @@ export default function SubscriptionExpired({ setActivePage }: { setActivePage: 
     setActivePage('landing')
   }
 
+  const handleAlreadyRenewed = async () => {
+    const next = await refresh()
+    if (next?.active) {
+      setActivePage('home')
+      return
+    }
+    // Access is restored only after server-verified activation (e.g. redeeming the PIN emailed after payment).
+    setActivePage('activation')
+  }
+
   return (
     <div className="auth-page auth-activation-page">
       <header className="auth-register-header">
@@ -36,12 +46,12 @@ export default function SubscriptionExpired({ setActivePage }: { setActivePage: 
           )}
           <div className="payment-unavailable payment-return-note" role="status">
             <ShieldCheck size={18} />
-            <p>Your progress is safe. Everything is restored as soon as your renewal is activated.</p>
+            <p>Your progress is safe. If you&apos;ve paid, activate your access with the PIN emailed after the server verified your payment.</p>
           </div>
           <button type="button" className="auth-btn-primary" onClick={() => setActivePage('renew')}>
             Renew subscription <ArrowRight size={17} />
           </button>
-          <button type="button" className="auth-back-link" onClick={() => { void refresh() }} disabled={loading}>
+          <button type="button" className="auth-back-link" onClick={() => { void handleAlreadyRenewed() }} disabled={loading}>
             <RefreshCw size={15} /> {loading ? 'Checking access...' : 'I have already renewed'}
           </button>
           <button type="button" className="auth-back-link" onClick={handleLogout}>

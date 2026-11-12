@@ -109,7 +109,22 @@ export default function Renew({ setActivePage }: { setActivePage: (page: string)
           <button type="button" className="auth-activation-link" onClick={() => setActivePage('activation')}>
             Already have an activation PIN?
           </button>
-          <button type="button" className="auth-back-link" onClick={() => { void refresh() }} disabled={loading}>
+          <button
+            type="button"
+            className="auth-back-link"
+            onClick={() => {
+              void (async () => {
+                const next = await refresh()
+                if (next?.active) {
+                  setActivePage('home')
+                  return
+                }
+                // If payment was made, access is restored only after server-verified activation (PIN redemption).
+                setActivePage('activation')
+              })()
+            }}
+            disabled={loading}
+          >
             <RefreshCw size={15} /> {loading ? 'Checking access...' : 'I have already renewed'}
           </button>
         </section>

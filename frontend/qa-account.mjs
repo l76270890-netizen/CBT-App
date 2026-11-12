@@ -29,7 +29,7 @@ export default async function run(page, ui) {
       if (el) el.click()
       return !!el
     }
-    findAndClick('get started') || findAndClick('account')
+    if (!findAndClick('get started')) findAndClick('account')
   })
   await page.waitForTimeout(1000)
 

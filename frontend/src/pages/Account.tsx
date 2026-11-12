@@ -243,7 +243,7 @@ export default function Account({ setActivePage }: Props) {
     return `${API_URL}/uploads/avatars/${img}`
   }, [photoURL])
 
-  const isAdmin =
+  const _isAdmin =
     !!user &&
     (user.email || '').trim().toLowerCase() ===
     'emmanuellilypondu33@gmail.com'

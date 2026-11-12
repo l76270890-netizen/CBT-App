@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { ArrowLeft, Clock, Timer, BookCheck, GraduationCap, Check } from 'lucide-react'
-import type { TestConfigType, SubjectData } from '../types'
+import type { TestConfigType } from '../types'
 import './TestConfig.css'
 
 type Props = {
