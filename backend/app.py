@@ -839,12 +839,13 @@ def internal_error(_error):
 
 @app.route("/")
 def home():
-    """The site root belongs to the frontend app; the API lives under /api/*.
-
-    ``FRONTEND_URL`` is the public frontend origin; when unset, the deployed
-    frontend URL above is used so visitors never land on localhost.
-    """
-    return redirect(FRONTEND_URL, code=302)
+    """Root endpoint for the backend deployment; API routes live under /api/*."""
+    return jsonify(
+        message="CBT Backend is LIVE",
+        status="ok",
+        cloudinary=HAS_CLOUDINARY,
+        frontend_url=FRONTEND_URL,
+    )
 
 
 @app.route("/health")
