@@ -2457,24 +2457,32 @@ STUDY_TOPICS_BY_SUBJECT = {
 
 
 def normalize_label(value):
-    return " ".join(str(value or "").strip().split())
+    if value is None:
+        return ""
+    text = str(value)
+    # strip BOM and normalize whitespace
+    text = text.replace("\ufeff", "").strip()
+    return " ".join(text.split())
 
 
 def normalize_study_exam_type(value):
     text = normalize_label(value)
+    if not text:
+        return None
     lower = text.lower().replace("-", " ").replace("_", " ")
-    if lower == "jamb":
+    compact = "".join(lower.split())
+    if lower == "jamb" or compact == "jamb":
         return "JAMB"
-    if lower == "waec":
+    if lower == "waec" or compact == "waec":
         return "WAEC"
-    if lower == "neco":
+    if lower == "neco" or compact == "neco":
         return "NECO"
-    if lower in {"post utme", "postutme"}:
+    if lower in {"post utme", "postutme", "putme"} or compact in {"postutme", "putme"}:
         return "Post-UTME"
-    if lower == "cbt":
+    if lower == "cbt" or compact == "cbt":
         return "CBT"
     for item in STUDY_EXAM_TYPES:
-        if item.lower() == text.lower():
+        if item.lower() == lower or "".join(item.lower().replace("-", " ").split()) == compact:
             return item
     return None
 
@@ -2733,30 +2741,62 @@ def admin_study_import():
         return api_error("Upload a CSV or Excel (.xlsx) file.")
     filename = secure_filename(file.filename)
     ext = os.path.splitext(filename)[1].lower()
+
+    def import_header_key(name):
+        if name is None:
+            return ""
+        return normalize_label(name).lower().replace(" ", "").replace("_", "").replace("-", "")
+
+    def cell_text(value):
+        if value is None:
+            return ""
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value).strip()
+
     rows = []
     errors = []
     if ext == ".csv":
         try:
-            text = file.read().decode("utf-8-sig")
+            raw_bytes = file.read()
+            text = None
+            for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+                try:
+                    text = raw_bytes.decode(enc)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            if text is None:
+                text = raw_bytes.decode("utf-8", errors="replace")
             reader = csv.DictReader(io.StringIO(text))
+            if reader.fieldnames:
+                reader.fieldnames = [cell_text(h) for h in reader.fieldnames]
             for idx, raw in enumerate(reader, start=2):
                 if not raw:
                     continue
-                if all(v is None or str(v).strip() == "" for v in raw.values()):
+                if all(v is None or cell_text(v) == "" for v in raw.values()):
                     continue
                 rows.append((idx, raw))
         except Exception:
-            return api_error("Could not read the CSV file. Ensure it is a valid UTF-8 CSV.")
+            return api_error("Could not read the CSV file. Ensure it is a valid CSV file.")
     elif ext == ".xlsx":
         try:
             import openpyxl  # type: ignore
             wb = openpyxl.load_workbook(file, read_only=True, data_only=True)
             ws = wb.active
-            header_cells = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
-            headers_list = [str(h).strip() if h is not None else "" for h in header_cells]
-            for idx, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if ws is None:
+                return api_error("Could not read the Excel file. No worksheet found.")
+            rows_iter = ws.iter_rows(values_only=True)
+            try:
+                header_cells = next(rows_iter)
+            except StopIteration:
+                return api_error("Could not read the Excel file. The worksheet is empty.")
+            headers_list = [cell_text(h) for h in header_cells]
+            for idx, values in enumerate(rows_iter, start=2):
+                if values is None:
+                    continue
                 raw = {headers_list[i]: (values[i] if i < len(values) else None) for i in range(len(headers_list))}
-                if all(v is None or str(v).strip() == "" for v in raw.values()):
+                if all(v is None or cell_text(v) == "" for v in raw.values()):
                     continue
                 rows.append((idx, raw))
         except Exception:
@@ -2765,30 +2805,43 @@ def admin_study_import():
         return api_error("Only CSV and .xlsx files are supported.")
 
     def get_col(raw, *names):
-        for name in names:
-            for k, v in raw.items():
-                if normalize_label(k).lower().replace(" ", "").replace("_", "") == normalize_label(name).lower().replace(" ", "").replace("_", ""):
-                    return v
+        wanted = {import_header_key(name) for name in names}
+        for k, v in (raw or {}).items():
+            if import_header_key(k) in wanted:
+                return v
         return ""
 
     prepared = []
     seen_in_file = set()
     for idx, raw in rows:
+        exam_type_raw = get_col(raw, "examType", "exam type", "exam_type", "exam")
+        subject_raw = get_col(raw, "subject")
+        topic_raw = get_col(raw, "topic")
+        year_raw = get_col(raw, "year")
+        question_raw = get_col(raw, "question", "question text")
+        opt_a = get_col(raw, "optionA", "option a", "option_a", "A")
+        opt_b = get_col(raw, "optionB", "option b", "option_b", "B")
+        opt_c = get_col(raw, "optionC", "option c", "option_c", "C")
+        opt_d = get_col(raw, "optionD", "option d", "option_d", "D")
+        answer_raw = get_col(raw, "correctAnswer", "correct answer", "correct_answer", "answer")
+        explanation_raw = get_col(raw, "explanation")
+        image_raw = get_col(raw, "imageUrl", "image url", "image_url", "image")
+
         payload = {
-            "examType": get_col(raw, "examType", "exam type"),
-            "subject": get_col(raw, "subject"),
-            "topic": get_col(raw, "topic"),
-            "year": get_col(raw, "year"),
-            "question": get_col(raw, "question"),
+            "examType": cell_text(exam_type_raw),
+            "subject": cell_text(subject_raw),
+            "topic": cell_text(topic_raw),
+            "year": cell_text(year_raw) if year_raw not in (None, "") else year_raw,
+            "question": cell_text(question_raw),
             "options": {
-                "A": str(get_col(raw, "optionA", "option a", "A") or "").strip(),
-                "B": str(get_col(raw, "optionB", "option b", "B") or "").strip(),
-                "C": str(get_col(raw, "optionC", "option c", "C") or "").strip(),
-                "D": str(get_col(raw, "optionD", "option d", "D") or "").strip(),
+                "A": cell_text(opt_a),
+                "B": cell_text(opt_b),
+                "C": cell_text(opt_c),
+                "D": cell_text(opt_d),
             },
-            "correctAnswer": str(get_col(raw, "correctAnswer", "correct answer", "answer") or "").strip().upper(),
-            "explanation": str(get_col(raw, "explanation") or "").strip(),
-            "imageUrl": str(get_col(raw, "imageUrl", "image url", "image") or "").strip() or None,
+            "correctAnswer": cell_text(answer_raw).upper(),
+            "explanation": cell_text(explanation_raw),
+            "imageUrl": (cell_text(image_raw) or None),
         }
         validated, err = validate_study_question_payload(payload, school_id=school_id)
         if err:
