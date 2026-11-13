@@ -1,6 +1,7 @@
 interface ImportMetaEnv {
   readonly VITE_API_URL?: string
   readonly VITE_SCHOOL_ID?: string
+  readonly VITE_APP_MODE?: string
 }
 
 interface ImportMeta {

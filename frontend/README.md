@@ -4,6 +4,8 @@ Set `VITE_API_URL` to the backend origin. Set `VITE_SCHOOL_ID` to the school ID
 to attach public registrations to that school's student roster; if omitted, the
 backend must provide `DEFAULT_SCHOOL_ID`.
 
+For the separate Admin Vercel deployment (root directory `frontend`, Vite build), set `VITE_APP_MODE=admin` so the app opens the Admin Login at `/` using the existing `AdminDashboard` and backend auth. Leave `VITE_APP_MODE` unset for the normal student frontend deployment.
+
 ## Question image upload API
 
 The admin question form expects the backend to provide

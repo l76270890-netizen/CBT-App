@@ -41,9 +41,11 @@ export default function App() {
 }
 
 function AppShell() {
-  const [page, setPage] = useState(() => (
-    window.location.pathname.replace(/\/+$/, '') === '/payment-received' ? 'paymentReceived' : 'landing'
-  ))
+  const isAdminApp = import.meta.env.VITE_APP_MODE === 'admin'
+  const [page, setPage] = useState(() => {
+    if (isAdminApp) return 'admin'
+    return window.location.pathname.replace(/\/+$/, '') === '/payment-received' ? 'paymentReceived' : 'landing'
+  })
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [homeSearchQuery, setHomeSearchQuery] = useState('')
@@ -66,6 +68,10 @@ function AppShell() {
 
   // CHECK LOGIN FROM localStorage
   useEffect(() => {
+    if (isAdminApp) {
+      setCheckingAuth(false)
+      return
+    }
     const saved = localStorage.getItem('cbt_user')
     if (saved) {
       // if user exists and on landing/login/register, go home
@@ -79,24 +85,32 @@ function AppShell() {
       }
     }
     setCheckingAuth(false)
-  }, [])
+  }, [isAdminApp])
 
   const { blocked, clearBlocked } = useSubscription()
 
   // A successful renewal/activation restores access without a reload.
   useEffect(() => {
-    if (page === 'home') clearBlocked()
-  }, [page, clearBlocked])
+    if (!isAdminApp && page === 'home') clearBlocked()
+  }, [page, clearBlocked, isAdminApp])
+
+  const navigateTo = (p: string) => {
+    if (isAdminApp && (p === 'home' || p === 'landing')) {
+      setPage('admin')
+      return
+    }
+    setPage(p)
+  }
 
   const hideNavbarPages = ['landing', 'login', 'register', 'payment', 'paymentReceived', 'activation', 'renew', 'subscriptionExpired', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
   const AdminAny = AdminDashboard as any
 
   // The backend answers 403 once the subscription lapses. Until it is renewed,
   // every signed-in page is replaced by the blocked screen.
-  const isPublicPage = ['landing', 'login', 'register', 'payment', 'paymentReceived', 'activation', 'demo'].includes(page)
-  const showBlocked = blocked && !isPublicPage && page !== 'renew' && page !== 'subscriptionExpired'
+  const isPublicPage = ['landing', 'login', 'register', 'payment', 'paymentReceived', 'activation', 'demo', 'admin'].includes(page)
+  const showBlocked = !isAdminApp && blocked && !isPublicPage && page !== 'renew' && page !== 'subscriptionExpired'
   const effectivePage = showBlocked ? 'subscriptionExpired' : page
-  const showNavbar = !hideNavbarPages.includes(effectivePage)
+  const showNavbar = !isAdminApp && !hideNavbarPages.includes(effectivePage)
 
   if (checkingAuth) {
     return (
@@ -114,7 +128,7 @@ function AppShell() {
       {showNavbar && (
         <Navbar
           activePage={page === 'demo' ? demoSection : page}
-          setActivePage={setPage}
+          setActivePage={navigateTo}
           sidebarCollapsed={sidebarCollapsed}
           setSidebarCollapsed={setSidebarCollapsed}
           searchQuery={homeSearchQuery}
@@ -125,38 +139,38 @@ function AppShell() {
       )}
 
       <main className={`app-main${showNavbar ? ' app-main-sidebar' : ''}${['testConfig', 'testInstructions'].includes(page) ? ' app-main-setup' : ''}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-        {showNavbar && <SubscriptionBanner onRenew={() => setPage('renew')} />}
-        {effectivePage === 'subscriptionExpired' && <SubscriptionExpired setActivePage={setPage} />}
-        {effectivePage === 'renew' && <Renew setActivePage={setPage} />}
+        {showNavbar && <SubscriptionBanner onRenew={() => navigateTo('renew')} />}
+        {effectivePage === 'subscriptionExpired' && <SubscriptionExpired setActivePage={navigateTo} />}
+        {effectivePage === 'renew' && <Renew setActivePage={navigateTo} />}
         {!showBlocked && (
           <>
-            {page === 'landing' && <LandingMobile setActivePage={setPage} />}
-          {page === 'login' && <Login setActivePage={setPage} />}
+            {page === 'landing' && <LandingMobile setActivePage={navigateTo} />}
+          {page === 'login' && <Login setActivePage={navigateTo} />}
           {['register', 'payment'].includes(page) && (
             <Register
-              setActivePage={setPage}
-              onContinueToPayment={details => { setCheckoutDetails(details); setPage('payment') }}
+              setActivePage={navigateTo}
+              onContinueToPayment={details => { setCheckoutDetails(details); navigateTo('payment') }}
               hidden={page === 'payment'}
             />
           )}
-          {page === 'payment' && checkoutDetails && <Payment details={checkoutDetails} setActivePage={setPage} />}
-          {page === 'activation' && <Activation setActivePage={setPage} />}
-          {page === 'paymentReceived' && <PaymentReceived setActivePage={setPage} />}
-          {page === 'demo' && <DemoExperience setActivePage={setPage} section={demoSection} setSection={setDemoSection} searchQuery={homeSearchQuery} setSearchQuery={setHomeSearchQuery} />}
+          {page === 'payment' && checkoutDetails && <Payment details={checkoutDetails} setActivePage={navigateTo} />}
+          {page === 'activation' && <Activation setActivePage={navigateTo} />}
+          {page === 'paymentReceived' && <PaymentReceived setActivePage={navigateTo} />}
+          {page === 'demo' && <DemoExperience setActivePage={navigateTo} section={demoSection} setSection={setDemoSection} searchQuery={homeSearchQuery} setSearchQuery={setHomeSearchQuery} />}
 
-          {page === 'home' && <Home setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} searchQuery={homeSearchQuery} setSearchQuery={setHomeSearchQuery} />}
-          {page === 'exams' && <Exams setActivePage={setPage} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
-          {page === 'subjects' && <Subjects setActivePage={setPage} setTestConfig={setTestConfig} selectedExam={selectedExam} selectedExamId={testConfig.examId || testConfig.customExamId} configuredSubjects={testConfig.subjects} />}
-          {page === 'testConfig' && <TestConfig setActivePage={setPage} testConfig={testConfig} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
-          {page === 'testInstructions' && <TestInstructions setActivePage={setPage} testConfig={testConfig} />}
-          {page === 'test' && <Test setActivePage={setPage} testConfig={testConfig} />}
-          {page === 'result' && <Result setActivePage={setPage} />}
-          {page === 'review' && <Review setActivePage={setPage} />}
-          {page === 'classroom' && <Study setActivePage={setPage} selectedExam={selectedExam} setTestConfig={setTestConfig} />}
-          {page === 'account' && <Account setActivePage={setPage} />}
-          {page === 'practiceHistory' && <PracticeHistory setActivePage={setPage} />}
-          {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={setPage} setTestConfig={setTestConfig} examId={testConfig.examId || testConfig.customExamId} />}
-            {page === 'admin' && <AdminAny setActivePage={setPage} />}
+          {page === 'home' && <Home setActivePage={navigateTo} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} searchQuery={homeSearchQuery} setSearchQuery={setHomeSearchQuery} />}
+          {page === 'exams' && <Exams setActivePage={navigateTo} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
+          {page === 'subjects' && <Subjects setActivePage={navigateTo} setTestConfig={setTestConfig} selectedExam={selectedExam} selectedExamId={testConfig.examId || testConfig.customExamId} configuredSubjects={testConfig.subjects} />}
+          {page === 'testConfig' && <TestConfig setActivePage={navigateTo} testConfig={testConfig} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
+          {page === 'testInstructions' && <TestInstructions setActivePage={navigateTo} testConfig={testConfig} />}
+          {page === 'test' && <Test setActivePage={navigateTo} testConfig={testConfig} />}
+          {page === 'result' && <Result setActivePage={navigateTo} />}
+          {page === 'review' && <Review setActivePage={navigateTo} />}
+          {page === 'classroom' && <Study setActivePage={navigateTo} selectedExam={selectedExam} setTestConfig={setTestConfig} />}
+          {page === 'account' && <Account setActivePage={navigateTo} />}
+          {page === 'practiceHistory' && <PracticeHistory setActivePage={navigateTo} />}
+          {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={navigateTo} setTestConfig={setTestConfig} examId={testConfig.examId || testConfig.customExamId} />}
+            {page === 'admin' && <AdminAny setActivePage={navigateTo} />}
           </>
         )}
       </main>
