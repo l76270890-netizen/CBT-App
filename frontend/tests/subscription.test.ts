@@ -86,3 +86,4 @@ test('only a subscription-expiry 403 counts as a subscription block', () => {
   assert.equal(isSubscriptionBlockedError({ status: 401 }), false)
   assert.equal(isSubscriptionBlockedError(new Error('boom')), false)
 })
+
