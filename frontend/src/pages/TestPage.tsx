@@ -192,7 +192,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
         <div className="question-card">
           <h2 className="question-text">{q.question}</h2>
           {q.imageUrl && <QuestionImage key={q.imageUrl} className="question-diagram" imageUrl={q.imageUrl} />}
-          <div className="options">{q.options.map((opt,i)=><button key={i} className={`option-btn ${selectedAnswer===i?'selected':''}`} onClick={()=>{if(selectedAnswer!==null) return; const c=[...answers]; c[current]=i; setAnswers(c)}} disabled={selectedAnswer!==null}><span className="option-label">{letters[i]}</span><span>{opt}</span></button>)}</div>
+          <div className="options">{q.options.map((opt,i)=><button key={i} className={`option-btn ${selectedAnswer===i?'selected':''}`} onClick={()=>{if(studyMode && selectedAnswer!==null) return; const c=[...answers]; c[current]=i; setAnswers(c)}} disabled={studyMode && selectedAnswer!==null}><span className="option-label">{letters[i]}</span><span>{opt}</span></button>)}</div>
 
           {studyMode && (
             <div className="study-answer-controls">
