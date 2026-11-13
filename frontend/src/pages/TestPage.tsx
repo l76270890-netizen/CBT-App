@@ -18,6 +18,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
   const [showCalc, setShowCalc] = useState(false)
   const [calcInput, setCalcInput] = useState('0')
   const [loading, setLoading] = useState(true)
+  const [explanationVisible, setExplanationVisible] = useState<boolean[]>([])
   const submitting = useRef(false)
 
   const getSubjectName = (s: any) => typeof s === 'string'? s : s?.subject || s?.name || 'General'
@@ -102,6 +103,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
       const shuffled = fetched.sort(() => 0.5 - Math.random()).slice(0, testConfig.totalQuestions || fetched.length)
       setQuestions(shuffled)
       setAnswers(Array(shuffled.length).fill(null))
+      setExplanationVisible(Array(shuffled.length).fill(false))
       setLoading(false)
     }
     fetchQuestions()
@@ -162,9 +164,22 @@ export default function Test({ setActivePage, testConfig }: Props) {
 
   const q = questions[current]
   const answeredCount = answers.filter(a=>a!==null).length
-  // In Study mode (started from Study page or practice mode) show the answer + explanation right away
+  // In Study/practice mode allow the student to reveal the answer and explanation on demand
   const studyMode = testConfig.mode === 'practice' || !!testConfig.fromStudy
-  const revealed = studyMode && answers[current] !== null
+  const revealed = studyMode && !!explanationVisible[current]
+  const selectedAnswer = answers[current]
+  const letters = ['A','B','C','D']
+  const correctLetter = letters[q.answer] || 'A'
+  const correctText = q.options[q.answer] ?? ''
+  const explanationText = (q.explanation || '').trim() || 'No explanation available for this question.'
+
+  const toggleExplanation = () => {
+    setExplanationVisible(prev => {
+      const next = [...prev]
+      next[current] = !next[current]
+      return next
+    })
+  }
 
   return (
     <div className="test-page1">
@@ -177,14 +192,28 @@ export default function Test({ setActivePage, testConfig }: Props) {
         <div className="question-card">
           <h2 className="question-text">{q.question}</h2>
           {q.imageUrl && <QuestionImage key={q.imageUrl} className="question-diagram" imageUrl={q.imageUrl} />}
-          <div className="options">{q.options.map((opt,i)=><button key={i} className={`option-btn ${answers[current]===i?'selected':''}`} onClick={()=>{const c=[...answers]; c[current]=i; setAnswers(c)}}><span className="option-label">{String.fromCharCode(65+i)}</span><span>{opt}</span></button>)}</div>
-          {revealed && (
-            <div className="explanation-box">
-              <div className={`answer-status ${answers[current]===q.answer ? 'correct' : 'wrong'}`}>
-                {answers[current]===q.answer ? '✓ Correct' : `✗ Correct answer: ${String.fromCharCode(65+q.answer)}. ${q.options[q.answer] ?? ''}`}
+          <div className="options">{q.options.map((opt,i)=><button key={i} className={`option-btn ${selectedAnswer===i?'selected':''}`} onClick={()=>{if(selectedAnswer!==null) return; const c=[...answers]; c[current]=i; setAnswers(c)}} disabled={selectedAnswer!==null}><span className="option-label">{letters[i]}</span><span>{opt}</span></button>)}</div>
+
+          {studyMode && (
+            <div className="study-answer-controls">
+              <button type="button" className="study-reveal-btn" onClick={toggleExplanation} disabled={selectedAnswer===null}>
+                {revealed ? 'Hide Answer & Explanation' : 'Show Answer & Explanation'}
+              </button>
+              {selectedAnswer===null && <p className="study-reveal-hint">Select an answer to reveal the correct answer and explanation.</p>}
+              <div className={`explanation-panel ${revealed ? 'open' : ''}`} aria-hidden={!revealed}>
+                <div className="explanation-panel-inner">
+                  {selectedAnswer!==null && (
+                    <>
+                      <div className={`answer-status ${selectedAnswer===q.answer ? 'correct' : 'wrong'}`}>
+                        {selectedAnswer===q.answer ? '✓ Correct' : '✗ Incorrect'}
+                      </div>
+                      <div className="correct-answer-line"><strong>Correct Answer:</strong> {correctLetter}. {correctText}</div>
+                      <div className="explanation-label">Explanation</div>
+                      <p className="explanation-text">{explanationText}</p>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="explanation-label">Explanation</div>
-              <p className="explanation-text">{q.explanation?.trim() || 'No explanation has been added for this question yet.'}</p>
             </div>
           )}
         </div>
