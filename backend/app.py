@@ -126,9 +126,31 @@ def ensure_user_columns():
             "Could not verify the users table schema at startup; continuing.")
 
 
+def ensure_question_columns():
+    """Add study-management columns to questions without requiring a migration.
+
+    Existing exam questions remain valid (topic stays NULL). This must never
+    raise at startup.
+    """
+    try:
+        inspector = db.inspect(db.engine)
+        if not inspector.has_table("questions"):
+            return
+        existing_cols = {col["name"] for col in inspector.get_columns("questions")}
+        if "topic" not in existing_cols:
+            with db.engine.connect() as conn:
+                conn.execute(db.text('ALTER TABLE questions ADD COLUMN topic VARCHAR(200)'))
+                conn.commit()
+            app.logger.info("Added missing question column: topic")
+    except Exception:
+        app.logger.exception(
+            "Could not verify the questions table schema at startup; continuing.")
+
+
 # Run once at import time so login and other routes don't 500 on missing columns.
 with app.app_context():
     ensure_user_columns()
+    ensure_question_columns()
 
 BASEDIR = os.path.abspath(os.path.dirname(__file__))
 is_serverless = is_vercel or bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
@@ -574,6 +596,7 @@ class Question(db.Model):
         "exams.id"), nullable=True, index=True)
     examType = db.Column(db.String(80))
     subject = db.Column(db.String(100))
+    topic = db.Column(db.String(200), nullable=True, index=True)
     question = db.Column(db.Text)
     options = db.Column(db.JSON)
     answer = db.Column(db.String(10))
@@ -1567,6 +1590,7 @@ def get_questions():
             "examId": q.examId,
             "examType": q.examType,
             "subject": q.subject,
+            "topic": q.topic,
             "question": q.question,
             "options": q.options,
             "year": q.year,
@@ -1739,9 +1763,12 @@ def validate_question_payload(data, exam):
         image_path = image_url
     else:
         image_path = data.get("image_path")
+    topic = data.get("topic")
+    topic_value = topic.strip() if isinstance(topic, str) and topic.strip() else None
     return {"subject": subject.strip(), "question": question.strip(),
             "options": {key: options[key].strip() for key in "ABCD"}, "answer": answer,
-            "explanation": data.get("explanation", "") or "", "image_path": image_path}, None
+            "explanation": data.get("explanation", "") or "", "image_path": image_path,
+            "topic": topic_value}, None
 
 
 @app.route("/api/admin/add-question", methods=["POST"])
@@ -1775,7 +1802,7 @@ def add_question():
             return api_error(storage_error, 503, "image_storage_unavailable")
         validated["image_path"] = image_path
     row = Question(examId=exam.id, school_id=exam.school_id, examType=exam.examType,
-                   subject=validated["subject"], question=validated["question"],
+                   subject=validated["subject"], topic=validated.get("topic"), question=validated["question"],
                    options=validated["options"], answer=validated["answer"],
                    explanation=validated["explanation"], year=exam.year, image_path=validated["image_path"])
     db.session.add(row)
@@ -1784,6 +1811,7 @@ def add_question():
         examId=exam.id, school_id=exam.school_id).count()
     db.session.commit()
     return jsonify(success=True, id=row.id, examId=exam.id, subject=row.subject,
+                   topic=row.topic,
                    image_path=row.image_path, image_url=get_image_url(row.image_path)), 201
 
 
@@ -1854,6 +1882,7 @@ def handle_question_import(is_zip_endpoint):
                     school_id=exam.school_id,
                     examType=exam.examType,
                     subject=question["subject"],
+                    topic=question.get("topic"),
                     question=question["question"],
                     options=question["options"],
                     answer=question["answer"],
@@ -2375,3 +2404,508 @@ def assign_legacy_data_command():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5000")))
+# --- Study question management (admin) and student study-mode access ---
+
+STUDY_EXAM_TYPES = {"JAMB", "WAEC", "NECO", "Post-UTME", "CBT"}
+STUDY_SUBJECTS_BY_EXAM = {
+    "JAMB": [
+        "English Language", "Mathematics", "Physics", "Chemistry", "Biology",
+        "Government", "Economics", "Literature in English", "Christian Religious Studies",
+        "Geography", "Agricultural Science", "Commerce", "Financial Accounting",
+        "History", "Business Studies",
+    ],
+    "WAEC": [
+        "English Language", "Mathematics", "Physics", "Chemistry", "Biology",
+        "Government", "Economics", "Literature in English", "Christian Religious Studies",
+        "Geography", "Agricultural Science", "Commerce", "Financial Accounting",
+        "History",
+    ],
+    "NECO": [
+        "English Language", "Mathematics", "Physics", "Chemistry", "Biology",
+        "Government", "Economics", "Literature in English", "Christian Religious Studies",
+        "Geography", "Agricultural Science", "Commerce", "Financial Accounting",
+    ],
+    "Post-UTME": [
+        "English Language", "Mathematics", "Physics", "Chemistry", "Biology",
+        "General Knowledge", "Current Affairs",
+    ],
+    "CBT": [
+        "English Language", "Mathematics", "Physics", "Chemistry", "Biology",
+        "Government", "Economics", "General Knowledge", "Computer Studies",
+    ],
+}
+STUDY_TOPICS_BY_SUBJECT = {
+    "English Language": ["Lexis & Structure", "Oral English", "Comprehension", "Summary", "Essay Writing"],
+    "Mathematics": ["Algebra", "Trigonometry", "Probability", "Calculus", "Geometry", "Statistics", "Number & Numeration"],
+    "Physics": ["Mechanics", "Electricity", "Waves", "Modern Physics", "Heat", "Optics"],
+    "Chemistry": ["Atomic Structure", "Organic Chemistry", "Acids & Bases", "Mole Concept", "Chemical Bonding", "Electrochemistry"],
+    "Biology": ["Cell Biology", "Genetics", "Ecology", "Human Anatomy", "Reproduction", "Evolution"],
+    "Government": ["Constitution", "Political Parties", "Elections", "International Relations", "Public Administration"],
+    "Economics": ["Micro Economics", "Macro Economics", "Demand & Supply", "Market Structure", "Money & Banking"],
+    "Literature in English": ["African Prose", "Non-African Prose", "Poetry", "Drama"],
+    "Christian Religious Studies": ["Old Testament", "New Testament", "Themes", "Life of Jesus"],
+    "Geography": ["Physical Geography", "Human Geography", "Map Reading", "Environmental Studies"],
+    "Agricultural Science": ["Crop Production", "Animal Husbandry", "Soil Science", "Farm Management"],
+    "Commerce": ["Trade", "Business Organization", "Finance", "Marketing"],
+    "Financial Accounting": ["Double Entry", "Trial Balance", "Final Accounts", "Partnership"],
+    "History": ["Pre-Colonial", "Colonial Era", "Independence", "World History"],
+    "Business Studies": ["Office Practice", "Business Law", "Management", "Entrepreneurship"],
+    "General Knowledge": ["Current Affairs", "Science & Technology", "Civics", "General Studies"],
+    "Current Affairs": ["National Affairs", "International Affairs", "Education", "Sports"],
+    "Computer Studies": ["Computer Fundamentals", "Programming Basics", "Networking", "Data Processing"],
+}
+
+
+def normalize_label(value):
+    return " ".join(str(value or "").strip().split())
+
+
+def normalize_study_exam_type(value):
+    text = normalize_label(value)
+    lower = text.lower().replace("-", " ").replace("_", " ")
+    if lower == "jamb":
+        return "JAMB"
+    if lower == "waec":
+        return "WAEC"
+    if lower == "neco":
+        return "NECO"
+    if lower in {"post utme", "postutme"}:
+        return "Post-UTME"
+    if lower == "cbt":
+        return "CBT"
+    for item in STUDY_EXAM_TYPES:
+        if item.lower() == text.lower():
+            return item
+    return None
+
+
+def valid_study_subject(exam_type, subject):
+    subject = normalize_label(subject)
+    if not subject:
+        return False
+    return subject in STUDY_SUBJECTS_BY_EXAM.get(exam_type, [])
+
+
+def valid_study_topic(subject, topic):
+    topic = normalize_label(topic)
+    if not topic:
+        return False
+    allowed = STUDY_TOPICS_BY_SUBJECT.get(subject)
+    if allowed is None:
+        return True
+    return topic in allowed or topic in STUDY_TOPICS_BY_SUBJECT.get(subject, [])
+
+
+def validate_study_image_url(value):
+    if value in (None, ""):
+        return None, None
+    if not isinstance(value, str):
+        return None, "imageUrl must be a string."
+    image_url = value.strip()
+    if not image_url:
+        return None, None
+    if len(image_url) > 1000:
+        return None, "imageUrl is too long."
+    if not is_valid_question_image_url(image_url):
+        return None, "imageUrl must be a valid HTTP(S) URL or a relative upload path."
+    return image_url, None
+
+
+def is_valid_question_image_url(value):
+    if not isinstance(value, str):
+        return False
+    image_url = value.strip()
+    if not image_url or image_url.startswith("//") or len(image_url) > 1000 or re.search(r"%(?![0-9a-fA-F]{2})", image_url):
+        return False
+    if image_url.startswith("/") or re.match(r"^(uploads|questions)/", image_url, re.IGNORECASE):
+        return True
+    try:
+        parsed = urlsplit(image_url)
+        if parsed.scheme.lower() in {"http", "https"} and parsed.hostname:
+            parsed.port
+            return not parsed.username and not parsed.password and not any(ch.isspace() for ch in image_url)
+    except Exception:
+        return False
+    return False
+
+
+def study_question_to_dict(q, include_answer=True):
+    data = {
+        "id": q.id,
+        "examType": q.examType,
+        "exam_type": q.examType,
+        "subject": q.subject,
+        "topic": q.topic,
+        "year": q.year,
+        "question": q.question,
+        "options": q.options,
+        "explanation": q.explanation or "",
+        "imageUrl": get_image_url(q.image_path),
+        "image_path": q.image_path,
+    }
+    if include_answer:
+        data["answer"] = q.answer
+        data["correctAnswer"] = q.answer
+    return data
+
+
+def validate_study_question_payload(data, school_id=None, exclude_id=None):
+    exam_type = normalize_study_exam_type(data.get("examType") or data.get("exam_type"))
+    subject = normalize_label(data.get("subject"))
+    topic = normalize_label(data.get("topic"))
+    question = normalize_label(data.get("question"))
+    options = data.get("options")
+    answer = str(data.get("correctAnswer") or data.get("answer") or "").strip().upper()
+    explanation = data.get("explanation") or ""
+    year_raw = data.get("year")
+
+    if not exam_type:
+        return None, "A valid exam type (JAMB, WAEC, NECO, Post-UTME, CBT) is required."
+    if not subject:
+        return None, "Subject is required."
+    if not valid_study_subject(exam_type, subject):
+        return None, f"Subject is not valid for {exam_type}."
+    if not topic:
+        return None, "Topic is required."
+    # allow custom topics when subject not in predefined map, but require non-empty
+    allowed_topics = STUDY_TOPICS_BY_SUBJECT.get(subject)
+    if allowed_topics is not None and topic not in allowed_topics:
+        return None, f"Topic is not valid for {subject}."
+    if not question:
+        return None, "Question is required."
+    if not isinstance(options, dict) or set(options.keys()) != {"A", "B", "C", "D"} or any(
+        not isinstance(options.get(letter), str) or not options[letter].strip() for letter in "ABCD"
+    ):
+        return None, "options must contain non-empty A, B, C, and D values."
+    if answer not in {"A", "B", "C", "D"}:
+        return None, "correctAnswer must be A, B, C, or D."
+    try:
+        year = int(year_raw)
+        if year < 1980 or year > 2100:
+            raise ValueError
+    except (TypeError, ValueError):
+        return None, "year must be a valid year."
+    if not isinstance(explanation, str):
+        explanation = str(explanation)
+    image_url, image_error = validate_study_image_url(data.get("imageUrl") or data.get("image_url") or data.get("image_path"))
+    if image_error:
+        return None, image_error
+
+    qn = " ".join(question.casefold().split())
+    dup_query = Question.query.filter(
+        Question.school_id == school_id,
+        Question.examId.is_(None),
+        func.lower(func.trim(Question.examType)) == exam_type.lower(),
+        func.lower(func.trim(Question.subject)) == subject.lower(),
+        func.lower(func.trim(func.coalesce(Question.topic, ""))) == topic.lower(),
+        Question.year == year,
+    )
+    if exclude_id is not None:
+        dup_query = dup_query.filter(Question.id != exclude_id)
+    existing = dup_query.all()
+    for row in existing:
+        if " ".join((row.question or "").casefold().split()) == qn:
+            return None, "A matching study question already exists for this exam type, subject, topic, year, and question text."
+
+    return {
+        "examType": exam_type,
+        "subject": subject,
+        "topic": topic,
+        "question": question,
+        "options": {k: options[k].strip() for k in "ABCD"},
+        "answer": answer,
+        "explanation": explanation.strip(),
+        "year": year,
+        "image_path": image_url,
+    }, None
+
+
+@app.route("/api/admin/study/meta", methods=["GET"])
+@roles_required("school_admin", "exam_officer", "teacher")
+def admin_study_meta():
+    return jsonify({
+        "examTypes": sorted(STUDY_EXAM_TYPES),
+        "subjectsByExamType": STUDY_SUBJECTS_BY_EXAM,
+        "topicsBySubject": STUDY_TOPICS_BY_SUBJECT,
+    })
+
+
+@app.route("/api/admin/study/questions", methods=["GET"])
+@roles_required("school_admin", "exam_officer")
+def admin_study_questions_list():
+    school_id = g.current_user.school_id
+    query = Question.query.filter_by(school_id=school_id, examId=None)
+    exam_type = normalize_study_exam_type(request.args.get("examType") or request.args.get("exam_type") or "")
+    subject = normalize_label(request.args.get("subject"))
+    topic = normalize_label(request.args.get("topic"))
+    year = request.args.get("year")
+    search = normalize_label(request.args.get("search") or request.args.get("q"))
+    if exam_type:
+        query = query.filter(func.lower(Question.examType) == exam_type.lower())
+    if subject:
+        query = query.filter(func.lower(Question.subject) == subject.lower())
+    if topic:
+        query = query.filter(func.lower(func.coalesce(Question.topic, "")) == topic.lower())
+    if year not in (None, ""):
+        try:
+            query = query.filter(Question.year == int(year))
+        except (TypeError, ValueError):
+            return api_error("year must be an integer.")
+    if search:
+        needle = f"%{search}%"
+        query = query.filter(Question.question.ilike(needle))
+    rows = query.order_by(Question.examType.asc(), Question.subject.asc(), Question.topic.asc(), Question.year.desc(), Question.id.desc()).limit(1000).all()
+    return jsonify({"questions": [study_question_to_dict(q, include_answer=True) for q in rows], "total": len(rows)})
+
+
+@app.route("/api/admin/study/question", methods=["POST"])
+@roles_required("school_admin", "exam_officer")
+def admin_study_question_create():
+    data = json_body()
+    validated, error = validate_study_question_payload(data, school_id=g.current_user.school_id)
+    if error:
+        return api_error(error)
+    row = Question(
+        examId=None,
+        school_id=g.current_user.school_id,
+        examType=validated["examType"],
+        subject=validated["subject"],
+        topic=validated["topic"],
+        question=validated["question"],
+        options=validated["options"],
+        answer=validated["answer"],
+        explanation=validated["explanation"],
+        year=validated["year"],
+        image_path=validated["image_path"],
+    )
+    db.session.add(row)
+    db.session.commit()
+    return jsonify(success=True, question=study_question_to_dict(row, include_answer=True)), 201
+
+
+@app.route("/api/admin/study/question/<int:question_id>", methods=["PUT", "DELETE"])
+@roles_required("school_admin", "exam_officer")
+def admin_study_question_manage(question_id):
+    row = Question.query.filter_by(id=question_id, school_id=g.current_user.school_id, examId=None).first()
+    if not row:
+        return api_error("Study question not found.", 404, "study_question_not_found")
+    if request.method == "DELETE":
+        db.session.delete(row)
+        db.session.commit()
+        return jsonify(success=True)
+    data = json_body()
+    # merge current values for partial-ish edit convenience
+    merged = study_question_to_dict(row, include_answer=True)
+    merged.update({
+        "examType": data.get("examType", data.get("exam_type", merged["examType"])),
+        "subject": data.get("subject", merged["subject"]),
+        "topic": data.get("topic", merged["topic"]),
+        "year": data.get("year", merged["year"]),
+        "question": data.get("question", merged["question"]),
+        "options": data.get("options", merged["options"]),
+        "correctAnswer": data.get("correctAnswer", data.get("answer", merged["answer"])),
+        "explanation": data.get("explanation", merged.get("explanation", "")),
+        "imageUrl": data.get("imageUrl", data.get("image_url", merged.get("imageUrl"))),
+    })
+    validated, error = validate_study_question_payload(merged, school_id=g.current_user.school_id, exclude_id=row.id)
+    if error:
+        return api_error(error)
+    row.examType = validated["examType"]
+    row.subject = validated["subject"]
+    row.topic = validated["topic"]
+    row.question = validated["question"]
+    row.options = validated["options"]
+    row.answer = validated["answer"]
+    row.explanation = validated["explanation"]
+    row.year = validated["year"]
+    row.image_path = validated["image_path"]
+    db.session.commit()
+    return jsonify(success=True, question=study_question_to_dict(row, include_answer=True))
+
+
+@app.route("/api/admin/study/import", methods=["POST"])
+@roles_required("school_admin", "exam_officer")
+def admin_study_import():
+    school_id = g.current_user.school_id
+    preview_only = str(request.form.get("preview") or request.args.get("preview") or "").lower() in {"1", "true", "yes"}
+    file = request.files.get("file") or request.files.get("csv")
+    if not file or not file.filename:
+        return api_error("Upload a CSV or Excel (.xlsx) file.")
+    filename = secure_filename(file.filename)
+    ext = os.path.splitext(filename)[1].lower()
+    rows = []
+    errors = []
+    if ext == ".csv":
+        try:
+            text = file.read().decode("utf-8-sig")
+            reader = csv.DictReader(io.StringIO(text))
+            for idx, raw in enumerate(reader, start=2):
+                if not raw:
+                    continue
+                if all(v is None or str(v).strip() == "" for v in raw.values()):
+                    continue
+                rows.append((idx, raw))
+        except Exception:
+            return api_error("Could not read the CSV file. Ensure it is a valid UTF-8 CSV.")
+    elif ext == ".xlsx":
+        try:
+            import openpyxl  # type: ignore
+            wb = openpyxl.load_workbook(file, read_only=True, data_only=True)
+            ws = wb.active
+            header_cells = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
+            headers_list = [str(h).strip() if h is not None else "" for h in header_cells]
+            for idx, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                raw = {headers_list[i]: (values[i] if i < len(values) else None) for i in range(len(headers_list))}
+                if all(v is None or str(v).strip() == "" for v in raw.values()):
+                    continue
+                rows.append((idx, raw))
+        except Exception:
+            return api_error("Could not read the Excel file. Ensure it is a valid .xlsx file.")
+    else:
+        return api_error("Only CSV and .xlsx files are supported.")
+
+    def get_col(raw, *names):
+        for name in names:
+            for k, v in raw.items():
+                if normalize_label(k).lower().replace(" ", "").replace("_", "") == normalize_label(name).lower().replace(" ", "").replace("_", ""):
+                    return v
+        return ""
+
+    prepared = []
+    seen_in_file = set()
+    for idx, raw in rows:
+        payload = {
+            "examType": get_col(raw, "examType", "exam type"),
+            "subject": get_col(raw, "subject"),
+            "topic": get_col(raw, "topic"),
+            "year": get_col(raw, "year"),
+            "question": get_col(raw, "question"),
+            "options": {
+                "A": str(get_col(raw, "optionA", "option a", "A") or "").strip(),
+                "B": str(get_col(raw, "optionB", "option b", "B") or "").strip(),
+                "C": str(get_col(raw, "optionC", "option c", "C") or "").strip(),
+                "D": str(get_col(raw, "optionD", "option d", "D") or "").strip(),
+            },
+            "correctAnswer": str(get_col(raw, "correctAnswer", "correct answer", "answer") or "").strip().upper(),
+            "explanation": str(get_col(raw, "explanation") or "").strip(),
+            "imageUrl": str(get_col(raw, "imageUrl", "image url", "image") or "").strip() or None,
+        }
+        validated, err = validate_study_question_payload(payload, school_id=school_id)
+        if err:
+            errors.append({"row": idx, "question": str(payload.get("question") or "")[:120], "error": err})
+            continue
+        key = (validated["examType"].lower(), validated["subject"].lower(), validated["topic"].lower(), validated["year"], " ".join(validated["question"].casefold().split()))
+        if key in seen_in_file:
+            errors.append({"row": idx, "question": validated["question"][:120], "error": "Duplicate question in this file."})
+            continue
+        seen_in_file.add(key)
+        prepared.append((idx, validated))
+
+    preview = [{
+        "row": idx,
+        "examType": v["examType"],
+        "subject": v["subject"],
+        "topic": v["topic"],
+        "year": v["year"],
+        "question": v["question"],
+        "optionA": v["options"]["A"], "optionB": v["options"]["B"], "optionC": v["options"]["C"], "optionD": v["options"]["D"],
+        "correctAnswer": v["answer"],
+        "explanation": v.get("explanation", ""),
+        "imageUrl": v.get("image_path"),
+    } for idx, v in prepared[:100]]
+
+    if preview_only:
+        return jsonify(success=len(errors) == 0, preview=True, totalRows=len(rows), valid=len(prepared), imported=0, failed=len(errors), errors=errors, previewRows=preview,
+                       message=("Ready to import." if len(errors) == 0 and prepared else "Fix validation errors before importing."))
+
+    if errors and not prepared:
+        return jsonify(success=False, message="No valid questions to import.", imported=0, failed=len(errors), errors=errors, previewRows=[]), 400
+
+    # if any errors, do not import silently; require clean file
+    if errors:
+        return jsonify(success=False, message="Validation failed. Fix errors and re-upload; no questions were imported.", imported=0, failed=len(errors), errors=errors, previewRows=preview), 400
+
+    for _, v in prepared:
+        db.session.add(Question(examId=None, school_id=school_id, examType=v["examType"], subject=v["subject"], topic=v["topic"], question=v["question"], options=v["options"], answer=v["answer"], explanation=v["explanation"], year=v["year"], image_path=v["image_path"]))
+    db.session.commit()
+    return jsonify(success=True, message=f"Imported {len(prepared)} study questions.", imported=len(prepared), failed=0, errors=[], previewRows=[])
+
+
+@app.route("/api/study/meta", methods=["GET"])
+@require_auth
+def study_meta():
+    school_id = g.current_user.school_id
+    # return configured meta filtered to what exists when possible
+    counts = db.session.query(Question.examType, Question.subject, Question.topic, Question.year, func.count(Question.id)).filter(
+        Question.school_id == school_id, Question.examId.is_(None)
+    ).group_by(Question.examType, Question.subject, Question.topic, Question.year).all()
+    availability = {}
+    for et, subj, topic, year, c in counts:
+        availability.setdefault(et or "", {}).setdefault(subj or "", {}).setdefault(topic or "", {})[str(year)] = c
+    return jsonify({
+        "examTypes": sorted(STUDY_EXAM_TYPES),
+        "subjectsByExamType": STUDY_SUBJECTS_BY_EXAM,
+        "topicsBySubject": STUDY_TOPICS_BY_SUBJECT,
+        "availability": availability,
+    })
+
+
+@app.route("/api/study/questions", methods=["GET"])
+@require_auth
+def study_questions():
+    school_id = g.current_user.school_id
+    exam_type = normalize_study_exam_type(request.args.get("examType") or request.args.get("exam_type") or "")
+    subject = normalize_label(request.args.get("subject"))
+    topics_raw = request.args.getlist("topics") or request.args.getlist("topic")
+    if not topics_raw:
+        topics_param = request.args.get("topics") or request.args.get("topic") or ""
+        topics_raw = [t for t in topics_param.split(",") if t.strip()]
+    topics = []
+    for item in topics_raw:
+        for part in str(item).split(","):
+            label = normalize_label(part)
+            if label:
+                topics.append(label)
+    year = request.args.get("year")
+    if not exam_type or not subject or not topics:
+        return api_error("examType, subject, and at least one topic are required.")
+    query = Question.query.filter(
+        Question.school_id == school_id,
+        Question.examId.is_(None),
+        func.lower(Question.examType) == exam_type.lower(),
+        func.lower(Question.subject) == subject.lower(),
+    )
+    lowered = [t.lower() for t in topics]
+    query = query.filter(func.lower(func.coalesce(Question.topic, "")).in_(lowered))
+    if year not in (None, "", "All", "all"):
+        try:
+            query = query.filter(Question.year == int(year))
+        except (TypeError, ValueError):
+            return api_error("year must be an integer or All.")
+    rows = query.order_by(Question.year.desc(), Question.id.asc()).all()
+    result = []
+    for q in rows:
+        opts = q.options or {}
+        if isinstance(opts, dict):
+            options_list = [opts.get("A", ""), opts.get("B", ""), opts.get("C", ""), opts.get("D", "")]
+        elif isinstance(opts, list):
+            options_list = (opts + ["", "", "", ""])[:4]
+        else:
+            options_list = ["", "", "", ""]
+        ans = str(q.answer or "A").strip().upper()
+        ans_idx = {"A": 0, "B": 1, "C": 2, "D": 3}.get(ans, 0)
+        result.append({
+            "id": q.id,
+            "examType": q.examType,
+            "subject": q.subject,
+            "topic": q.topic,
+            "year": q.year,
+            "question": q.question,
+            "options": options_list,
+            "answer": ans_idx,
+            "correctAnswer": ans,
+            "explanation": q.explanation or "",
+            "imageUrl": get_image_url(q.image_path),
+        })
+    return jsonify(result)
+

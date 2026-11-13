@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent } from "react";
-import { Activity, ArrowRight, BookOpen, Download, FileSpreadsheet, ImagePlus, LayoutDashboard, Trash2, Upload, UsersRound } from "lucide-react";
+import { Activity, ArrowRight, BookOpen, Download, FileSpreadsheet, GraduationCap, ImagePlus, LayoutDashboard, Pencil, Search, Trash2, Upload, UsersRound } from "lucide-react";
 import "./AdminDashboard.css";
 import { apiRequest, asArray, uploadQuestionImage } from "../api";
 import QuestionImage from "../components/QuestionImage";
@@ -27,6 +27,271 @@ const formatExamDate = (value: string) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
 };
 
+type StudyQuestion = {
+  id: number;
+  examType: string;
+  subject: string;
+  topic: string;
+  year: number;
+  question: string;
+  options: { A: string; B: string; C: string; D: string } | string[];
+  correctAnswer?: string;
+  answer?: string;
+  explanation?: string;
+  imageUrl?: string | null;
+};
+
+type StudyMeta = {
+  examTypes: string[];
+  subjectsByExamType: Record<string, string[]>;
+  topicsBySubject: Record<string, string[]>;
+};
+
+function StudyManagementSection() {
+  const [meta, setMeta] = useState<StudyMeta>({ examTypes: ["JAMB","WAEC","NECO","Post-UTME","CBT"], subjectsByExamType: {}, topicsBySubject: {} });
+  const [questions, setQuestions] = useState<StudyQuestion[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [msg, setMsg] = useState("");
+  const [search, setSearch] = useState("");
+  const [filterExamType, setFilterExamType] = useState("");
+  const [filterSubject, setFilterSubject] = useState("");
+  const [filterTopic, setFilterTopic] = useState("");
+  const [filterYear, setFilterYear] = useState("");
+
+  const [formExamType, setFormExamType] = useState("JAMB");
+  const [formSubject, setFormSubject] = useState("");
+  const [formTopic, setFormTopic] = useState("");
+  const [formYear, setFormYear] = useState(String(new Date().getFullYear()));
+  const [formQuestion, setFormQuestion] = useState("");
+  const [formOptions, setFormOptions] = useState(["","","",""]);
+  const [formCorrect, setFormCorrect] = useState("A");
+  const [formExplanation, setFormExplanation] = useState("");
+  const [formImage, setFormImage] = useState<File | null>(null);
+  const [formImagePreview, setFormImagePreview] = useState("");
+  const [formImageUrl, setFormImageUrl] = useState("");
+  const [formImageError, setFormImageError] = useState("");
+  const [formSaving, setFormSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<any[]>([]);
+  const [importErrors, setImportErrors] = useState<{row:number;question?:string;error:string}[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState<{imported:number;failed:number;message?:string} | null>(null);
+  const [importStatus, setImportStatus] = useState("");
+
+  useEffect(() => { void (async () => {
+    try { const m = await apiRequest<StudyMeta>("/api/admin/study/meta"); setMeta(m); if (!formSubject && m.subjectsByExamType?.[formExamType]?.[0]) setFormSubject(m.subjectsByExamType[formExamType][0]); }
+    catch (e) { /* fallback defaults */ }
+  })(); }, []);
+
+  useEffect(() => {
+    const subs = meta.subjectsByExamType?.[formExamType] || [];
+    if (!subs.includes(formSubject)) { setFormSubject(subs[0] || ""); setFormTopic(""); }
+  }, [formExamType, meta]);
+  useEffect(() => {
+    const topics = meta.topicsBySubject?.[formSubject] || [];
+    if (!topics.includes(formTopic)) setFormTopic(topics[0] || "");
+  }, [formSubject, meta]);
+
+  const loadQuestions = async () => {
+    setLoading(true); setError("");
+    try {
+      const params = new URLSearchParams();
+      if (filterExamType) params.set("examType", filterExamType);
+      if (filterSubject) params.set("subject", filterSubject);
+      if (filterTopic) params.set("topic", filterTopic);
+      if (filterYear) params.set("year", filterYear);
+      if (search.trim()) params.set("search", search.trim());
+      const res = await apiRequest<{questions?: StudyQuestion[]; total?: number}>(`/api/admin/study/questions?${params}`);
+      setQuestions(asArray<StudyQuestion>((res as any)?.questions ?? res));
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not load study questions."); setQuestions([]); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void loadQuestions(); }, [filterExamType, filterSubject, filterTopic, filterYear]);
+
+  useEffect(() => () => { if (formImagePreview) URL.revokeObjectURL(formImagePreview); }, [formImagePreview]);
+
+  const resetForm = () => {
+    setEditingId(null); setFormQuestion(""); setFormOptions(["","","",""]); setFormCorrect("A"); setFormExplanation("");
+    setFormImage(null); if (formImagePreview) URL.revokeObjectURL(formImagePreview); setFormImagePreview(""); setFormImageUrl(""); setFormImageError(""); setFormError("");
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  };
+
+  const onImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = ""; if (!file) return;
+    if (!["image/png","image/jpeg","image/webp"].includes(file.type.toLowerCase())) { setFormImageError("Choose a PNG, JPG, JPEG, or WEBP image."); return; }
+    setFormImageError(""); setFormImage(file); setFormImageUrl(""); setFormImagePreview(URL.createObjectURL(file));
+  };
+
+  const saveQuestion = async (e: React.FormEvent) => {
+    e.preventDefault(); setFormError(""); setMsg("");
+    if (!formExamType || !formSubject || !formTopic) { setFormError("Select exam type, subject, and topic."); return; }
+    setFormSaving(true);
+    try {
+      let imageUrl = formImageUrl || undefined;
+      if (formImage && !formImageUrl) { imageUrl = await uploadQuestionImage(formImage); setFormImageUrl(imageUrl); }
+      const payload = {
+        examType: formExamType, subject: formSubject, topic: formTopic, year: Number(formYear),
+        question: formQuestion, options: { A: formOptions[0], B: formOptions[1], C: formOptions[2], D: formOptions[3] },
+        correctAnswer: formCorrect, explanation: formExplanation, ...(imageUrl ? { imageUrl } : {}),
+      };
+      if (editingId) await apiRequest(`/api/admin/study/question/${editingId}`, { method: "PUT", body: JSON.stringify(payload) });
+      else await apiRequest("/api/admin/study/question", { method: "POST", body: JSON.stringify(payload) });
+      setMsg(editingId ? "Study question updated." : "Study question added."); resetForm(); await loadQuestions();
+      setTimeout(() => setMsg(""), 3000);
+    } catch (err) { setFormError(err instanceof Error ? err.message : "Could not save question."); }
+    finally { setFormSaving(false); }
+  };
+
+  const startEdit = (q: StudyQuestion) => {
+    const opts = Array.isArray(q.options) ? q.options : [q.options.A,q.options.B,q.options.C,q.options.D];
+    setEditingId(q.id); setFormExamType(q.examType); setFormSubject(q.subject); setFormTopic(q.topic || ""); setFormYear(String(q.year || ""));
+    setFormQuestion(q.question || ""); setFormOptions([opts[0]||"",opts[1]||"",opts[2]||"",opts[3]||""]); setFormCorrect(q.correctAnswer || q.answer || "A");
+    setFormExplanation(q.explanation || ""); setFormImage(null); if (formImagePreview) URL.revokeObjectURL(formImagePreview); setFormImagePreview(q.imageUrl || ""); setFormImageUrl(q.imageUrl || ""); setFormImageError(""); setFormError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const deleteQuestion = async (id: number) => {
+    if (!confirm("Delete this study question?")) return;
+    try { await apiRequest(`/api/admin/study/question/${id}`, { method: "DELETE" }); setQuestions(qs => qs.filter(q => q.id !== id)); setMsg("Study question deleted."); setTimeout(()=>setMsg(""),2500); }
+    catch (e) { setError(e instanceof Error ? e.message : "Could not delete question."); }
+  };
+
+  const downloadTemplate = () => {
+    const header = "examType,subject,topic,year,question,optionA,optionB,optionC,optionD,correctAnswer,explanation,imageUrl\n";
+    const sample = 'JAMB,Mathematics,Algebra,2024,"Solve: 2x + 3 = 7",1,2,3,4,B,"2x=4 so x=2",""\n';
+    const blob = new Blob([header + sample], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "study-questions-template.csv"; a.click(); URL.revokeObjectURL(url);
+  };
+
+  const runImportPreview = async (file: File) => {
+    setImportStatus("Validating file..."); setImportSummary(null); setImportErrors([]); setImportPreview([]);
+    const fd = new FormData(); fd.append("file", file); fd.append("preview", "1");
+    try {
+      const res = await apiRequest<any>("/api/admin/study/import", { method: "POST", body: fd });
+      setImportPreview(asArray<any>(res?.previewRows)); setImportErrors(asArray<any>(res?.errors));
+      setImportStatus(res?.message || (res?.success ? "Ready to import." : "Fix errors before importing."));
+    } catch (e) { setImportStatus(e instanceof Error ? e.message : "Could not validate file."); }
+  };
+
+  const onImportFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = ""; if (!file) return;
+    const ext = file.name.toLowerCase().split(".").pop();
+    if (ext !== "csv" && ext !== "xlsx") { setImportStatus("Choose a .csv or .xlsx file."); return; }
+    setImportFile(file); await runImportPreview(file);
+  };
+
+  const confirmImport = async () => {
+    if (!importFile) return;
+    if (importErrors.length > 0) { setImportStatus("Resolve all validation errors before importing. No questions were imported."); return; }
+    if (!confirm(`Import ${importPreview.length} study question(s)?`)) return;
+    setImporting(true); setImportStatus("Importing...");
+    try {
+      const fd = new FormData(); fd.append("file", importFile);
+      const res = await apiRequest<any>("/api/admin/study/import", { method: "POST", body: fd });
+      setImportSummary({ imported: Number(res?.imported||0), failed: Number(res?.failed||0), message: res?.message });
+      setImportErrors(asArray<any>(res?.errors)); setImportPreview([]);
+      setImportStatus(res?.message || "Import complete."); if ((res?.imported||0)>0) await loadQuestions();
+      setImportFile(null);
+    } catch (e) { setImportStatus(e instanceof Error ? e.message : "Import failed."); }
+    finally { setImporting(false); }
+  };
+
+  const subjectOptions = meta.subjectsByExamType?.[formExamType] || [];
+  const topicOptions = meta.topicsBySubject?.[formSubject] || [];
+  const filterSubjects = filterExamType ? (meta.subjectsByExamType?.[filterExamType] || []) : Array.from(new Set(Object.values(meta.subjectsByExamType||{}).flat()));
+  const filterTopics = filterSubject ? (meta.topicsBySubject?.[filterSubject] || []) : Array.from(new Set(Object.values(meta.topicsBySubject||{}).flat()));
+  const years = Array.from({length: 20}, (_,i)=> String(new Date().getFullYear() - i));
+
+  return (
+    <section className="admin-students-view">
+      <div className="admin-view-heading"><div><p className="admin-eyebrow">SCHOOL WORKSPACE</p><h2>Study Management</h2><p>Manage study questions by exam type, subject, topic, and year.</p></div></div>
+      {msg && <div className="admin-toast success">{msg}</div>}
+      {error && <p className="admin-error" role="alert">{error}</p>}
+
+      <form onSubmit={saveQuestion} className="admin-form">
+        <h3 style={{color:'#fff', margin:0}}>{editingId ? "Edit Study Question" : "Add Study Question"}</h3>
+        <div className="admin-row">
+          <div className="admin-field"><label>Exam Type *</label><select value={formExamType} onChange={e=>setFormExamType(e.target.value)} required>{(meta.examTypes||["JAMB","WAEC","NECO","Post-UTME","CBT"]).map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+          <div className="admin-field"><label>Subject *</label><select value={formSubject} onChange={e=>setFormSubject(e.target.value)} required><option value="">-- Subject --</option>{subjectOptions.map(s=><option key={s} value={s}>{s}</option>)}</select></div>
+          <div className="admin-field"><label>Topic *</label><select value={formTopic} onChange={e=>setFormTopic(e.target.value)} required><option value="">-- Topic --</option>{topicOptions.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+          <div className="admin-field"><label>Year *</label><input type="number" value={formYear} onChange={e=>setFormYear(e.target.value)} min={1980} max={2100} required /></div>
+        </div>
+        <div className="admin-field"><label>Question *</label><textarea value={formQuestion} onChange={e=>setFormQuestion(e.target.value)} rows={4} required style={{background:'#1a1a1a', color:'#fff', border:'1px solid #333'}}/></div>
+        <div className="admin-field">
+          <label>Question image (optional)</label>
+          <div className="question-image-actions">
+            <button type="button" className="csv-template-btn" onClick={()=>imageInputRef.current?.click()} disabled={formSaving}><ImagePlus size={16}/> {formImagePreview?"Replace image":"Insert Image/Diagram"}</button>
+            <input ref={imageInputRef} className="question-image-input" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" onChange={onImageChange} />
+            {formImagePreview && <button type="button" className="question-image-remove" onClick={()=>{setFormImage(null); if(formImagePreview && formImagePreview.startsWith('blob:')) URL.revokeObjectURL(formImagePreview); setFormImagePreview(""); setFormImageUrl(""); setFormImageError("");}} disabled={formSaving}><Trash2 size={15}/> Remove</button>}
+          </div>
+          {formImageError && <p className="csv-error" role="alert">{formImageError}</p>}
+          {formImagePreview && <div className="question-image-preview"><img src={formImagePreview} alt="Question preview" /></div>}
+        </div>
+        <div className="admin-options-grid">
+          {["A","B","C","D"].map((o,i)=>(
+            <div key={o} className={`admin-field option-field ${formCorrect===o?'is-correct':''}`}><label>Option {o} *</label><input value={formOptions[i]} onChange={e=>{const n=[...formOptions]; n[i]=e.target.value; setFormOptions(n)}} required style={{background:'#1a1a1a', color:'#fff'}}/></div>
+          ))}
+        </div>
+        <div className="admin-row">
+          <div className="admin-field"><label>Correct Answer *</label><select value={formCorrect} onChange={e=>setFormCorrect(e.target.value)}><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
+          <div className="admin-field" style={{flex:2}}><label>Explanation (optional)</label><input value={formExplanation} onChange={e=>setFormExplanation(e.target.value)} placeholder="Optional explanation" style={{background:'#1a1a1a', color:'#fff'}}/></div>
+        </div>
+        {formError && <p className="admin-error" role="alert">{formError}</p>}
+        <div style={{display:'flex', gap:8}}>
+          <button className="admin-btn primary lg" disabled={formSaving} style={{flex:1}}>{formSaving ? "Saving..." : (editingId ? "Update Question" : "Add Study Question")}</button>
+          {editingId && <button type="button" className="admin-btn ghost" onClick={resetForm}>Cancel edit</button>}
+        </div>
+      </form>
+
+      <section className="csv-import-panel" aria-labelledby="study-import-title" style={{marginTop:20}}>
+        <div className="csv-import-heading">
+          <div><h3 id="study-import-title"><FileSpreadsheet size={18}/> Import Study Questions</h3><p>Upload CSV or Excel (.xlsx). Required columns: examType, subject, topic, year, question, optionA, optionB, optionC, optionD, correctAnswer, explanation (optional), imageUrl (optional). Invalid rows are reported and nothing is imported until fixed.</p></div>
+          <button type="button" className="csv-template-btn" onClick={downloadTemplate}><Download size={16}/> Download template</button>
+        </div>
+        <label className="csv-upload-btn"><Upload size={16}/> Choose CSV or Excel file<input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={onImportFile} disabled={importing} /></label>
+        {importFile && <span className="csv-file-name">{importFile.name}</span>}
+        {importStatus && <p className={importErrors.length ? "admin-error" : "csv-progress"} role={importErrors.length ? "alert" : undefined}>{importStatus}</p>}
+        {importErrors.length > 0 && <div className="csv-bulk-validation" role="alert"><strong>Validation errors (fix and re-upload)</strong><ul>{importErrors.slice(0,50).map((er,i)=><li key={i}>Row {er.row}{er.question ? ` — ${er.question}` : ""}: {er.error}</li>)}{importErrors.length>50 && <li>…and {importErrors.length-50} more</li>}</ul></div>}
+        {importPreview.length > 0 && <div className="csv-preview"><div className="csv-preview-summary"><span>{importPreview.length} valid question(s) previewed</span>{importErrors.length>0 && <span>{importErrors.length} error(s)</span>}</div>
+          <div className="csv-preview-table-wrap"><table className="csv-preview-table"><thead><tr><th>Row</th><th>Exam</th><th>Subject</th><th>Topic</th><th>Year</th><th>Question</th><th>Answer</th></tr></thead><tbody>{importPreview.slice(0,30).map((r,i)=><tr key={i}><td>{r.row}</td><td>{r.examType}</td><td>{r.subject}</td><td>{r.topic}</td><td>{r.year}</td><td className="csv-question-cell">{r.question}</td><td>{r.correctAnswer}</td></tr>)}</tbody></table></div>
+        </div>}
+        {importFile && <button type="button" className="admin-btn primary csv-import-btn" onClick={confirmImport} disabled={importing || importErrors.length > 0 || importPreview.length === 0}>{importing ? "Importing..." : "Confirm Import"}</button>}
+        {importSummary && <div className="admin-toast success" style={{marginTop:10}}>Import summary: {importSummary.imported} imported, {importSummary.failed} failed. {importSummary.message || ""}</div>}
+      </section>
+
+      <section className="admin-overview-card" style={{marginTop:20}}>
+        <div className="admin-section-heading"><div><h3>Study Questions</h3><p>View, search, filter, edit, and delete.</p></div><button onClick={()=>void loadQuestions()} disabled={loading}>Refresh</button></div>
+        <form className="admin-student-filters" onSubmit={e=>{e.preventDefault(); void loadQuestions();}} style={{marginTop:0}}>
+          <input aria-label="Search study questions" placeholder="Search question text" value={search} onChange={e=>setSearch(e.target.value)} />
+          <select value={filterExamType} onChange={e=>{setFilterExamType(e.target.value); setFilterSubject(""); setFilterTopic("");}}><option value="">All exam types</option>{(meta.examTypes||[]).map(t=><option key={t} value={t}>{t}</option>)}</select>
+          <select value={filterSubject} onChange={e=>{setFilterSubject(e.target.value); setFilterTopic("");}}><option value="">All subjects</option>{filterSubjects.map(s=><option key={s} value={s}>{s}</option>)}</select>
+          <select value={filterTopic} onChange={e=>setFilterTopic(e.target.value)}><option value="">All topics</option>{filterTopics.map(t=><option key={t} value={t}>{t}</option>)}</select>
+          <select value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="">All years</option>{years.map(y=><option key={y} value={y}>{y}</option>)}</select>
+          <button className="admin-btn primary" type="submit"><Search size={14}/> Search</button>
+        </form>
+        {loading ? <p className="admin-empty-note">Loading study questions...</p> : questions.length === 0 ? <p className="admin-empty-note">No study questions match these filters.</p> : (
+          <div className="csv-preview-table-wrap"><table className="csv-preview-table"><thead><tr><th>Exam</th><th>Subject</th><th>Topic</th><th>Year</th><th>Question</th><th>Answer</th><th>Actions</th></tr></thead><tbody>
+            {questions.map(q => {
+              const ans = q.correctAnswer || q.answer || "";
+              return (<tr key={q.id}>
+                <td>{q.examType}</td><td>{q.subject}</td><td>{q.topic || "—"}</td><td>{q.year}</td>
+                <td className="csv-question-cell">{q.question}{q.imageUrl ? <div style={{marginTop:6}}><img src={q.imageUrl} alt="" style={{maxHeight:80,maxWidth:160,objectFit:'contain',borderRadius:4}}/></div> : null}</td>
+                <td>{ans}</td>
+                <td><div style={{display:'flex',gap:6}}><button type="button" className="admin-btn sm" onClick={()=>startEdit(q)} aria-label="Edit"><Pencil size={14}/></button><button type="button" className="del-btn" onClick={()=>void deleteQuestion(q.id)} aria-label="Delete"><Trash2 size={14}/></button></div></td>
+              </tr>);
+            })}
+          </tbody></table></div>
+        )}
+      </section>
+    </section>
+  );
+}
+
 export default function AdminDashboard({ setActivePage }: { setActivePage: (p:string)=>void }) {
   const [authState, setAuthState] = useState<"checking" | "signedOut" | "denied" | "authenticated">("checking");
   const [email, setEmail] = useState("");
@@ -52,7 +317,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [questionsLoading, setQuestionsLoading] = useState(false);
   const [questionsError, setQuestionsError] = useState("");
 
-  const [adminView, setAdminView] = useState<"overview"|"students"|"exams">("overview");
+  const [adminView, setAdminView] = useState<"overview"|"students"|"exams"|"study">("overview");
   const [examTab, setExamTab] = useState<"exams"|"questions">("exams");
   const [exams, setExams] = useState<Exam[]>([]);
   const [allSubjects] = useState(defaultSubjects);
@@ -587,6 +852,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         <button className={adminView === "overview" ? "active" : ""} onClick={() => setAdminView("overview")}><LayoutDashboard size={16} /> Overview</button>
         <button className={adminView === "students" ? "active" : ""} onClick={() => setAdminView("students")}><UsersRound size={16} /> Students</button>
         <button className={adminView === "exams" ? "active" : ""} onClick={() => setAdminView("exams")}><BookOpen size={16} /> Exams</button>
+        <button className={adminView === "study" ? "active" : ""} onClick={() => setAdminView("study")}><GraduationCap size={16} /> Study Management</button>
       </nav>
 
       {msg && <div className="admin-toast success">{msg}</div>}
@@ -621,7 +887,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
             {performanceLoading ? <p className="admin-empty-note">Loading performance...</p> : performanceError ? <p className="admin-error" role="alert">{performanceError}</p> : <><article className="admin-metric-card"><span>Completed attempts</span><strong>{studentPerformance?.completedAttempts ?? "—"}</strong></article><div className="admin-overview-columns"><section className="admin-overview-card"><h3>Score history</h3>{asArray<any>(studentPerformance?.scoreHistory).length ? asArray<any>(studentPerformance?.scoreHistory).map((item,index)=><p key={String(item?.id ?? index)}>{item?.date ?? item?.completedAt ?? ""} {item?.score == null ? "—" : item.score}{item?.total == null ? "" : ` / ${item.total}`}</p>) : <p className="admin-empty-note">No score history yet.</p>}</section><section className="admin-overview-card"><h3>Results by subject</h3>{asArray<any>(studentPerformance?.resultsBySubject).length ? asArray<any>(studentPerformance?.resultsBySubject).map((item,index)=><p key={String(item?.subject ?? index)}>{item?.subject ?? "Subject"}: {item?.averageScore ?? item?.score ?? "—"}</p>) : <p className="admin-empty-note">No subject results yet.</p>}</section></div></>}
           </section>}
         </section>
-      ) : (
+      ) : adminView === "exams" ? (
         <>
         <div className="admin-view-heading admin-exams-heading"><div><p className="admin-eyebrow">SCHOOL WORKSPACE</p><h2>Exams</h2><p>Create exams, manage subjects, and add questions.</p></div></div>
         <div className="admin-tabs">
@@ -716,7 +982,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         <section className="admin-overview-card" aria-live="polite">
           <div className="admin-section-heading"><div><h3>Questions</h3><p>{selectedSubject || "Select a subject in the form below"}</p></div></div>
           {questionsError && <p className="admin-error" role="alert">{questionsError}</p>}
-          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><strong>{item?.question || "Question text unavailable"}</strong>{(item?.imageUrl || item?.image_url) && <QuestionImage key={item.imageUrl || item.image_url} className="admin-question-image" imageUrl={item.imageUrl || item.image_url} /> }<small>{item?.subject || selectedSubject}</small></article>)}</div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
+          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><strong>{item?.question || "Question text unavailable"}</strong>{(item?.imageUrl || item?.image_url) && <QuestionImage key={item.imageUrl || item.image_url} className="admin-question-image" imageUrl={item.imageUrl || item.image_url} /> }<small>{item?.subject || selectedSubject}{item?.topic ? ` • ${item.topic}` : ""}</small></article>)}</div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
         </section>
 
         <section className="csv-import-panel" aria-labelledby="csv-import-title">
@@ -904,6 +1170,8 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         </>
       )}
         </>
+      ) : (
+        <StudyManagementSection />
       )}
     </div></div>
   );

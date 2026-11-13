@@ -9,3 +9,4 @@ psycopg2-binary==2.9.9
 Pillow==13.0.0
 cloudinary>=1.36,<2
 python-dotenv>=1.0.0
+openpyxl>=3.1.2
