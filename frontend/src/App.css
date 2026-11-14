@@ -822,3 +822,235 @@ body {
 [data-theme="light"] .home-header .home-title { color: #fff !important; }
 [data-theme="light"] .home-header .home-subtitle { color: #e5e5e5 !important; }
 [data-theme="light"] .home-header .hero-btn { background: #fff !important; color: #1d4be3 !important; }
+/* === Light mode refinements: blue + white branding, component-specific fixes === */
+
+/* Study Cards */
+[data-theme="light"] .study-page .subject-card1,
+[data-theme="light"] .study-page .study-subject-button,
+[data-theme="light"] .study-page .topic-card,
+[data-theme="light"] .study-page .study-mode-card {
+  background: #FFFFFF !important;
+  border-color: #E6EEFA !important;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.06) !important;
+}
+[data-theme="light"] .study-page .subject-card1:hover,
+[data-theme="light"] .study-page .study-subject-button:hover,
+[data-theme="light"] .study-page .topic-card:hover,
+[data-theme="light"] .study-page .study-mode-card:hover:not(:disabled) {
+  border-color: #1d4be3 !important;
+  background: #F8FAFF !important;
+}
+[data-theme="light"] .study-page .subject-name,
+[data-theme="light"] .study-page .topic-title,
+[data-theme="light"] .study-page .study-mode-title,
+[data-theme="light"] .study-page .study-header h1 { color: #0F172A !important; }
+[data-theme="light"] .study-page .subject-meta,
+[data-theme="light"] .study-page .topic-meta,
+[data-theme="light"] .study-page .study-mode-desc,
+[data-theme="light"] .study-page .study-header p { color: #475569 !important; }
+[data-theme="light"] .study-page .subject-action { background: #EEF4FF !important; color: #1d4be3 !important; border: 1px solid #E6EEFA !important; }
+[data-theme="light"] .study-page .study-mode-icon { background: #EAF1FF !important; color: #1d4be3 !important; }
+[data-theme="light"] .study-page .topic-dot { box-shadow: 0 0 0 3px #EAF1FF; }
+
+/* Home Page Navbar */
+[data-theme="light"] .navbar {
+  background: #FFFFFF !important;
+  border-bottom: 1px solid #E6EEFA !important;
+  color: #0F172A !important;
+}
+[data-theme="light"] .navbar .span,
+[data-theme="light"] .navbar-user-name { color: #0F172A !important; }
+[data-theme="light"] .navbar-user-email { color: #475569 !important; }
+[data-theme="light"] .nav-link { color: #475569 !important; }
+[data-theme="light"] .nav-link:hover { color: #0F172A !important; background: #EEF4FF !important; }
+[data-theme="light"] .nav-link.active { color: #1d4be3 !important; background: #EAF1FF !important; }
+[data-theme="light"] .hamburger,
+[data-theme="light"] .navbar-user { background: #F1F5FF !important; border-color: #E6EEFA !important; color: #0F172A !important; }
+[data-theme="light"] .bell-btn { background: #F1F5FF !important; border-color: #E6EEFA !important; color: #0F172A !important; }
+[data-theme="light"] .bell-btn:hover { background: #EAF1FF !important; color: #1d4be3 !important; }
+[data-theme="light"] .desktop-search-wrapper { background: #F8FAFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .desktop-search-wrapper:focus-within { border-color: #1d4be3 !important; background: #FFFFFF !important; }
+[data-theme="light"] .desktop-search-wrapper input { color: #0F172A !important; }
+[data-theme="light"] .desktop-search-wrapper input::placeholder { color: #64748B !important; }
+[data-theme="light"] .sidebar { background: #FFFFFF !important; border-right-color: #E6EEFA !important; }
+[data-theme="light"] .sidebar-link { color: #475569 !important; }
+[data-theme="light"] .sidebar-link:hover { background: #EEF4FF !important; color: #0F172A !important; }
+[data-theme="light"] .sidebar-link.active { background: #EAF1FF !important; color: #1d4be3 !important; box-shadow: inset 3px 0 #1d4be3 !important; }
+[data-theme="light"] .sidebar-footer { color: #64748B !important; border-top-color: #E6EEFA !important; }
+[data-theme="light"] .sidebar-divider { background: #E6EEFA !important; }
+[data-theme="light"] .bottom-nav { background: #FFFFFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .nav-item { color: #64748B !important; }
+[data-theme="light"] .nav-item:hover { background: #EEF4FF !important; color: #0F172A !important; }
+[data-theme="light"] .nav-item.active { background: #EAF1FF !important; color: #1d4be3 !important; }
+
+/* Quick Practice section */
+[data-theme="light"] .home-extra-section,
+[data-theme="light"] .quick-practice-card,
+[data-theme="light"] .upcoming-exam-card {
+  background: #FFFFFF !important;
+  border-color: #E6EEFA !important;
+}
+[data-theme="light"] .quick-practice-card { background: #FFFFFF !important; }
+[data-theme="light"] .quick-practice-card:hover,
+[data-theme="light"] .upcoming-exam-card:hover { background: #F8FAFF !important; border-color: #C7D8F8 !important; }
+[data-theme="light"] .home-extra-title h3,
+[data-theme="light"] .quick-practice-card-copy strong,
+[data-theme="light"] .upcoming-exam-copy strong { color: #0F172A !important; }
+[data-theme="light"] .home-extra-title p,
+[data-theme="light"] .quick-practice-card-copy span,
+[data-theme="light"] .upcoming-exam-copy span { color: #475569 !important; }
+[data-theme="light"] .home-extra-icon.practice { background: #EAF1FF !important; color: #1d4be3 !important; }
+[data-theme="light"] .home-extra-icon.upcoming { background: #ECFDF5 !important; color: #16A34A !important; }
+[data-theme="light"] .quick-practice-card-icon { background: #EAF1FF !important; color: #1d4be3 !important; }
+[data-theme="light"] .quick-practice-arrow { color: #64748B !important; }
+[data-theme="light"] .home-extra-link { color: #1d4be3 !important; }
+[data-theme="light"] .home-extra-empty { background: #F8FAFF !important; border-color: #D6E2F5 !important; color: #475569 !important; }
+[data-theme="light"] .upcoming-exam-date { background: #ECFDF5 !important; color: #15803D !important; }
+
+/* Upcoming Examinations status accents (keep green/orange/red where used) */
+[data-theme="light"] .status-badge.passed { background: #ECFDF5 !important; color: #15803D !important; border-color: #BBF7D0 !important; }
+[data-theme="light"] .status-badge.failed { background: #FEF2F2 !important; color: #DC2626 !important; border-color: #FECACA !important; }
+
+/* JAMB Subjects Selection page */
+[data-theme="light"] .exams-page1 { background: #F8FAFF !important; }
+[data-theme="light"] .exams-topbar { background: #FFFFFF !important; border-bottom-color: #E6EEFA !important; }
+[data-theme="light"] .topbar-main h1 { color: #0F172A !important; }
+[data-theme="light"] .topbar-main p { color: #475569 !important; }
+[data-theme="light"] .count-badge { background: #EAF1FF !important; color: #1d4be3 !important; border-color: #C7D8F8 !important; }
+[data-theme="light"] .back-btn1 { background: #F1F5FF !important; color: #0F172A !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .subject-card { background: #FFFFFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .subject-card:hover { border-color: #C7D8F8 !important; background: #F8FAFF !important; }
+[data-theme="light"] .subject-card.selected { background: #EEF4FF !important; border-color: #1d4be3 !important; box-shadow: 0 0 0 1px #1d4be3 inset !important; }
+[data-theme="light"] .subject-name { color: #0F172A !important; }
+[data-theme="light"] .subject-meta { color: #475569 !important; }
+[data-theme="light"] .checkbox { border-color: #CBD5E1 !important; background: #FFFFFF !important; }
+[data-theme="light"] .subject-card.selected .checkbox { background: #1d4be3 !important; border-color: #1d4be3 !important; color: #fff !important; }
+[data-theme="light"] .required-badge { background: #FEF2F2 !important; color: #DC2626 !important; }
+[data-theme="light"] .selected-summary span { color: #475569 !important; }
+[data-theme="light"] .selected-summary b { color: #0F172A !important; }
+[data-theme="light"] .alert-card { background: #EFF6FF !important; border-color: #BFDBFE !important; }
+[data-theme="light"] .alert-text { color: #1D4ED8 !important; }
+
+/* CONTINUE TO INSTRUCTIONS button */
+[data-theme="light"] .btn-continue,
+[data-theme="light"] .continue-btn {
+  background: #1d4be3 !important;
+  color: #FFFFFF !important;
+  border: none !important;
+}
+[data-theme="light"] .btn-continue:hover,
+[data-theme="light"] .continue-btn:hover { filter: brightness(1.05); }
+[data-theme="light"] .btn-continue:disabled,
+[data-theme="light"] .continue-btn:disabled {
+  background: #CBD5E1 !important;
+  color: #64748B !important;
+  cursor: not-allowed !important;
+}
+
+/* History Page */
+[data-theme="light"] .history-section,
+[data-theme="light"] .history-page { background: #F8FAFF !important; }
+[data-theme="light"] .history-header h1,
+[data-theme="light"] .card-title-wrap h3,
+[data-theme="light"] .summary-card h3,
+[data-theme="light"] .stat-value,
+[data-theme="light"] .history-left h3,
+[data-theme="light"] .score { color: #0F172A !important; }
+[data-theme="light"] .history-header p,
+[data-theme="light"] .card-meta,
+[data-theme="light"] .summary-card span,
+[data-theme="light"] .stat-label,
+[data-theme="light"] .history-left p { color: #475569 !important; }
+[data-theme="light"] .history-card,
+[data-theme="light"] .summary-card { background: #FFFFFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .filter-tab { background: #FFFFFF !important; border-color: #E6EEFA !important; color: #475569 !important; }
+[data-theme="light"] .filter-tab.active { background: #1d4be3 !important; color: #FFFFFF !important; border-color: #1d4be3 !important; }
+[data-theme="light"] .retake-btn { background: #1d4be3 !important; color: #FFFFFF !important; }
+[data-theme="light"] .delete-btn { background: #F1F5FF !important; border-color: #E6EEFA !important; color: #475569 !important; }
+[data-theme="light"] .stat-item { background: #F8FAFF !important; border: 1px solid #E6EEFA; }
+[data-theme="light"] .progress-bar { background: #E6EEFA !important; }
+[data-theme="light"] .mode-tag { background: #EAF1FF !important; color: #1d4be3 !important; }
+
+/* Test Instructions page */
+[data-theme="light"] .instruction-page { background: #F8FAFF !important; }
+[data-theme="light"] .instruction-header h1 { color: #0F172A !important; }
+[data-theme="light"] .instruction-header p { color: #475569 !important; }
+[data-theme="light"] .info-card, [data-theme="light"] .instruction-card, [data-theme="light"] .agree-card { background: #FFFFFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .info-card h3, [data-theme="light"] .instruction-card h3 { color: #1d4be3 !important; }
+[data-theme="light"] .info-item { background: #F8FAFF !important; border: 1px solid #E6EEFA; }
+[data-theme="light"] .info-item span { color: #64748B !important; }
+[data-theme="light"] .info-item strong { color: #0F172A !important; }
+[data-theme="light"] .info-item strong.highlight { color: #1d4be3 !important; }
+[data-theme="light"] .instruction-card li { color: #334155 !important; }
+[data-theme="light"] .instruction-card li b { color: #0F172A !important; }
+[data-theme="light"] .icon-b { background: #EAF1FF !important; color: #1d4be3 !important; }
+[data-theme="light"] .warning-card { background: #FFFBEB !important; border-color: #FED7AA !important; }
+[data-theme="light"] .warning-card h4 { color: #C2410C !important; }
+[data-theme="light"] .warning-card p { color: #7C2D12 !important; }
+[data-theme="light"] .warning-icon { background: #FFEDD5 !important; color: #EA580C !important; }
+[data-theme="light"] .agree-label { color: #334155 !important; }
+[data-theme="light"] .custom-check { border-color: #CBD5E1 !important; background: #FFFFFF !important; }
+[data-theme="light"] .agree-label input:checked + .custom-check { background: #1d4be3 !important; border-color: #1d4be3 !important; }
+[data-theme="light"] .start-test-btn:not(:disabled) { background: #1d4be3 !important; color: #FFFFFF !important; }
+[data-theme="light"] .hint { color: #64748B !important; }
+[data-theme="light"] .back-circle { background: #F1F5FF !important; border-color: #E6EEFA !important; color: #0F172A !important; }
+
+/* Exam/Test Page */
+[data-theme="light"] .test-page1 { background: #F8FAFF !important; color: #0F172A !important; }
+[data-theme="light"] .test-header { background: #FFFFFF !important; border-bottom-color: #E6EEFA !important; }
+[data-theme="light"] .question-card { background: #FFFFFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .question-text { color: #0F172A !important; }
+[data-theme="light"] .option-btn { background: #FFFFFF !important; border-color: #E6EEFA !important; color: #0F172A !important; }
+[data-theme="light"] .option-btn:hover { border-color: #93C5FD !important; background: #F8FAFF !important; }
+[data-theme="light"] .option-btn.selected { background: #EEF4FF !important; border-color: #1d4be3 !important; color: #0F172A !important; }
+[data-theme="light"] .option-label { background: #F1F5FF !important; color: #475569 !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .option-btn.selected .option-label { background: #1d4be3 !important; color: #FFFFFF !important; }
+[data-theme="light"] .exit-btn, [data-theme="light"] .test-timer, [data-theme="light"] .nav-btn, [data-theme="light"] .grid-btn { background: #F1F5FF !important; color: #0F172A !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .nav-btn.primary { background: #1d4be3 !important; color: #FFFFFF !important; border-color: #1d4be3 !important; }
+[data-theme="light"] .submit-btn { background: #16A34A !important; color: #FFFFFF !important; }
+[data-theme="light"] .account { background: #FFFFFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .test-subject { color: #0F172A !important; }
+[data-theme="light"] .test-q-count { color: #475569 !important; }
+[data-theme="light"] .grid-modal, [data-theme="light"] .calc-modal { background: #FFFFFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .grid-modal h3, [data-theme="light"] .calc-header { color: #0F172A !important; }
+[data-theme="light"] .grid-item { background: #F1F5FF !important; border-color: #E6EEFA !important; color: #0F172A !important; }
+[data-theme="light"] .grid-item.answered { background: #EAF1FF !important; border-color: #1d4be3 !important; color: #1d4be3 !important; }
+[data-theme="light"] .grid-item.active { background: #1d4be3 !important; color: #FFFFFF !important; border-color: #1d4be3 !important; }
+[data-theme="light"] .calc-display { background: #F8FAFF !important; color: #0F172A !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .calc-key { background: #F1F5FF !important; color: #0F172A !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .calc-key.equals { background: #1d4be3 !important; color: #FFFFFF !important; border-color: #1d4be3 !important; }
+
+/* General containers and cards use white in light mode */
+[data-theme="light"] .home-container,
+[data-theme="light"] .exams-container,
+[data-theme="light"] .study-page,
+[data-theme="light"] .history-section,
+[data-theme="light"] .account-page,
+[data-theme="light"] .config-page,
+[data-theme="light"] .instruction-page,
+[data-theme="light"] .general-container { background: #F8FAFF !important; }
+[data-theme="light"] .stats-card,
+[data-theme="light"] .exam-card1,
+[data-theme="light"] .exam-card { background: #FFFFFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .stats-card h2,
+[data-theme="light"] .exam-info h4,
+[data-theme="light"] .section-header h3 { color: #0F172A !important; }
+[data-theme="light"] .stats-card span,
+[data-theme="light"] .exam-info p,
+[data-theme="light"] .home-subtitle { color: #475569 !important; }
+[data-theme="light"] .exam-icon-wrap1,
+[data-theme="light"] .exam-icon-wrap { background: #EAF1FF !important; color: #1d4be3 !important; }
+[data-theme="light"] .exam-type-card { background: #FFFFFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .exam-type-card:hover { background: #F8FAFF !important; }
+[data-theme="light"] .search-wrapper { background: #FFFFFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .search-wrapper:focus-within { border-color: #1d4be3 !important; }
+[data-theme="light"] .hero-input-box, [data-theme="light"] .input-box { color: #0F172A !important; }
+[data-theme="light"] .clear-btn, [data-theme="light"] .clear-search-btn, [data-theme="light"] .funnel-icon { background: #F1F5FF !important; color: #475569 !important; }
+[data-theme="light"] .section-header p { color: #1d4be3 !important; }
+
+/* Keep exam hero text readable on images */
+[data-theme="light"] .home-header .home-title { color: #FFFFFF !important; }
+[data-theme="light"] .home-header .home-subtitle { color: #E5E7EB !important; }
+[data-theme="light"] .home-header .hero-btn { background: #FFFFFF !important; color: #1d4be3 !important; }
+[data-theme="light"] .exam-header .exam-title { color: #FFFFFF !important; }
+[data-theme="light"] .exam-header .exam-subtitle { color: #E5E7EB !important; }
