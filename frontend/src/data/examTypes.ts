@@ -1,7 +1,7 @@
 // The five examination bodies shown on the Home page. Each one lists the
 // subjects a student can pick from; picking a subject opens the existing
 // Configure Test page with that exam type + subject already selected.
-export type ExamTypeKey = 'JAMB' | 'POST-UTME' | 'WAEC' | 'NECO' | 'BECE'
+export type ExamTypeKey = 'JAMB' | 'POST-UTME' | 'WAEC' | 'NECO' | 'CBT'
 
 export type ExamTypeInfo = {
   key: ExamTypeKey
@@ -63,10 +63,10 @@ export const examTypes: ExamTypeInfo[] = [
     accentSoft: '#ffedd5',
   },
   {
-    key: 'BECE',
-    label: 'BECE',
-    fullName: 'Basic Education Certificate Examination',
-    description: 'Junior secondary practice for the BECE.',
+    key: 'CBT',
+    label: 'CBT',
+    fullName: 'Computer-Based Test',
+    description: 'Computer-based practice across core subjects.',
     subjects: ['English Language', 'Mathematics', 'Basic Science', 'Social Studies', 'Business Studies', 'CRS', 'Agricultural Science'],
     questionsPerSubject: 30,
     duration: 45,
@@ -75,5 +75,13 @@ export const examTypes: ExamTypeInfo[] = [
   },
 ]
 
-export const getExamType = (key: string): ExamTypeInfo | undefined =>
-  examTypes.find(exam => exam.key.toLowerCase() === String(key || '').toLowerCase())
+export const getExamType = (key: string): ExamTypeInfo | undefined => {
+  const k = String(key || '').toLowerCase()
+  return examTypes.find(exam => {
+    const ek = exam.key.toLowerCase()
+    if (ek === k) return true
+    // Backward compatibility: existing BECE records map to CBT card.
+    if ((ek === 'cbt' && k === 'bece') || (ek === 'bece' && k === 'cbt')) return true
+    return false
+  })
+}

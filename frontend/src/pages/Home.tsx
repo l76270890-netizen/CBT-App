@@ -124,14 +124,60 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
     }).sort((a, b) => a.scheduledDate.getTime() - b.scheduledDate.getTime())
   }, [examsFromDb, upcomingFromEndpoint])
 
+  const examTypeMatches = (dbType: string, key: string) => {
+    const a = String(dbType || '').toLowerCase()
+    const b = String(key || '').toLowerCase()
+    return a === b || (a === 'bece' && b === 'cbt') || (a === 'cbt' && b === 'bece')
+  }
+
+  const [subjectCounts, setSubjectCounts] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    const resolveCounts = async () => {
+      const entries = await Promise.all(examTypes.map(async (exam) => {
+        const dbExam = examsFromDb.find(e => examTypeMatches(e.examType, exam.key))
+        if (dbExam?.id) {
+          try {
+            const avail = await apiRequest<any>(`/api/exams/${dbExam.id}/availability`)
+            const availability = (avail?.availability && typeof avail.availability === 'object') ? avail.availability : {}
+            const names = Array.isArray(avail?.subjects) && avail.subjects.length ? avail.subjects : (dbExam.subjects || [])
+            const unique = new Set<string>(names.filter((s: any) => typeof s === 'string' && s.trim()))
+            // count subjects that are actually selectable/available (have questions or are configured in availability)
+            const selectable = unique.size ? Array.from(unique).filter((name) => {
+              const byYear = availability[name]
+              if (!byYear || typeof byYear !== 'object') return true
+              // if availability known for subject, treat as selectable if present (even 0 shown in picker context) — but better count subjects with any questions
+              const total = Object.values(byYear).reduce((sum: number, c: any) => sum + (Number(c) || 0), 0)
+              return total > 0 || Object.keys(byYear).length >= 0
+            }).length : 0
+            // Prefer unique subjects returned by availability/exam (matches Subjects page list). If none, fall back to exam.subjects unique.
+            const count = unique.size || new Set((dbExam.subjects || []).filter(Boolean)).size
+            return [exam.key, count] as const
+          } catch {
+            const count = new Set((dbExam.subjects || []).filter(Boolean)).size
+            return [exam.key, count] as const
+          }
+        }
+        const fallback = new Set((dbExam?.subjects || exam.subjects || []).filter(Boolean)).size
+        return [exam.key, fallback] as const
+      }))
+      if (!cancelled) {
+        const next: Record<string, number> = {}
+        for (const [k, v] of entries) next[k] = v
+        setSubjectCounts(next)
+      }
+    }
+    void resolveCounts()
+    return () => { cancelled = true }
+  }, [examsFromDb])
+
   // Clicking one of the five exam cards opens that exam type's subjects.
   // The subject picker then hands over to the existing Configure Test page.
   // If the admin has imported this exam type on the backend, its exam ID is
   // passed along so the imported questions are used (same as the Exams page).
   const openExamType = (examKey: string) => {
-    const dbExam = examsFromDb.find(
-      exam => exam.examType.toLowerCase() === examKey.toLowerCase()
-    )
+    const dbExam = examsFromDb.find(exam => examTypeMatches(exam.examType, examKey))
     setSelectedExam(dbExam ? dbExam.examType : examKey)
     setTestConfig((prev: any) => ({
       ...prev,
@@ -230,7 +276,7 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
             <div className="exam-info">
               <h4>{exam.label}</h4>
               <p>{exam.fullName}</p>
-              <p className="exam-meta">{exam.subjects.length} subjects available</p>
+              <p className="exam-meta">{(subjectCounts[exam.key] ?? exam.subjects.length)} subjects available</p>
             </div>
             <span className="exam-type-chevron"><ChevronRightIcon size={20} className="chevron" /></span>
           </div>

@@ -384,7 +384,7 @@ body {
   flex-shrink: 0;
 }
 
-/* ---- Exam type cards (JAMB, WAEC, NECO, BECE, Post-UTME) ---- */
+/* ---- Exam type cards (JAMB, WAEC, NECO, CBT, Post-UTME) ---- */
 .exam-type-grid {
   display: grid;
   grid-template-columns: 1fr;
