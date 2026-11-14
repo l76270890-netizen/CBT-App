@@ -1783,6 +1783,7 @@ def get_exams():
 def get_questions():
     exam_id = request.args.get("examId", type=int)
     subject = (request.args.get("subject") or "").strip()
+    year = request.args.get("year", type=int)
 
     if not exam_id or not subject:
         return api_error("Both examId and subject are required.")
@@ -1802,16 +1803,14 @@ def get_questions():
             "subject_not_found"
         )
 
-    questions = (
-        Question.query
-        .filter_by(
-            examId=exam.id,
-            school_id=g.current_user.school_id,
-            subject=subject
-        )
-        .order_by(Question.id)
-        .all()
+    query = Question.query.filter_by(
+        examId=exam.id,
+        school_id=g.current_user.school_id,
+        subject=subject
     )
+    if year is not None:
+        query = query.filter(Question.year == year)
+    questions = query.order_by(Question.id).all()
 
     is_admin = g.current_user.role in ADMIN_ROLES
     result = []
@@ -1837,6 +1836,41 @@ def get_questions():
         result.append(item)
 
     return jsonify(result)
+
+
+@app.route("/api/exams/<int:exam_id>/availability", methods=["GET"])
+@require_auth
+def exam_question_availability(exam_id):
+    exam = Exam.query.filter_by(
+        id=exam_id,
+        school_id=g.current_user.school_id
+    ).first()
+    if not exam:
+        return api_error("Exam not found.", 404, "exam_not_found")
+
+    exam_subjects = subjects_for_exam(exam)
+    counts = db.session.query(
+        Question.subject,
+        Question.year,
+        func.count(Question.id)
+    ).filter(
+        Question.examId == exam.id,
+        Question.school_id == g.current_user.school_id,
+    ).group_by(Question.subject, Question.year).all()
+
+    availability = {subject: {} for subject in exam_subjects}
+    for subject, year, count in counts:
+        if subject not in availability:
+            availability[subject] = {}
+        if year is not None:
+            availability[subject][str(year)] = int(count)
+
+    return jsonify({
+        "examId": exam.id,
+        "examType": exam.examType,
+        "subjects": exam_subjects,
+        "availability": availability,
+    })
 
 
 def validate_exam_payload(data):

@@ -62,6 +62,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
           for (const sub of subjectsList) {
             try {
               const query = new URLSearchParams({ examId: String(examId), subject: sub })
+              if (testConfig.year && testConfig.year !== 'All Years' && testConfig.year !== 'All') query.set('year', String(testConfig.year))
               const res = await fetch(`${API_URL}/api/questions?${query}`, { credentials: 'include' })
               if (res.ok) {
                 const payload = await res.json()
@@ -90,7 +91,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
           }
 
           fetched = allFetched
-          console.log(`✅ Backend collected: ${fetched.length} Qs from [${subjectsList.join(', ')}]`)
+          console.log(`Backend collected: ${fetched.length} Qs from [${subjectsList.join(', ')}]`)
         } catch (e) { console.log("API failed to load imported questions", e) }
       }
 

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { ArrowLeft, Clock, Timer, BookCheck, GraduationCap, Check } from 'lucide-react'
 import type { TestConfigType } from '../types'
 import './TestConfig.css'
@@ -7,57 +7,160 @@ type Props = {
   setActivePage: (page: string) => void
   testConfig: TestConfigType
   setTestConfig: (config: TestConfigType) => void
-  selectedExam?: any // <-- ADDED THIS
+  selectedExam?: any
 }
+
+type SubjectLike = { subject?: string; name?: string; questions?: number; years?: string; required?: boolean; questionsByYear?: Record<string, number> } | string
+
+const subjectName = (s: SubjectLike) => (typeof s === 'string' ? s : s?.subject || s?.name || '')
+const hasYearAvailability = (subjects: SubjectLike[]) =>
+  subjects.some(s => typeof s === 'object' && s?.questionsByYear && Object.keys(s.questionsByYear).length > 0)
 
 export default function TestConfig({ setActivePage, testConfig, setTestConfig, selectedExam }: Props) {
   const [mode, setMode] = useState<'exam' | 'practice'>(testConfig.mode)
-  const [duration, setDuration] = useState(testConfig.duration || Math.ceil(testConfig.totalQuestions * 1.2))
-  const [year, setYear] = useState(testConfig.year)
-  const [difficulty, setDifficulty] = useState(testConfig.difficulty)
-  const [topic, setTopic] = useState(testConfig.topic)
+  const [difficulty, setDifficulty] = useState(testConfig.difficulty || 'General')
+  const [topic, setTopic] = useState(testConfig.topic || 'All Topics')
+  const [year, setYear] = useState<string>(testConfig.year || '')
+  const [duration, setDuration] = useState<number>(testConfig.duration || 60)
+  const yearAdjustedRef = useRef<string>('')
 
-  const years = Array.from({ length: 16 }, (_, i) => `${2025 - i}`)
+  const allSubjects = (testConfig.subjects || []) as SubjectLike[]
+  const availabilityKnown = hasYearAvailability(allSubjects)
+
+  const availableYears = useMemo(() => {
+    if (!availabilityKnown) return Array.from({ length: 16 }, (_, i) => `${2025 - i}`)
+    const set = new Set<string>()
+    for (const s of allSubjects) {
+      if (typeof s !== 'object' || !s?.questionsByYear) continue
+      for (const [y, c] of Object.entries(s.questionsByYear)) {
+        if (Number(c) > 0) set.add(String(y))
+      }
+    }
+    return Array.from(set).sort((a, b) => Number(b) - Number(a))
+  }, [allSubjects, availabilityKnown])
+
+  const effectiveYear = availableYears.length ? (availableYears.includes(year) ? year : availableYears[0]) : year
+
+  const subjectsForYear = useMemo(() => {
+    if (!availabilityKnown) {
+      return allSubjects.map(s => {
+        const name = subjectName(s)
+        const base = typeof s === 'object' && s ? s : {}
+        return {
+          subject: name,
+          questions: Number((base as any).questions) || 0,
+          years: String((base as any).years || effectiveYear || '2024'),
+          required: !!(base as any).required || name.toLowerCase().includes('english'),
+          questionsByYear: (base as any).questionsByYear || {},
+        }
+      }).filter(s => s.subject)
+    }
+    return allSubjects.map(s => {
+      const name = subjectName(s)
+      const base = typeof s === 'object' && s ? s : {}
+      const qby = (base as any).questionsByYear || {}
+      const count = Number(qby[effectiveYear] || 0)
+      return {
+        subject: name,
+        questions: count,
+        years: effectiveYear,
+        required: !!(base as any).required || name.toLowerCase().includes('english'),
+        questionsByYear: qby,
+      }
+    }).filter(s => s.subject && s.questions > 0)
+  }, [allSubjects, effectiveYear, availabilityKnown])
+
+  const totalQuestions = subjectsForYear.reduce((sum, s) => sum + (s.questions || 0), 0)
+  const recommendedDuration = Math.max(1, Math.ceil((totalQuestions || 0) * 1.2) || 60)
+
+  useEffect(() => {
+    if (effectiveYear !== year) setYear(effectiveYear)
+  }, [effectiveYear, year])
+
+  // When year (availability context) changes, auto-adjust duration to fit available questions.
+  useEffect(() => {
+    if (!availabilityKnown) return
+    if (yearAdjustedRef.current === effectiveYear) return
+    yearAdjustedRef.current = effectiveYear
+    if (totalQuestions > 0) setDuration(recommendedDuration)
+  }, [effectiveYear, availabilityKnown, totalQuestions, recommendedDuration])
+
+  // Keep config in sync so downstream steps (instructions/test) use year-filtered subjects/counts.
+  useEffect(() => {
+    const nextYear = effectiveYear || year
+    const subjectsChanged =
+      subjectsForYear.length !== (testConfig.subjects || []).length ||
+      subjectsForYear.some((s, i) => subjectName((testConfig.subjects || [])[i] as any) !== s.subject || Number(((testConfig.subjects || [])[i] as any)?.questions) !== s.questions)
+    const shouldUpdate =
+      subjectsChanged ||
+      testConfig.year !== nextYear ||
+      testConfig.totalQuestions !== totalQuestions ||
+      testConfig.duration !== duration ||
+      testConfig.mode !== mode ||
+      testConfig.difficulty !== difficulty ||
+      testConfig.topic !== topic ||
+      testConfig.showAnswers !== (mode === 'practice')
+    if (!shouldUpdate) return
+    setTestConfig({
+      ...testConfig,
+      subjects: subjectsForYear,
+      year: nextYear,
+      totalQuestions,
+      duration,
+      mode,
+      difficulty,
+      topic,
+      showAnswers: mode === 'practice',
+      examId: selectedExam?.id || testConfig.examId || testConfig.customExamId || '',
+      examTitle: selectedExam?.title || testConfig.examTitle || testConfig.customTitle || '',
+    })
+  }, [subjectsForYear, effectiveYear, totalQuestions, duration, mode, difficulty, topic, selectedExam, year])
 
   const timePerQuestion = useMemo(() => {
-    if (!testConfig.totalQuestions) return 0
-    return (duration * 60 / testConfig.totalQuestions).toFixed(0)
-  }, [duration, testConfig.totalQuestions])
+    if (!totalQuestions) return 0
+    return (duration * 60 / totalQuestions).toFixed(0)
+  }, [duration, totalQuestions])
+
+  const handleYearChange = (nextYear: string) => {
+    yearAdjustedRef.current = ''
+    setYear(nextYear)
+  }
 
   const handleContinue = () => {
+    if (!subjectsForYear.length || totalQuestions <= 0) return
     const finalConfig: TestConfigType = {
       ...testConfig,
       mode,
       duration,
-      year,
+      year: effectiveYear || year,
       difficulty,
       topic,
       showAnswers: mode === 'practice',
-      // keep firebase exam id if present
       examId: selectedExam?.id || testConfig.examId || testConfig.customExamId || '',
       examTitle: selectedExam?.title || testConfig.examTitle || testConfig.customTitle || '',
+      subjects: subjectsForYear,
+      totalQuestions,
     }
     setTestConfig(finalConfig)
     setActivePage('testInstructions')
   }
 
-  const selectedSubjectNames = testConfig.subjects
-    .map((s: any) => (typeof s === 'string' ? s : s?.subject || s?.name))
-    .filter(Boolean)
+  const selectedSubjectNames = subjectsForYear.map(s => s.subject).filter(Boolean)
+  const noAvailable = availabilityKnown && (!availableYears.length || !subjectsForYear.length || totalQuestions <= 0)
 
   return (
     <div className="config-page">
       <div className="config-header">
         <button className="back-circle1" onClick={() => setActivePage('subjects')}><ArrowLeft size={18}/></button>
-        <div><h1>Configure Test</h1><p>{testConfig.examType}{selectedSubjectNames.length ? ` • ${selectedSubjectNames.join(', ')}` : ''} • {testConfig.totalQuestions || 0} Questions{selectedExam?.title ? ` • ${selectedExam.title}` : ''}</p></div>
+        <div><h1>Configure Test</h1><p>{testConfig.examType}{selectedSubjectNames.length ? ` • ${selectedSubjectNames.join(', ')}` : ''} • {totalQuestions || 0} Questions{selectedExam?.title ? ` • ${selectedExam.title}` : ''}</p></div>
       </div>
 
       <div className="config-card highlight">
         <h3>Selected Subjects</h3>
         <div className="selected-subjects-list">
-         {testConfig.subjects.map((s: any) => {
-           const name = typeof s === 'string' ? s : s.subject
-           const qs = typeof s === 'string' ? '' : `${s.questions} Qs • ${s.years}`
+         {subjectsForYear.map((s: any) => {
+           const name = subjectName(s)
+           const qs = `${s.questions} Qs • ${effectiveYear || s.years || ''}`
            return (
             <div key={name} className="selected-subject-item">
               <span className="s-name">{name}</span>
@@ -65,8 +168,10 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
             </div>
            )
          })}
+         {subjectsForYear.length === 0 && <div className="selected-subject-item"><span className="s-name">No subjects available for this year.</span></div>}
         </div>
-        <div className="total-q"><span>Total</span><b>{testConfig.totalQuestions} Qs • {duration} mins • ~{timePerQuestion}s per Q</b></div>
+        <div className="total-q"><span>Total</span><b>{totalQuestions} Qs • {duration} mins • ~{timePerQuestion}s per Q</b></div>
+        {availabilityKnown && <p style={{margin:'8px 0 0', fontSize:12, color:'#8f9091'}}>Subjects and question counts update automatically when you change the year.</p>}
       </div>
 
       <div className="config-card">
@@ -93,12 +198,13 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
 
       <div className="config-card">
         <h3 className="account-title"><GraduationCap size={16}/> Test Settings</h3>
-        <div className="config-row"><label>Year</label><select className="config-select small" value={year} onChange={(e) => setYear(e.target.value)}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div>
+        <div className="config-row"><label>Year</label><select className="config-select small" value={effectiveYear || ''} onChange={(e) => handleYearChange(e.target.value)} disabled={!availableYears.length}>{availableYears.map(y => <option key={y} value={y}>{y}</option>)}{!availableYears.length && <option value="">No years available</option>}</select></div>
         <div className="config-row"><label>Difficulty</label><select className="config-select small" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}><option value="General">General</option><option value="Easy">Easy</option><option value="Normal">Normal</option><option value="Hard">Hard</option></select></div>
         <div className="config-row"><label>Topic</label><select className="config-select small" value={topic} onChange={(e) => setTopic(e.target.value)}><option value="All Topics">All Topics</option><option value="Random">Random Mix</option></select></div>
       </div>
 
-      <button className="continue-btn" onClick={handleContinue}><Check size={18}/> CONTINUE TO INSTRUCTIONS</button>
+      {noAvailable && <div className="config-card" style={{borderColor:'#7f1d1d', color:'#fca5a5'}}>No questions are available for the selected subjects in any year. Go back and choose different subjects.</div>}
+      <button className="continue-btn" onClick={handleContinue} disabled={noAvailable || !subjectsForYear.length || totalQuestions <= 0}><Check size={18}/> CONTINUE TO INSTRUCTIONS</button>
     </div>
   )
 }

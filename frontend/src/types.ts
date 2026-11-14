@@ -6,6 +6,7 @@ export type SubjectData = {
   years: string
   required?: boolean
   icon?: string
+  questionsByYear?: Record<string, number>
 }
 
 export type TestConfigType = {
