@@ -395,3 +395,73 @@
 .owner-pin-msg.error { color: #f87171; }
 .owner-pin-msg.success { color: #34d399; }
 .owner-pin-note { margin-top: 10px !important; font-size: 11px !important; color: #6b7280 !important; }
+
+/* Appearance / theme toggle */
+.appearance-card {
+  background: var(--bg-card, #1e1e1e);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.appearance-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.appearance-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--primary-soft, #d6e2fc);
+  color: var(--primary, #1d4be3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.appearance-head h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main, #fff);
+}
+.appearance-head p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary, #9ca3af);
+  line-height: 1.5;
+}
+.theme-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border, #2a2a2a);
+  background: var(--bg-raised, #2a2a2a);
+  color: var(--text-secondary, #9ca3af);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.theme-toggle-btn:hover {
+  background: var(--hover, #2f2f2f);
+  color: var(--text-main, #fff);
+}
+.theme-toggle-btn.active {
+  background: var(--primary, #1d4be3);
+  color: #fff;
+  border-color: var(--primary, #1d4be3);
+}
+[data-theme="light"] .appearance-card {
+  box-shadow: 0 1px 2px var(--shadow);
+}

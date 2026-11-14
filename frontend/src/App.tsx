@@ -28,15 +28,18 @@ import SubscriptionBanner from './components/SubscriptionBanner'
 import type { TestConfigType } from './types'
 import { AuthProvider } from './context/AuthContext'
 import { SubscriptionProvider, useSubscription } from './context/SubscriptionContext'
+import { ThemeProvider } from './theme'
 import './App.css'
 
 export default function App() {
   return (
-    <AuthProvider>
-      <SubscriptionProvider>
-        <AppShell />
-      </SubscriptionProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <SubscriptionProvider>
+          <AppShell />
+        </SubscriptionProvider>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 
@@ -114,7 +117,7 @@ function AppShell() {
 
   if (checkingAuth) {
     return (
-      <div style={{ minHeight: '100vh', background: '#121212', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+      <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-main)' }}>
         <div style={{ textAlign: 'center' }}>
           <img src="/icons/examcore-192.png" alt="ExamCore" style={{ width: 40, height: 40, objectFit: 'contain', margin: '0 auto 12px' }} />
           Loading...
@@ -124,7 +127,7 @@ function AppShell() {
   }
 
   return (
-    <div className={`app-shell${showNavbar ? ' app-shell-workspace' : ''}`} style={{ background: '#121212', minHeight: '100vh' }}>
+    <div className={`app-shell${showNavbar ? ' app-shell-workspace' : ''}`} style={{ background: 'var(--bg-main)', minHeight: '100vh' }}>
       {showNavbar && (
         <Navbar
           activePage={page === 'demo' ? demoSection : page}

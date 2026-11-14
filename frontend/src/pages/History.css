@@ -1,18 +1,20 @@
-.history-page { background: #F8FAFC; min-height: 100vh; }
+.history-page { background: var(--bg-main, #121212); min-height: 100vh; }
 .history-header {
-  background: white; padding: 16px; display: flex; align-items: center; gap: 12px;
-  border-bottom: 1px solid #E2E8F0;
+  background: var(--bg-card, #1e1e1e); padding: 16px; display: flex; align-items: center; gap: 12px;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+  color: var(--text-main, #fff);
 }
-.history-header h1 { font-size: 20px; margin: 0; }
+.history-header h1 { font-size: 20px; margin: 0; color: var(--text-main, #fff); }
 .history-list { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .history-card {
-  background: white; border-radius: 14px; padding: 16px; display: flex; justify-content: space-between;
-  border: 1px solid #E2E8F0;
+  background: var(--bg-card, #1e1e1e); border-radius: 14px; padding: 16px; display: flex; justify-content: space-between;
+  border: 1px solid var(--border, #2a2a2a);
+  color: var(--text-main, #fff);
 }
-.history-left h3 { margin: 0 0 4px 0; font-size: 16px; }
-.history-left p { margin: 0; font-size: 12px; color: #64748B; }
+.history-left h3 { margin: 0 0 4px 0; font-size: 16px; color: var(--text-main, #fff); }
+.history-left p { margin: 0; font-size: 12px; color: var(--text-secondary, #64748B); }
 .history-right { text-align: right; }
-.score { font-weight: 800; font-size: 16px; }
+.score { font-weight: 800; font-size: 16px; color: var(--text-main, #fff); }
 .percent { font-size: 12px; color: #10B981; font-weight: 700; }
 
 @media (min-width: 768px) {

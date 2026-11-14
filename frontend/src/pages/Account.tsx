@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useSubscription } from '../context/SubscriptionContext'
+import { useTheme } from '../theme'
 import {
   User,
   Download,
@@ -17,6 +18,8 @@ import {
   Trash2,
   KeyRound,
   ShieldCheck,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import './Account.css'
 import { API_URL } from '../config'
@@ -29,6 +32,7 @@ type Props = {
 export default function Account({ setActivePage }: Props) {
   const { user, logout, updateAvatar, setUserData } = useAuth()
   const { status, isOwner: subIsOwner } = useSubscription()
+  const { theme, setTheme } = useTheme()
 
   const [name, setName] = useState(user?.username || 'User')
   const [email, setEmail] = useState(user?.email || '')
@@ -231,7 +235,7 @@ export default function Account({ setActivePage }: Props) {
   const menuItems = [
     { id: 'profile', label: 'Edit Profile', icon: User, desc: 'Update your name', action: handleEditName },
     { id: 'download', label: 'Practice History', icon: Download, desc: `${practiced} exams completed`, action: () => setActivePage('practiceHistory') },
-    { id: 'settings', label: 'Settings', icon: Settings, desc: 'Theme, notifications', action: () => alert('Settings coming soon') },
+    { id: 'settings', label: 'Settings', icon: Settings, desc: 'Notifications and preferences', action: () => alert('More settings coming soon') },
     { id: 'admin', label: 'Admin Dashboard', icon: Shield, desc: 'Manage exams and students', action: () => setActivePage('admin') },
     { id: 'help', label: 'Help & Support', icon: HelpCircle, desc: 'Chat with us', action: () => window.open('https://wa.me/2340000000000', '_blank', 'noopener,noreferrer') },
     { id: 'about', label: 'About Us', icon: Info, desc: 'Version 2.0 • EXAMCORE', action: () => alert('EXAMCORE v2 • Made for Nigerian students 🇳🇬') },
@@ -262,7 +266,7 @@ export default function Account({ setActivePage }: Props) {
               {name.charAt(0).toUpperCase()}
             </span>
           )}
-          <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#1d4be3', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #121212' }}>
+          <span style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--primary, #1d4be3)', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--bg-main, #121212)' }}>
             {uploading ? <Loader2 size={14} color="#fff" className="spin" /> : <Camera size={14} color="#fff" />}
           </span>
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={handleFileChange} disabled={uploading} />
@@ -277,6 +281,36 @@ export default function Account({ setActivePage }: Props) {
             </span>
             <span className="stat-mini">{practiced} Tests</span>
           </div>
+        </div>
+      </div>
+
+      <div className="appearance-card">
+        <div className="appearance-head">
+          <div className="appearance-icon"><Sun size={18} /></div>
+          <div>
+            <h3>Appearance</h3>
+            <p>Choose Light or Dark mode. Your preference is saved on this device.</p>
+          </div>
+        </div>
+        <div className="theme-toggle" role="group" aria-label="Appearance">
+          <button
+            type="button"
+            className={`theme-toggle-btn${theme === 'light' ? ' active' : ''}`}
+            onClick={() => setTheme('light')}
+            aria-pressed={theme === 'light'}
+          >
+            <Sun size={16} />
+            Light
+          </button>
+          <button
+            type="button"
+            className={`theme-toggle-btn${theme === 'dark' ? ' active' : ''}`}
+            onClick={() => setTheme('dark')}
+            aria-pressed={theme === 'dark'}
+          >
+            <Moon size={16} />
+            Dark
+          </button>
         </div>
       </div>
 
