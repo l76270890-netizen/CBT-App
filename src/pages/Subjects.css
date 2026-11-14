@@ -1,0 +1,105 @@
+.exams-page1 {
+  background: #121212;
+  min-height: 10vh;
+  max-width: 700px;
+  margin: 0 auto;
+  padding-bottom: 120px;
+  box-sizing: border-box;
+}
+
+.exams-topbar {
+  background: #121212;
+  padding: 14px 16px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid #1e1e1e;
+}
+.topbar-main{
+  display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+}
+.topbar-main h1{ font-size: 18px; font-weight: 800; color: #fff; margin: 0; }
+.topbar-main p{ font-size: 12px; color: #8f9091; margin: 2px 0 0 0; }
+.count-badge{
+  margin-left: auto; background: #1e1e1e; border: 1px solid #2a2a2a;
+  padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; color: #fff;
+}
+
+.back-btn1 {
+  background: #1e1e1e; border: 1px solid #2a2a2a; width: 38px; height: 38px;
+  border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: #fff;
+}
+
+.search-wrapper.small{
+  display: flex; align-items: center; background: #1e1e1e; border: 1px solid #2a2a2a;
+  border-radius: 12px; padding: 0 12px; margin-bottom: 12px;
+}
+.search-wrapper.small input{
+  flex: 1; background: transparent; border: none; outline: none; color: #fff;
+  padding: 11px 8px; font-size: 14px;
+}
+.search-icon{ color: #6b7280; }
+
+.alert-card {
+  background: #1e293b; border: 1px solid #1e3a8a; border-radius: 10px;
+  padding: 10px 12px; display: flex; gap: 10px; align-items: center;
+}
+.alert-icon {
+  background: #1d4be3; color: white; border-radius: 50%; width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0;
+}
+.alert-text { font-size: 12px; color: #93c5fd; font-weight: 500; }
+
+.subject-list {
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.subject-card {
+  background: #1e1e1e; border: 1.5px solid #2a2a2a; border-radius: 14px;
+  padding: 14px; display: flex; align-items: center; gap: 12px;
+  cursor: pointer; transition: 0.15s;
+}
+.subject-card:hover{ border-color: #3a3a3a; }
+.subject-card.selected { border-color: #1d4be3; background: #1a1f3d; }
+.subject-card.required{ opacity: 0.9; }
+
+.subject-icon-wrap {
+  width: 42px; height: 42px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.15s;
+}
+.subject-details { flex: 1; min-width: 0; }
+.subject-name { font-weight: 600; font-size: 14px; color: #fff; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.required-badge { font-size: 9px; background: #fee2e2; color: #dc2626; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
+.subject-meta { font-size: 11px; color: #8f9091; margin-top: 3px; }
+
+.checkbox {
+  width: 22px; height: 22px; border: 2px solid #3a3a3a; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.15s;
+}
+.subject-card.selected.checkbox { background: #1d4be3; border-color: #1d4be3; color: #fff; }
+
+.sticky-continue {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, #121212 85%, transparent);
+  z-index: 30; max-width: 700px; margin: 0 auto;
+}
+.selected-summary {
+  display: flex; justify-content: space-between; font-size: 11px; color: #8f9091;
+  margin-bottom: 10px; padding: 0 2px; gap: 10px;
+}
+.selected-summary span{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.selected-summary b{ color: #fff; flex-shrink: 0; }
+
+.btn-continue {
+  width: 100%; background: #fff; color: #121212; border: none;
+  padding: 15px; border-radius: 14px; font-weight: 800; font-size: 14px;
+  cursor: pointer; letter-spacing: 0.5px; transition: 0.2s;
+}
+.btn-continue:disabled{ background: #2a2a2a; color: #6b7280; }
+.btn-continue:active{ transform: scale(0.98); }
+
+@media (min-width: 768px){
+.exams-page1{ padding-bottom: 100px; }
+.subject-list{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+}
