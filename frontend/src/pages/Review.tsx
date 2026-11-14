@@ -12,7 +12,7 @@ export default function Review({ setActivePage }: Props) {
     if (data) setResult(JSON.parse(data))
   }, [])
 
-  if (!result) return <div style={{color:'#fff', padding:20}}>Loading review...</div>
+  if (!result) return <div style={{color:'var(--text-main, #fff)', padding:20}}>Loading review...</div>
 
   const questions = result.questions || Array.from({length: result.total}).map((_, i) => ({
     id: i+1,
@@ -56,7 +56,7 @@ export default function Review({ setActivePage }: Props) {
                 ))}
               </div>
               {q.explanation && (
-                <div style={{marginTop:10, fontSize:13, opacity:0.8, background:'#1e293b', padding:10, borderRadius:8}}>
+                <div className="review-explanation" style={{marginTop:10, fontSize:13, opacity:0.9, padding:10, borderRadius:8}}>
                   <b>Explanation:</b> {q.explanation}
                 </div>
               )}

@@ -177,32 +177,32 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
             {!demoMode && <div style={{position:'relative'}}>
               <button className="bell-btn" onClick={() => setShowNotif(!showNotif)}><Bell size={20} />{unreadCount>0 && <span className="bell-dot">{unreadCount>9? '9+': unreadCount}</span>}</button>
               {showNotif && (
-                <div className="notif-dropdown" style={{position:'absolute', right:0, top:'45px', width:'360px', maxWidth:'90vw', background:'#111827', color:'#f9fafb', borderRadius:'16px', boxShadow:'0 20px 60px rgba(0,0,0,0.15)', border:'1px solid #e5e7eb', zIndex:100, overflow:'hidden'}}>
-                  <div style={{padding:'14px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #f3f4f6'}}>
+                <div className="notif-dropdown" style={{position:'absolute', right:0, top:'45px', width:'360px', maxWidth:'90vw', borderRadius:'16px', boxShadow:'0 20px 60px rgba(0,0,0,0.15)', zIndex:100, overflow:'hidden'}}>
+                  <div className="notif-dropdown-header" style={{padding:'14px 16px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                     <h4 style={{margin:0, fontSize:14, fontWeight:700}}>Notifications {unreadCount>0 && `(${unreadCount})`}</h4>
                     <div style={{display:'flex', gap:8}}>
-                      <button onClick={markAllRead} style={{border:'none', background:'#f3f4f6', padding:'6px 10px', borderRadius:8, fontSize:11, fontWeight:600, cursor:'pointer'}}><CheckCheck size={12}/> Read</button>
-                      <button onClick={clearNotifs} style={{border:'none', background:'#fef2f2', color:'#dc2626', padding:'6px 10px', borderRadius:8, fontSize:11, fontWeight:600, cursor:'pointer'}}><Trash2 size={12}/> Clear</button>
+                      <button onClick={markAllRead} className="notif-action-btn" style={{border:'none', padding:'6px 10px', borderRadius:8, fontSize:11, fontWeight:600, cursor:'pointer'}}><CheckCheck size={12}/> Read</button>
+                      <button onClick={clearNotifs} className="notif-action-btn danger" style={{border:'none', padding:'6px 10px', borderRadius:8, fontSize:11, fontWeight:600, cursor:'pointer'}}><Trash2 size={12}/> Clear</button>
                     </div>
                   </div>
                   <div style={{maxHeight:'380px', overflowY:'auto'}}>
                     {notifications.length===0? (
-                      <div style={{padding:'30px', textAlign:'center', color:'#9ca3af'}}>
+                      <div className="notif-empty-state" style={{padding:'30px', textAlign:'center'}}>
                         <Bell size={24} style={{margin:'0 auto 8px', display:'block', opacity:0.5}}/>
                         <p style={{fontSize:13}}>No notifications yet</p>
                         <p style={{fontSize:11}}>Exam results will appear here. Study mode is hidden.</p>
                       </div>
                     ) : notifications.map(n=>(
-                      <div key={n.id} onClick={()=>markOneRead(n.id)} style={{padding:'12px 16px', borderBottom:'1px solid #f9fafb', cursor:'pointer', background: n.read? '#fff' : '#f8fafc', display:'flex', gap:12}}>
+                      <div key={n.id} onClick={()=>markOneRead(n.id)} className={`notif-row${n.read ? '' : ' unread'}`} style={{padding:'12px 16px', cursor:'pointer', display:'flex', gap:12}}>
                         <div style={{width:32, height:32, borderRadius:'50%', background: n.type==='success'? '#dcfce7' : n.type==='warning'? '#fef3c7' : '#dbeafe', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0}}>
                           {n.type==='success'? '🎉' : n.type==='warning'? '⚠️' : '📢'}
                         </div>
                         <div style={{flex:1}}>
-                          <div style={{fontSize:13, fontWeight: n.read? 500 : 700, color:'#111827'}}>{n.title}</div>
-                          <div style={{fontSize:12, color:'#6b7280', marginTop:2}}>{n.message}</div>
-                          <div style={{fontSize:10, color:'#9ca3af', marginTop:4}}>{new Date(n.time).toLocaleString()}</div>
+                          <div className="notif-title" style={{fontSize:13, fontWeight: n.read? 500 : 700}}>{n.title}</div>
+                          <div className="notif-msg-text" style={{fontSize:12, marginTop:2}}>{n.message}</div>
+                          <div className="notif-time-text" style={{fontSize:10, marginTop:4}}>{new Date(n.time).toLocaleString()}</div>
                         </div>
-                        {!n.read && <div style={{width:8, height:8, borderRadius:'50%', background:'#3b82f6', marginTop:6}}></div>}
+                        {!n.read && <div style={{width:8, height:8, borderRadius:'50%', background:'var(--primary, #3b82f6)', marginTop:6}}></div>}
                       </div>
                     ))}
                   </div>

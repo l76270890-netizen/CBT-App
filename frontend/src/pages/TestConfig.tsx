@@ -203,7 +203,7 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
         <div className="config-row"><label>Topic</label><select className="config-select small" value={topic} onChange={(e) => setTopic(e.target.value)}><option value="All Topics">All Topics</option><option value="Random">Random Mix</option></select></div>
       </div>
 
-      {noAvailable && <div className="config-card" style={{borderColor:'#7f1d1d', color:'#fca5a5'}}>No questions are available for the selected subjects in any year. Go back and choose different subjects.</div>}
+          {noAvailable && <div className="config-card" style={{borderColor:'var(--danger, #7f1d1d)', color:'var(--danger-text, #fca5a5)'}}>No questions are available for the selected subjects in any year. Go back and choose different subjects.</div>}
       <button className="continue-btn" onClick={handleContinue} disabled={noAvailable || !subjectsForYear.length || totalQuestions <= 0}><Check size={18}/> CONTINUE TO INSTRUCTIONS</button>
     </div>
   )

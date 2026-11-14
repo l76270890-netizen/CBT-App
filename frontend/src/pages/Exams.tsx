@@ -126,7 +126,7 @@ export default function Exams({ setActivePage, setSelectedExam, setTestConfig }:
   return (
     <div className="exams-container">
       <div className="exams-header"><h1>Available Exams</h1><p>Choose an exam to practice</p></div>
-      {error && <p role="alert" style={{ color: '#fca5a5', padding: '0 20px' }}>{error}</p>}
+        {error && <p role="alert" style={{ color: 'var(--danger, #ef4444)', padding: '0 20px' }}>{error}</p>}
       <div className="search-bar">
         <div className="search-wrapper">
           <Search className="search-icon" size={18} />

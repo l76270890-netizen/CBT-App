@@ -52,7 +52,7 @@ export default function GeneralKnowledge({ setActivePage, setTestConfig, examId 
         </div>
       )}
 
-      <button onClick={()=>setActivePage('home')} className="hero-btn" style={{marginTop:20, background:'#1e1e1e', color:'#fff', border:'1px solid #2a2a2a'}}>← Back Home</button>
+      <button onClick={()=>setActivePage('home')} className="hero-btn gk-back-btn" style={{marginTop:20}}>← Back Home</button>
     </div>
   )
 }

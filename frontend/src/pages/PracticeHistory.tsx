@@ -63,7 +63,7 @@ export default function PracticeHistory({ setActivePage }: any) {
       <div className="history-container">
         <div className="history-header"><h1>History</h1><p>Only exam tests are saved • Study practice is not saved</p></div>
         {historyError && <p role="alert">{historyError}</p>}
-        <div className="empty-state"><BarChart3 size={32}/><h3>No exam history yet</h3><p style={{fontSize:13, color:'#888'}}>Study mode is practice and does not count</p><button onClick={()=>setActivePage('exams')} className="start-btn">Start Exam</button></div>
+        <div className="empty-state"><BarChart3 size={32}/><h3>No exam history yet</h3><p style={{fontSize:13, color:'var(--text-secondary, #888)'}}>Study mode is practice and does not count</p><button onClick={()=>setActivePage('exams')} className="start-btn">Start Exam</button></div>
       </div>
     </section>
   )

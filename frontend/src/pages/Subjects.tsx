@@ -118,7 +118,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
               const selected = isSelected(item.subject)
               return (
                 <div key={item.subject} className={`subject-card ${selected ? 'selected' : ''} ${item.required ? 'required' : ''}`} onClick={() => toggleSubject(item)}>
-                  <div className="subject-icon-wrap" style={{ background: selected ? '#1d4be3' : '#1e1e1e', color: selected ? '#fff' : '#8f9091' }}><Icon size={20} /></div>
+                  <div className="subject-icon-wrap" style={{ background: selected ? 'var(--primary, #1d4be3)' : 'var(--bg-raised, #1e1e1e)', color: selected ? '#fff' : 'var(--text-secondary, #8f9091)' }}><Icon size={20} /></div>
                   <div className="subject-details"><div className="subject-name">{item.subject}{item.required && <span className="required-badge">REQUIRED</span>}</div><div className="subject-meta">{item.questions} Questions • {item.years}</div></div>
                   <div className="checkbox">{selected && <Check size={14} />}</div>
                 </div>

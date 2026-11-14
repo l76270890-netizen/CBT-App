@@ -262,7 +262,7 @@ export default function Account({ setActivePage }: Props) {
           {displayAvatar ? (
             <img src={displayAvatar} alt="Profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
           ) : (
-            <span style={{ fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#1d4be3', color: '#fff', borderRadius: '50%' }}>
+            <span style={{ fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'var(--primary, #1d4be3)', color: '#fff', borderRadius: '50%' }}>
               {name.charAt(0).toUpperCase()}
             </span>
           )}

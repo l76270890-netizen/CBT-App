@@ -338,9 +338,9 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
         ].map(t => (
           <button key={t.id} onClick={()=>setActiveDept(t.id as any)}
             style={{
-              padding:'8px 16px', borderRadius:20, border:'1px solid #e5e7eb',
-              background: activeDept===t.id? '#111827' : '#fff',
-              color: activeDept===t.id? '#fff' : '#374151',
+              padding:'8px 16px', borderRadius:20, border:'1px solid var(--border, #e5e7eb)',
+              background: activeDept===t.id? 'var(--primary, #111827)' : 'var(--bg-card, #fff)',
+              color: activeDept===t.id? '#fff' : 'var(--text-main, #374151)',
               fontWeight:600, fontSize:13, whiteSpace:'nowrap'
             }}>
             {t.label}

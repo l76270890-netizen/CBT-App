@@ -159,9 +159,9 @@ export default function Test({ setActivePage, testConfig }: Props) {
   useEffect(() => { if(timeLeft<=0){handleSubmit(); return} const t=setInterval(()=>setTimeLeft(x=>x-1),1000); return()=>clearInterval(t)}, [timeLeft, handleSubmit])
   const formatTime = (s:number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`
 
-  if (loading) return <div className="test-page1" style={{color:'#fff',padding:40,textAlign:'center'}}>Loading {subjectsList.join(', ') || singleSubject} questions...<br/>{subjectsList.length} subjects • Please wait</div>
+  if (loading) return <div className="test-page1" style={{padding:40,textAlign:'center'}}>Loading {subjectsList.join(', ') || singleSubject} questions...<br/>{subjectsList.length} subjects • Please wait</div>
 
-  if (!questions.length) return <div className="test-page1" style={{color:'#fff',padding:40,textAlign:'center'}}>No questions found for {subjectsList.join(', ')}<br/><button onClick={()=>setActivePage('home')} style={{marginTop:12, padding:'8px 16px'}}>Go Home</button></div>
+  if (!questions.length) return <div className="test-page1" style={{padding:40,textAlign:'center'}}>No questions found for {subjectsList.join(', ')}<br/><button onClick={()=>setActivePage('home')} style={{marginTop:12, padding:'8px 16px'}}>Go Home</button></div>
 
   const q = questions[current]
   const answeredCount = answers.filter(a=>a!==null).length
