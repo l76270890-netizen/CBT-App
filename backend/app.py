@@ -115,12 +115,20 @@ def ensure_user_columns():
         if "reset_token_expires" not in existing_cols:
             missing.append('ALTER TABLE users ADD COLUMN reset_token_expires TIMESTAMP')
         if "is_owner" not in existing_cols:
-            missing.append('ALTER TABLE users ADD COLUMN is_owner BOOLEAN DEFAULT 0')
+            # BOOLEAN DEFAULT FALSE is compatible with PostgreSQL and SQLite.
+            missing.append('ALTER TABLE users ADD COLUMN is_owner BOOLEAN DEFAULT FALSE')
 
         if missing:
             with db.engine.connect() as conn:
                 for stmt in missing:
-                    conn.execute(db.text(stmt))
+                    try:
+                        conn.execute(db.text(stmt))
+                    except Exception:
+                        # Fall back for dialect quirks (e.g. boolean default syntax)
+                        if 'is_owner BOOLEAN' in stmt:
+                            conn.execute(db.text('ALTER TABLE users ADD COLUMN is_owner BOOLEAN'))
+                        else:
+                            raise
                 conn.commit()
             app.logger.info("Added missing user columns: %s", ", ".join(missing))
     except Exception:
