@@ -26,6 +26,7 @@ type SubscriptionContextValue = {
   /** Clears the block after a successful renewal/activation. */
   clearBlocked: () => void
   clearError: () => void
+  isOwner: boolean
 }
 
 const SubscriptionContext = createContext<SubscriptionContextValue | null>(null)
@@ -33,18 +34,21 @@ const SubscriptionContext = createContext<SubscriptionContextValue | null>(null)
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const userId = user?.user_id
+  const userIsOwner = !!(user?.is_owner || user?.owner_access || user?.role === 'owner')
   const [status, setStatus] = useState<SubscriptionStatus | null>(null)
   const [blocked, setBlocked] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const lastSyncRef = useRef(0)
+  const isOwner = userIsOwner || status?.plan === 'owner'
 
   const applyStatus = useCallback((next: SubscriptionStatus | null) => {
     lastSyncRef.current = Date.now()
     setError(null)
     setStatus(next)
-    // A fresh, active status means the renewal went through.
-    setBlocked(next ? next.expired : false)
+    const ownerAccess = !!(next && next.plan === 'owner' && !next.expired)
+    // A fresh, active status means the renewal went through. Owners are never blocked.
+    setBlocked(ownerAccess ? false : (next ? next.expired : false))
     return next
   }, [])
 
@@ -55,9 +59,9 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       const payload = await apiRequest<unknown>(STATUS_PATH)
       return applyStatus(parseSubscriptionStatus(payload))
     } catch (requestError) {
-      if (isSubscriptionBlockedError(requestError)) {
+      if (isSubscriptionBlockedError(requestError) && !userIsOwner) {
         setBlocked(true)
-      } else {
+      } else if (!isSubscriptionBlockedError(requestError)) {
         // A 5xx or network failure is not an expiry: keep the last known status
         // and surface the problem instead of silently showing nothing.
         setError(requestError instanceof Error ? requestError.message : 'Could not check your subscription status.')
@@ -66,9 +70,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     } finally {
       setLoading(false)
     }
-  }, [userId, applyStatus])
+  }, [userId, applyStatus, userIsOwner])
 
-  const reportBlocked = useCallback(() => setBlocked(true), [])
+  const reportBlocked = useCallback(() => {
+    if (!userIsOwner) setBlocked(true)
+  }, [userIsOwner])
   const clearError = useCallback(() => setError(null), [])
   const clearBlocked = useCallback(() => {
     setBlocked(false)
@@ -77,17 +83,18 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
 // Any 403 from an authenticated request *may* indicate expired access, but not
   // every 403 is a subscription expiry (e.g. origin/CSRF checks, ownership checks).
-  // Only block on explicit subscription-expiry signals from the backend/status.
+  // Only block on explicit subscription-expiry signals from the backend/status. Owners are never blocked.
   useEffect(() => {
-    if (!userId) {
+    if (!userId || isOwner) {
       setSubscriptionBlockedListener(null)
+      if (isOwner) setBlocked(false)
       return
     }
     setSubscriptionBlockedListener((error) => {
       if (isSubscriptionBlockedError(error)) setBlocked(true)
     })
     return () => setSubscriptionBlockedListener(null)
-  }, [userId])
+  }, [userId, isOwner])
 
   // Reset whenever the signed-in user changes.
   useEffect(() => {
@@ -105,7 +112,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
   // Tick the countdown locally between polls.
   useEffect(() => {
-    if (!userId || !status?.active) return
+    if (!userId || !status?.active || isOwner) return
     const interval = window.setInterval(() => {
       const now = Date.now()
       const elapsed = now - lastSyncRef.current
@@ -118,10 +125,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       })
     }, TICK_INTERVAL_MS)
     return () => window.clearInterval(interval)
-  }, [userId, status?.active])
+  }, [userId, status?.active, isOwner])
 
   return (
-    <SubscriptionContext.Provider value={{ status, blocked, loading, error, refresh, reportBlocked, clearBlocked, clearError }}>
+    <SubscriptionContext.Provider value={{ status, blocked, loading, error, refresh, reportBlocked, clearBlocked, clearError, isOwner }}>
       {children}
     </SubscriptionContext.Provider>
   )

@@ -33,6 +33,9 @@ export type SubscriptionStatusPayload = {
   serverTime?: unknown
   server_time?: unknown
   now?: unknown
+  is_owner?: unknown
+  owner_access?: unknown
+  access_type?: unknown
 }
 
 const toNumber = (value: unknown): number | null => {
@@ -90,6 +93,8 @@ export function parseSubscriptionStatus(
   if (!payload || typeof payload !== 'object') return null
   const data = payload as SubscriptionStatusPayload
 
+  const ownerAccess = data.is_owner === true || data.owner_access === true || data.access_type === 'owner'
+
   const serverNow = toTimestamp(data.serverTime) ?? toTimestamp(data.server_time) ?? toTimestamp(data.now)
   const anchor = serverNow ?? now
 
@@ -109,6 +114,17 @@ export function parseSubscriptionStatus(
 
   const explicitActive = typeof data.active === 'boolean' ? data.active : null
   const explicitExpired = typeof data.expired === 'boolean' ? data.expired : null
+
+  if (ownerAccess) {
+    return {
+      active: true,
+      expired: false,
+      plan: toPlan(data.plan) ?? toPlan(data.subscription_plan) ?? 'owner',
+      expiresAt: null,
+      remainingMs: 0,
+      expiringSoon: false,
+    }
+  }
 
   if (remainingMs === null && explicitActive === null && explicitExpired === null) return null
 

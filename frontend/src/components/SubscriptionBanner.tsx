@@ -4,9 +4,9 @@ import { formatRemaining } from '../subscription'
 import './SubscriptionBanner.css'
 
 export default function SubscriptionBanner({ onRenew }: { onRenew: () => void }) {
-  const { status, blocked, error, loading, refresh } = useSubscription()
+  const { status, blocked, error, loading, refresh, isOwner } = useSubscription()
 
-  if (blocked) return null
+  if (isOwner || blocked) return null
 
   // The status check failed (5xx / network). Say so rather than showing nothing.
   if (error && !status) {

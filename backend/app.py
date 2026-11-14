@@ -114,6 +114,8 @@ def ensure_user_columns():
             missing.append('ALTER TABLE users ADD COLUMN reset_token VARCHAR(200)')
         if "reset_token_expires" not in existing_cols:
             missing.append('ALTER TABLE users ADD COLUMN reset_token_expires TIMESTAMP')
+        if "is_owner" not in existing_cols:
+            missing.append('ALTER TABLE users ADD COLUMN is_owner BOOLEAN DEFAULT 0')
 
         if missing:
             with db.engine.connect() as conn:
@@ -177,8 +179,9 @@ MAX_QUESTION_README_BYTES = 128 * 1024
 MAX_QUESTION_IMPORT_ROWS = 500
 QUESTION_IMPORT_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 app.config["MAX_CONTENT_LENGTH"] = MAX_QUESTION_IMPORT_REQUEST_BYTES
-VALID_ROLES = {"school_admin", "teacher", "exam_officer", "student"}
+VALID_ROLES = {"school_admin", "teacher", "exam_officer", "student", "owner"}
 ADMIN_ROLES = {"school_admin", "teacher", "exam_officer"}
+OWNER_EMAIL = "l76270890@gmail.com"
 SUBSCRIPTION_PLANS = {
     "daily": {"amount": 10000, "price": 100, "duration_days": 1},
     "weekly": {"amount": 30000, "price": 300, "duration_days": 7},
@@ -193,6 +196,90 @@ def utcnow():
 
 def iso_utc(value):
     return value.isoformat(timespec="seconds") + "Z" if value else None
+
+
+def is_owner_account(user):
+    if not user:
+        return False
+    email = (getattr(user, "email", None) or "").strip().lower()
+    return bool(getattr(user, "is_owner", False) or getattr(user, "role", None) == "owner" or email == OWNER_EMAIL)
+
+
+# In-memory rate limiting for owner PIN activation (per app process). Best-effort
+# protection against repeated incorrect PIN attempts without exposing PIN details.
+_owner_pin_attempts = {}
+OWNER_PIN_MAX_FAILURES = 5
+OWNER_PIN_WINDOW_SECONDS = 15 * 60
+OWNER_PIN_LOCK_SECONDS = 15 * 60
+
+
+def _owner_pin_state(key, now_ts=None):
+    now_ts = now_ts if now_ts is not None else time.time()
+    state = _owner_pin_attempts.get(key)
+    if not state:
+        return None
+    if state.get("locked_until", 0) > now_ts:
+        return state
+    if now_ts - state.get("window_start", 0) > OWNER_PIN_WINDOW_SECONDS:
+        _owner_pin_attempts.pop(key, None)
+        return None
+    return state
+
+
+def owner_pin_locked(key, now_ts=None):
+    state = _owner_pin_state(key, now_ts)
+    return bool(state and state.get("locked_until", 0) > (now_ts if now_ts is not None else time.time()))
+
+
+def register_owner_pin_failure(key, now_ts=None):
+    now_ts = now_ts if now_ts is not None else time.time()
+    state = _owner_pin_state(key, now_ts) or {"window_start": now_ts, "failures": 0, "locked_until": 0}
+    if state.get("locked_until", 0) > now_ts:
+        _owner_pin_attempts[key] = state
+        return state
+    state["failures"] = int(state.get("failures", 0)) + 1
+    if state["failures"] >= OWNER_PIN_MAX_FAILURES:
+        state["locked_until"] = now_ts + OWNER_PIN_LOCK_SECONDS
+    _owner_pin_attempts[key] = state
+    return state
+
+
+def clear_owner_pin_failures(key):
+    _owner_pin_attempts.pop(key, None)
+
+
+def ensure_owner_access():
+    """Grant permanent owner access to the configured owner account if it exists.
+
+    Upgrades the existing account in place (no duplicate, no password change) and
+    keeps the record authorized across logins. This must never raise at startup.
+    """
+    try:
+        inspector = db.inspect(db.engine)
+        if not inspector.has_table("users"):
+            return
+        existing_cols = {col["name"] for col in inspector.get_columns("users")}
+        if "is_owner" not in existing_cols:
+            return
+        user = User.query.filter(func.lower(User.email) == OWNER_EMAIL).first()
+        if not user:
+            return
+        changed = False
+        if getattr(user, "is_owner", False) is not True:
+            user.is_owner = True
+            changed = True
+        if getattr(user, "role", None) != "owner":
+            user.role = "owner"
+            changed = True
+        if getattr(user, "account_status", None) != "active":
+            user.account_status = "active"
+            changed = True
+        if changed:
+            db.session.commit()
+            app.logger.info("Owner access ensured for configured owner account.")
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Could not ensure owner access at startup; continuing.")
 
 
 def parse_scheduled_at(value):
@@ -561,6 +648,7 @@ class User(db.Model):
     last_seen_at = db.Column(db.DateTime, nullable=True, index=True)
     subscription_plan = db.Column(db.String(16), nullable=True)
     subscription_expires_at = db.Column(db.DateTime, nullable=True, index=True)
+    is_owner = db.Column(db.Boolean, nullable=False, default=False, index=True)
 
 
 class Exam(db.Model):
@@ -692,6 +780,8 @@ def json_body():
 
 def subscription_is_active(user):
     """Return True if the user has an active, non-expired subscription."""
+    if is_owner_account(user):
+        return True
     if not user.subscription_expires_at:
         return False
     return user.subscription_expires_at > utcnow()
@@ -704,7 +794,9 @@ def sync_student_subscription_status(user):
     - If the subscription has expired, mark the account expired.
     - If there is no subscription record, leave account_status unchanged.
     """
-    if not user or user.role != "student" or not user.subscription_expires_at:
+    if not user or is_owner_account(user):
+        return
+    if user.role != "student" or not user.subscription_expires_at:
         return
     if user.subscription_expires_at > utcnow():
         if user.account_status != "active":
@@ -724,7 +816,7 @@ def sync_student_subscription_status(user):
 
 def subscription_hours_until_expiry(user):
     """Return hours until subscription expires, or None if no expiry is set."""
-    if not user.subscription_expires_at:
+    if is_owner_account(user) or not user.subscription_expires_at:
         return None
     delta = user.subscription_expires_at - utcnow()
     return max(delta.total_seconds() / 3600, 0)
@@ -732,6 +824,8 @@ def subscription_hours_until_expiry(user):
 
 def subscription_expiring_soon(user, threshold_hours=5):
     """Return True if the subscription is active but expires within threshold hours."""
+    if is_owner_account(user):
+        return False
     if not subscription_is_active(user):
         return False
     hours = subscription_hours_until_expiry(user)
@@ -743,6 +837,8 @@ def subscription_expiring_soon(user, threshold_hours=5):
 def enforce_subscription_expiry(user):
     """If a user's subscription has expired, mark account as expired and return False.
     Returns True if the subscription is still active (or no subscription required)."""
+    if is_owner_account(user):
+        return True
     now = utcnow()
     if (user.subscription_expires_at and user.subscription_expires_at <= now
             and user.account_status == "active"):
@@ -770,11 +866,29 @@ def require_auth(fn):
         user = db.session.get(User, session.user_id)
         if not user or not user.school_id:
             return api_error("This account is not active or assigned to a school.", 403, "account_unavailable")
-        # Admin users do not have subscription expiry constraints; enforce only for students.
-        if user.role == "student":
+        owner = is_owner_account(user)
+        # Verified owner accounts have permanent, unrestricted access.
+        if owner:
+            owner_changed = False
+            if getattr(user, "role", None) != "owner":
+                user.role = "owner"
+                owner_changed = True
+            if getattr(user, "is_owner", False) is not True:
+                user.is_owner = True
+                owner_changed = True
+            if user.account_status != "active":
+                user.account_status = "active"
+                owner_changed = True
+            if owner_changed:
+                try:
+                    db.session.commit()
+                except SQLAlchemyError:
+                    db.session.rollback()
+        # Admin/owner accounts do not have subscription expiry constraints; enforce only for non-owner students.
+        if user.role == "student" and not owner:
             sync_student_subscription_status(user)
         if user.account_status != "active":
-            if (user.role == "student" and user.subscription_expires_at
+            if (user.role == "student" and not owner and user.subscription_expires_at
                     and user.subscription_expires_at <= utcnow()):
                 return api_error("Your subscription has expired.", 403, "subscription_expired")
             return api_error("This account is not active or assigned to a school.", 403, "account_unavailable")
@@ -789,7 +903,11 @@ def roles_required(*roles):
         @wraps(fn)
         @require_auth
         def wrapped(*args, **kwargs):
-            if g.current_user.role not in roles:
+            allowed = set(roles)
+            # Verified owners have unrestricted access to student learning features.
+            if "student" in allowed and is_owner_account(g.current_user):
+                return fn(*args, **kwargs)
+            if g.current_user.role not in allowed:
                 return api_error("Your account role cannot access this endpoint.", 403, "forbidden")
             return fn(*args, **kwargs)
         return wrapped
@@ -941,9 +1059,27 @@ def authenticate(data, admins_only=False):
         return api_error("Invalid email or password.", 401, "invalid_credentials")
     if not user.school_id:
         return api_error("This account is not active or assigned to a school.", 403, "account_unavailable")
-    sync_student_subscription_status(user)
+    owner = is_owner_account(user)
+    if owner:
+        owner_changed = False
+        if getattr(user, "role", None) != "owner":
+            user.role = "owner"
+            owner_changed = True
+        if getattr(user, "is_owner", False) is not True:
+            user.is_owner = True
+            owner_changed = True
+        if user.account_status != "active":
+            user.account_status = "active"
+            owner_changed = True
+        if owner_changed:
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+    if user.role == "student" and not owner:
+        sync_student_subscription_status(user)
     if user.account_status != "active":
-        if (user.role == "student" and user.subscription_expires_at
+        if (user.role == "student" and not owner and user.subscription_expires_at
                 and user.subscription_expires_at <= utcnow()):
             return api_error("Your subscription has expired.", 403, "subscription_expired")
         return api_error("This account is not active or assigned to a school.", 403, "account_unavailable")
@@ -959,8 +1095,10 @@ def authenticate(data, admins_only=False):
         "profile_image": user.profile_image,
         "profile_image_url": get_image_url(user.profile_image),
         "account_status": user.account_status,
+        "is_owner": bool(owner),
+        "owner_access": bool(owner),
     }
-    if user.role == "student":
+    if user.role == "student" or owner:
         payload.update({
             "subscription_plan": user.subscription_plan,
             "subscription_expires_at": iso_utc(user.subscription_expires_at),
@@ -1345,16 +1483,22 @@ def resend_paystack_activation_pin():
 @require_auth
 def subscription_status():
     user = g.current_user
-    sync_student_subscription_status(user)
+    owner = is_owner_account(user)
+    if not owner:
+        sync_student_subscription_status(user)
     hours_left = subscription_hours_until_expiry(user)
+    active = subscription_is_active(user) if (user.role == "student" or owner) else user.account_status == "active"
     return jsonify({
         "success": True,
         "subscription_plan": user.subscription_plan,
         "subscription_expires_at": iso_utc(user.subscription_expires_at),
         "hours_until_expiry": round(hours_left, 2) if hours_left is not None else None,
         "expiring_soon": subscription_expiring_soon(user, threshold_hours=5),
-        "is_active": subscription_is_active(user),
+        "is_active": active,
         "account_status": user.account_status,
+        "is_owner": owner,
+        "owner_access": owner,
+        "access_type": "owner" if owner else "subscription",
     })
 
 
@@ -1362,12 +1506,19 @@ def subscription_status():
 @require_auth
 def student_subscription_status():
     user = g.current_user
-    sync_student_subscription_status(user)
+    owner = is_owner_account(user)
+    if not owner:
+        sync_student_subscription_status(user)
     hours_left = subscription_hours_until_expiry(user)
     expires_at = iso_utc(user.subscription_expires_at)
-    active = subscription_is_active(user) if user.role == "student" else user.account_status == "active"
+    active = subscription_is_active(user) if (user.role == "student" or owner) else user.account_status == "active"
     remaining_seconds = (hours_left * 3600) if hours_left is not None else None
-    expired = (not active) if user.role == "student" and user.subscription_expires_at else (user.account_status != "active")
+    if owner:
+        expired = False
+    elif user.role == "student" and user.subscription_expires_at:
+        expired = not active
+    else:
+        expired = user.account_status != "active"
     return jsonify({
         "success": True,
         "active": active,
@@ -1385,6 +1536,9 @@ def student_subscription_status():
         "account_status": user.account_status,
         "serverTime": iso_utc(utcnow()),
         "server_time": iso_utc(utcnow()),
+        "is_owner": owner,
+        "owner_access": owner,
+        "access_type": "owner" if owner else "subscription",
     })
 
 
@@ -1392,7 +1546,9 @@ def student_subscription_status():
 @require_auth
 def get_current_user():
     user = g.current_user
-    sync_student_subscription_status(user)
+    owner = is_owner_account(user)
+    if not owner:
+        sync_student_subscription_status(user)
     payload = {
         "success": True,
         "user_id": user.id,
@@ -1403,8 +1559,10 @@ def get_current_user():
         "profile_image_url": get_image_url(user.profile_image),
         "account_status": user.account_status,
         "school_id": user.school_id,
+        "is_owner": owner,
+        "owner_access": owner,
     }
-    if user.role == "student":
+    if user.role == "student" or owner:
         hours_left = subscription_hours_until_expiry(user)
         payload.update({
             "subscription_plan": user.subscription_plan,
@@ -1414,6 +1572,72 @@ def get_current_user():
             "subscription_active": subscription_is_active(user),
         })
     return jsonify(payload)
+
+
+@app.route("/api/owner/status", methods=["GET"])
+@require_auth
+def owner_status():
+    user = g.current_user
+    owner = is_owner_account(user)
+    eligible = (user.email or "").strip().lower() == OWNER_EMAIL
+    return jsonify({
+        "success": True,
+        "owner_access": owner,
+        "is_owner": owner,
+        "eligible": eligible,
+        "email": user.email,
+    })
+
+
+@app.route("/api/owner/activate", methods=["POST"])
+@require_auth
+def owner_activate():
+    user = g.current_user
+    if (user.email or "").strip().lower() != OWNER_EMAIL:
+        # Do not reveal owner eligibility details for other accounts.
+        return api_error("Not authorized.", 403, "forbidden")
+    if is_owner_account(user):
+        return jsonify({"success": True, "owner_access": True, "is_owner": True, "message": "Owner access is already active."})
+    data = json_body()
+    pin = data.get("pin") or data.get("ownerPin") or data.get("owner_pin")
+    if not isinstance(pin, str) or not pin.strip():
+        return api_error("Owner access PIN is required.", 400, "pin_required")
+    pin = pin.strip()
+    pin_hash = os.environ.get("OWNER_ACCESS_PIN_HASH", "").strip()
+    if not pin_hash:
+        return api_error("Owner access PIN is not configured.", 503, "owner_pin_not_configured")
+    key = f"{request.remote_addr or 'unknown'}:{user.id}"
+    if owner_pin_locked(key):
+        app.logger.warning("Owner PIN activation locked after repeated failures for user %s", user.id)
+        return api_error("Too many incorrect attempts. Please try again later.", 429, "owner_pin_locked")
+    try:
+        valid = check_password_hash(pin_hash, pin)
+    except Exception:
+        valid = False
+    if not valid:
+        register_owner_pin_failure(key)
+        app.logger.warning("Owner PIN activation failed for user %s", user.id)
+        return api_error("Invalid owner access PIN.", 403, "invalid_owner_pin")
+    clear_owner_pin_failures(key)
+    # Upgrade the existing owner account in place; never change password or create duplicates.
+    user.role = "owner"
+    user.is_owner = True
+    user.account_status = "active"
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        app.logger.exception("Could not activate owner access for user %s", user.id)
+        return api_error("Could not activate owner access. Please try again.", 500, "owner_activation_failed")
+    app.logger.info("Owner access activated for configured owner account (user %s)", user.id)
+    return jsonify({
+        "success": True,
+        "owner_access": True,
+        "is_owner": True,
+        "role": user.role,
+        "account_status": user.account_status,
+        "message": "Owner access activated.",
+    })
 
 
 @app.route("/api/logout", methods=["POST"])
@@ -2368,6 +2592,13 @@ def set_school_user_role_command():
     user = db.session.get(User, user_id)
     if not user:
         raise click.ClickException("User not found.")
+    if role == "owner":
+        if (user.email or "").strip().lower() != OWNER_EMAIL:
+            raise click.ClickException("Owner role may only be assigned to the configured owner account.")
+        user.is_owner = True
+        user.account_status = "active"
+    elif is_owner_account(user):
+        raise click.ClickException("Owner privileges cannot be removed or reassigned through this command.")
     user.role = role
     db.session.commit()
     click.echo(f"Set account {user.id} to {role} in school {user.school_id}.")
@@ -2535,6 +2766,11 @@ def is_valid_question_image_url(value):
     except Exception:
         return False
     return False
+
+
+# Best-effort owner access provisioning (runs after models/helpers are defined).
+with app.app_context():
+    ensure_owner_access()
 
 
 def study_question_to_dict(q, include_answer=True):
