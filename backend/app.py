@@ -166,18 +166,32 @@ def ensure_novel_schema():
             db.create_all()
             inspector = db.inspect(db.engine)
             existing = set(inspector.get_table_names())
-        def add_col(table, col, ddl):
-            if table in existing:
-                cols = {c["name"] for c in inspector.get_columns(table)}
-                if col not in cols:
-                    with db.engine.connect() as conn:
-                        conn.execute(db.text(ddl)); conn.commit()
-        add_col("novels", "pdf_enabled", "ALTER TABLE novels ADD COLUMN pdf_enabled BOOLEAN DEFAULT FALSE")
-        add_col("novels", "published", "ALTER TABLE novels ADD COLUMN published BOOLEAN DEFAULT FALSE")
-        add_col("novels", "download_size", "ALTER TABLE novels ADD COLUMN download_size INTEGER")
-        add_col("novels", "updated_at", "ALTER TABLE novels ADD COLUMN updated_at TIMESTAMP")
-        add_col("novel_chapters", "position", "ALTER TABLE novel_chapters ADD COLUMN position INTEGER DEFAULT 0")
-        add_col("novel_progress", "reading_position", "ALTER TABLE novel_progress ADD COLUMN reading_position INTEGER DEFAULT 0")
+        def add_col(table, col, ddl_sqlite, ddl_pg=None):
+            if table not in existing:
+                return
+            cols = {c["name"] for c in inspector.get_columns(table)}
+            if col in cols:
+                return
+            stmt = ddl_pg or ddl_sqlite
+            try:
+                with db.engine.begin() as conn:
+                    conn.execute(db.text(stmt))
+            except Exception:
+                try:
+                    with db.engine.begin() as conn:
+                        conn.execute(db.text(ddl_sqlite))
+                except Exception:
+                    app.logger.exception("Could not add %s.%s; continuing.", table, col)
+        add_col("novels", "pdf_enabled", "ALTER TABLE novels ADD COLUMN pdf_enabled BOOLEAN DEFAULT 0", "ALTER TABLE novels ADD COLUMN IF NOT EXISTS pdf_enabled BOOLEAN DEFAULT FALSE")
+        add_col("novels", "published", "ALTER TABLE novels ADD COLUMN published BOOLEAN DEFAULT 0", "ALTER TABLE novels ADD COLUMN IF NOT EXISTS published BOOLEAN DEFAULT FALSE")
+        add_col("novels", "download_size", "ALTER TABLE novels ADD COLUMN download_size INTEGER", "ALTER TABLE novels ADD COLUMN IF NOT EXISTS download_size INTEGER")
+        add_col("novels", "updated_at", "ALTER TABLE novels ADD COLUMN updated_at TIMESTAMP", "ALTER TABLE novels ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP")
+        add_col("novels", "school_id", "ALTER TABLE novels ADD COLUMN school_id INTEGER", "ALTER TABLE novels ADD COLUMN IF NOT EXISTS school_id INTEGER")
+        add_col("novels", "cover_path", "ALTER TABLE novels ADD COLUMN cover_path VARCHAR(1000)", "ALTER TABLE novels ADD COLUMN IF NOT EXISTS cover_path VARCHAR(1000)")
+        add_col("novels", "pdf_path", "ALTER TABLE novels ADD COLUMN pdf_path VARCHAR(1000)", "ALTER TABLE novels ADD COLUMN IF NOT EXISTS pdf_path VARCHAR(1000)")
+        add_col("novel_chapters", "position", "ALTER TABLE novel_chapters ADD COLUMN position INTEGER DEFAULT 0", "ALTER TABLE novel_chapters ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0")
+        add_col("novel_progress", "reading_position", "ALTER TABLE novel_progress ADD COLUMN reading_position INTEGER DEFAULT 0", "ALTER TABLE novel_progress ADD COLUMN IF NOT EXISTS reading_position INTEGER DEFAULT 0")
+        add_col("novel_progress", "chapter_id", "ALTER TABLE novel_progress ADD COLUMN chapter_id INTEGER", "ALTER TABLE novel_progress ADD COLUMN IF NOT EXISTS chapter_id INTEGER")
     except Exception:
         app.logger.exception("Could not verify novel schema at startup; continuing.")
 
@@ -530,41 +544,68 @@ def novel_question_to_dict(q):
         "subject": "Novel",
     }
 
+def novel_accessible_to_user(novel, user):
+    if not novel or not getattr(novel, "published", False):
+        return False
+    school_id = getattr(novel, "school_id", None)
+    user_school = getattr(user, "school_id", None)
+    return school_id is None or (user_school is not None and school_id == user_school)
+
 def novel_to_dict(novel, include_chapters=False, include_questions=False, progress=None):
-    chapters = NovelChapter.query.filter_by(novel_id=novel.id).order_by(NovelChapter.position.asc(), NovelChapter.id.asc()).all()
-    questions_count = NovelQuestion.query.filter_by(novel_id=novel.id).count()
-    completed = (progress.completed_chapters if progress and isinstance(progress.completed_chapters, list) else []) or []
+    try:
+        chapters = NovelChapter.query.filter_by(novel_id=novel.id).order_by(NovelChapter.position.asc(), NovelChapter.id.asc()).all()
+    except Exception:
+        chapters = []
+    try:
+        questions_count = NovelQuestion.query.filter_by(novel_id=novel.id).count()
+    except Exception:
+        questions_count = 0
+    raw_completed = (progress.completed_chapters if progress and isinstance(getattr(progress, "completed_chapters", None), list) else []) or []
+    completed = []
+    for x in raw_completed:
+        try:
+            completed.append(int(x))
+        except Exception:
+            pass
     total_ch = len(chapters)
-    pct = int(round((len(set(completed)) / total_ch) * 100)) if total_ch else 0
+    completed_set = {c for c in completed if any(ch.id == c for ch in chapters)} if chapters else set(completed)
+    pct = int(round((len(completed_set) / total_ch) * 100)) if total_ch else 0
+    cover_path = getattr(novel, "cover_path", None)
+    pdf_path = getattr(novel, "pdf_path", None)
+    pdf_enabled = bool(getattr(novel, "pdf_enabled", False) and pdf_path)
+    updated = getattr(novel, "updated_at", None) or getattr(novel, "created_at", None)
     data = {
         "id": novel.id,
-        "title": novel.title,
-        "author": novel.author or "",
-        "description": novel.description or "",
-        "category": novel.category or "",
-        "coverUrl": get_image_url(novel.cover_path),
-        "pdfUrl": get_image_url(novel.pdf_path) if (novel.pdf_path and novel.pdf_enabled) else None,
-        "hasPdf": bool(novel.pdf_path),
-        "pdfEnabled": bool(novel.pdf_enabled and novel.pdf_path),
-        "published": bool(novel.published),
+        "title": getattr(novel, "title", "") or "",
+        "author": getattr(novel, "author", "") or "",
+        "description": getattr(novel, "description", "") or "",
+        "category": (getattr(novel, "category", "") or "").upper() or "JAMB",
+        "coverUrl": get_image_url(cover_path),
+        "pdfUrl": get_image_url(pdf_path) if pdf_enabled else None,
+        "hasPdf": bool(pdf_path),
+        "pdfEnabled": pdf_enabled,
+        "published": bool(getattr(novel, "published", False)),
         "chapterCount": total_ch,
         "questionCount": questions_count,
-        "downloadSize": novel.download_size,
-        "updatedAt": iso_utc(novel.updated_at or novel.created_at),
+        "downloadSize": getattr(novel, "download_size", None),
+        "updatedAt": iso_utc(updated) if updated else None,
         "progress": {
-            "chapterId": progress.chapter_id if progress else None,
-            "readingPosition": progress.reading_position if progress else 0,
-            "completedChapters": completed,
-            "bookmarks": (progress.bookmarks if progress and isinstance(progress.bookmarks, list) else []) or [],
+            "chapterId": getattr(progress, "chapter_id", None) if progress else None,
+            "readingPosition": max(0, int(getattr(progress, "reading_position", 0) or 0)) if progress else 0,
+            "completedChapters": list(completed_set),
+            "bookmarks": (getattr(progress, "bookmarks", None) if progress and isinstance(getattr(progress, "bookmarks", None), list) else []) or [],
             "percent": pct,
-            "lastReadAt": iso_utc(progress.last_read_at) if progress and progress.last_read_at else None,
+            "lastReadAt": iso_utc(getattr(progress, "last_read_at", None)) if progress and getattr(progress, "last_read_at", None) else None,
         } if progress is not None else None,
     }
     if include_chapters:
-        data["chapters"] = [{"id": c.id, "novelId": c.novel_id, "title": c.title, "content": c.content or "", "position": c.position, "updatedAt": iso_utc(c.updated_at)} for c in chapters]
+        data["chapters"] = [{"id": c.id, "novelId": c.novel_id, "title": getattr(c, "title", "") or "", "content": getattr(c, "content", "") or "", "position": getattr(c, "position", 0) or 0, "updatedAt": iso_utc(getattr(c, "updated_at", None)) if getattr(c, "updated_at", None) else None} for c in chapters]
     if include_questions:
-        qs = NovelQuestion.query.filter_by(novel_id=novel.id).order_by(NovelQuestion.id.asc()).all()
-        data["questions"] = [novel_question_to_dict(q) for q in qs]
+        try:
+            qs = NovelQuestion.query.filter_by(novel_id=novel.id).order_by(NovelQuestion.id.asc()).all()
+            data["questions"] = [novel_question_to_dict(q) for q in qs]
+        except Exception:
+            data["questions"] = []
     return data
 
 
@@ -3459,6 +3500,14 @@ def study_questions():
 
 # ---------------- Novel management & reading/practice APIs ----------------
 
+def _novel_manageable(novel, user):
+    if not novel or not user:
+        return False
+    school_id = getattr(user, "school_id", None)
+    if school_id is None:
+        return True
+    return novel.school_id is None or novel.school_id == school_id
+
 def _novel_category(value):
     v = normalize_label(value).upper()
     if v in {"JAMB", "WAEC", "NECO"}:
@@ -3503,294 +3552,522 @@ def _novel_payload(source, existing=None):
 @app.route("/api/admin/novels", methods=["GET"])
 @roles_required("school_admin", "exam_officer", "teacher")
 def admin_novels_list():
-    rows = Novel.query.order_by(Novel.updated_at.desc().nullslast(), Novel.id.desc()).all()
-    return jsonify({"novels": [novel_to_dict(n, include_chapters=True, include_questions=False, progress=None) for n in rows]})
+    try:
+        ensure_novel_schema()
+        q = Novel.query
+        school_id = getattr(g.current_user, "school_id", None)
+        if school_id is not None:
+            q = q.filter(or_(Novel.school_id == school_id, Novel.school_id.is_(None)))
+        try:
+            rows = q.order_by(Novel.updated_at.desc().nullslast(), Novel.id.desc()).all()
+        except Exception:
+            rows = q.order_by(Novel.id.desc()).all()
+        return jsonify({"novels": [novel_to_dict(n, include_chapters=True, include_questions=False, progress=None) for n in rows]})
+    except Exception:
+        app.logger.exception("Failed to load admin novels")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not load novels at this time.", 500)
 
 @app.route("/api/admin/novels", methods=["POST"])
 @roles_required("school_admin", "exam_officer")
 def admin_novel_create():
-    data = request.form.to_dict() if request.form else (json_body() or {})
-    payload, err = _novel_payload(data)
-    if err:
-        return api_error(err)
-    novel = Novel(school_id=g.current_user.school_id, **payload)
-    db.session.add(novel); db.session.flush()
-    cover = request.files.get("cover")
-    if cover and cover.filename:
-        path, e = store_novel_file(cover, "novel_covers", "examcore/novel_covers", NOVEL_COVER_FOLDER, NOVEL_IMAGE_EXTENSIONS, "cover image", max_bytes=MAX_NOVEL_COVER_BYTES)
-        if e: db.session.rollback(); return api_error(e, 503 if "unavailable" in e else 400)
-        novel.cover_path = path
-    pdf = request.files.get("pdf")
-    if pdf and pdf.filename:
-        path, e = store_novel_file(pdf, "novel_pdfs", "examcore/novel_pdfs", NOVEL_PDF_FOLDER, NOVEL_PDF_EXTENSIONS, "PDF", max_bytes=MAX_NOVEL_PDF_BYTES)
-        if e: db.session.rollback(); return api_error(e, 503 if "unavailable" in e else 400)
-        novel.pdf_path = path
-        if novel.download_size is None:
-            try:
-                pdf.seek(0, os.SEEK_END); novel.download_size = pdf.tell()
-            except Exception:
-                pass
-    db.session.commit()
-    return jsonify(success=True, novel=novel_to_dict(novel, include_chapters=True)), 201
+    try:
+        ensure_novel_schema()
+        data = request.form.to_dict() if request.form else (json_body() or {})
+        payload, err = _novel_payload(data)
+        if err:
+            return api_error(err)
+        novel = Novel(school_id=getattr(g.current_user, "school_id", None), **payload)
+        db.session.add(novel); db.session.flush()
+        cover = request.files.get("cover")
+        if cover and cover.filename:
+            path, e = store_novel_file(cover, "novel_covers", "examcore/novel_covers", NOVEL_COVER_FOLDER, NOVEL_IMAGE_EXTENSIONS, "cover image", max_bytes=MAX_NOVEL_COVER_BYTES)
+            if e: db.session.rollback(); return api_error(e, 503 if "unavailable" in e else 400)
+            novel.cover_path = path
+        pdf = request.files.get("pdf")
+        if pdf and pdf.filename:
+            path, e = store_novel_file(pdf, "novel_pdfs", "examcore/novel_pdfs", NOVEL_PDF_FOLDER, NOVEL_PDF_EXTENSIONS, "PDF", max_bytes=MAX_NOVEL_PDF_BYTES)
+            if e: db.session.rollback(); return api_error(e, 503 if "unavailable" in e else 400)
+            novel.pdf_path = path
+            if novel.download_size is None:
+                try:
+                    pdf.seek(0, os.SEEK_END); novel.download_size = pdf.tell()
+                except Exception:
+                    pass
+        db.session.commit()
+        return jsonify(success=True, novel=novel_to_dict(novel, include_chapters=True)), 201
+    except SQLAlchemyError:
+        app.logger.exception("Failed to create novel")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not save novel at this time.", 500)
+    except Exception:
+        app.logger.exception("Unexpected error creating novel")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not save novel at this time.", 500)
 
 @app.route("/api/admin/novels/<int:novel_id>", methods=["PUT"])
 @roles_required("school_admin", "exam_officer")
 def admin_novel_update(novel_id):
-    novel = db.session.get(Novel, novel_id)
-    if not novel:
-        return api_error("Novel not found.", 404, "novel_not_found")
-    data = request.form.to_dict() if request.form else (json_body() or {})
-    payload, err = _novel_payload(data, existing=novel)
-    if err:
-        return api_error(err)
-    for k, v in payload.items():
-        setattr(novel, k, v)
-    if str(data.get("removeCover", "")).lower() == "true" and novel.cover_path:
-        remove_stored_file(novel.cover_path); novel.cover_path = None
-    if str(data.get("removePdf", "")).lower() == "true" and novel.pdf_path:
-        remove_stored_file(novel.pdf_path); novel.pdf_path = None
-    cover = request.files.get("cover")
-    if cover and cover.filename:
-        path, e = store_novel_file(cover, "novel_covers", "examcore/novel_covers", NOVEL_COVER_FOLDER, NOVEL_IMAGE_EXTENSIONS, "cover image", max_bytes=MAX_NOVEL_COVER_BYTES)
-        if e: return api_error(e, 503 if "unavailable" in e else 400)
-        if novel.cover_path: remove_stored_file(novel.cover_path)
-        novel.cover_path = path
-    pdf = request.files.get("pdf")
-    if pdf and pdf.filename:
-        path, e = store_novel_file(pdf, "novel_pdfs", "examcore/novel_pdfs", NOVEL_PDF_FOLDER, NOVEL_PDF_EXTENSIONS, "PDF", max_bytes=MAX_NOVEL_PDF_BYTES)
-        if e: return api_error(e, 503 if "unavailable" in e else 400)
-        if novel.pdf_path: remove_stored_file(novel.pdf_path)
-        novel.pdf_path = path
+    try:
+        ensure_novel_schema()
+        novel = db.session.get(Novel, novel_id)
+        if not novel or not _novel_manageable(novel, g.current_user):
+            return api_error("Novel not found.", 404, "novel_not_found")
+        data = request.form.to_dict() if request.form else (json_body() or {})
+        payload, err = _novel_payload(data, existing=novel)
+        if err:
+            return api_error(err)
+        for k, v in payload.items():
+            setattr(novel, k, v)
+        if str(data.get("removeCover", "")).lower() == "true" and novel.cover_path:
+            remove_stored_file(novel.cover_path); novel.cover_path = None
+        if str(data.get("removePdf", "")).lower() == "true" and novel.pdf_path:
+            remove_stored_file(novel.pdf_path); novel.pdf_path = None
+        cover = request.files.get("cover")
+        if cover and cover.filename:
+            path, e = store_novel_file(cover, "novel_covers", "examcore/novel_covers", NOVEL_COVER_FOLDER, NOVEL_IMAGE_EXTENSIONS, "cover image", max_bytes=MAX_NOVEL_COVER_BYTES)
+            if e: db.session.rollback(); return api_error(e, 503 if "unavailable" in e else 400)
+            if novel.cover_path: remove_stored_file(novel.cover_path)
+            novel.cover_path = path
+        pdf = request.files.get("pdf")
+        if pdf and pdf.filename:
+            path, e = store_novel_file(pdf, "novel_pdfs", "examcore/novel_pdfs", NOVEL_PDF_FOLDER, NOVEL_PDF_EXTENSIONS, "PDF", max_bytes=MAX_NOVEL_PDF_BYTES)
+            if e: db.session.rollback(); return api_error(e, 503 if "unavailable" in e else 400)
+            if novel.pdf_path: remove_stored_file(novel.pdf_path)
+            novel.pdf_path = path
+            try:
+                pdf.seek(0, os.SEEK_END); novel.download_size = pdf.tell()
+            except Exception:
+                pass
+        novel.updated_at = utcnow()
+        db.session.commit()
+        return jsonify(success=True, novel=novel_to_dict(novel, include_chapters=True))
+    except SQLAlchemyError:
+        app.logger.exception("Failed to update novel %s", novel_id)
         try:
-            pdf.seek(0, os.SEEK_END); novel.download_size = pdf.tell()
+            db.session.rollback()
         except Exception:
             pass
-    novel.updated_at = utcnow()
-    db.session.commit()
-    return jsonify(success=True, novel=novel_to_dict(novel, include_chapters=True))
+        return api_error("Could not save novel at this time.", 500)
+    except Exception:
+        app.logger.exception("Unexpected error updating novel %s", novel_id)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not save novel at this time.", 500)
 
 @app.route("/api/admin/novels/<int:novel_id>", methods=["DELETE"])
 @roles_required("school_admin", "exam_officer")
 def admin_novel_delete(novel_id):
-    novel = db.session.get(Novel, novel_id)
-    if not novel:
-        return api_error("Novel not found.", 404, "novel_not_found")
-    if novel.cover_path: remove_stored_file(novel.cover_path)
-    if novel.pdf_path: remove_stored_file(novel.pdf_path)
-    for q in NovelQuestion.query.filter_by(novel_id=novel.id).all():
-        if q.image_path: remove_stored_file(q.image_path)
-    NovelChapter.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
-    NovelQuestion.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
-    NovelProgress.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
-    NovelAttempt.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
-    db.session.delete(novel); db.session.commit()
-    return jsonify(success=True)
+    try:
+        ensure_novel_schema()
+        novel = db.session.get(Novel, novel_id)
+        if not novel or not _novel_manageable(novel, g.current_user):
+            return api_error("Novel not found.", 404, "novel_not_found")
+        if novel.cover_path: remove_stored_file(novel.cover_path)
+        if novel.pdf_path: remove_stored_file(novel.pdf_path)
+        for q in NovelQuestion.query.filter_by(novel_id=novel.id).all():
+            if q.image_path: remove_stored_file(q.image_path)
+        NovelChapter.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
+        NovelQuestion.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
+        NovelProgress.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
+        NovelAttempt.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
+        db.session.delete(novel); db.session.commit()
+        return jsonify(success=True)
+    except SQLAlchemyError:
+        app.logger.exception("Failed to delete novel %s", novel_id)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not delete novel at this time.", 500)
+    except Exception:
+        app.logger.exception("Unexpected error deleting novel %s", novel_id)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not delete novel at this time.", 500)
 
 @app.route("/api/admin/novels/<int:novel_id>/chapters", methods=["POST"])
 @roles_required("school_admin", "exam_officer")
 def admin_novel_add_chapter(novel_id):
-    novel = db.session.get(Novel, novel_id)
-    if not novel: return api_error("Novel not found.", 404)
-    data = json_body()
-    title = normalize_label(data.get("title"))
-    content = (data.get("content") or "")
-    if not title: return api_error("Chapter title is required.")
-    pos = NovelChapter.query.filter_by(novel_id=novel.id).count()
-    ch = NovelChapter(novel_id=novel.id, title=title[:255], content=content, position=pos)
-    db.session.add(ch); novel.updated_at = utcnow(); db.session.commit()
-    return jsonify(success=True, chapter={"id": ch.id, "novelId": ch.novel_id, "title": ch.title, "content": ch.content, "position": ch.position})
+    try:
+        ensure_novel_schema()
+        novel = db.session.get(Novel, novel_id)
+        if not novel or not _novel_manageable(novel, g.current_user):
+            return api_error("Novel not found.", 404)
+        data = json_body()
+        title = normalize_label(data.get("title"))
+        content = (data.get("content") or "")
+        if not title:
+            return api_error("Chapter title is required.")
+        pos = NovelChapter.query.filter_by(novel_id=novel.id).count()
+        ch = NovelChapter(novel_id=novel.id, title=title[:255], content=content, position=pos)
+        db.session.add(ch); novel.updated_at = utcnow(); db.session.commit()
+        return jsonify(success=True, chapter={"id": ch.id, "novelId": ch.novel_id, "title": ch.title, "content": ch.content, "position": ch.position})
+    except SQLAlchemyError:
+        app.logger.exception("Failed to add chapter for novel %s", novel_id)
+        try: db.session.rollback()
+        except Exception: pass
+        return api_error("Could not save chapter at this time.", 500)
+    except Exception:
+        app.logger.exception("Unexpected error adding chapter for novel %s", novel_id)
+        try: db.session.rollback()
+        except Exception: pass
+        return api_error("Could not save chapter at this time.", 500)
 
 @app.route("/api/admin/novels/<int:novel_id>/chapters/<int:chapter_id>", methods=["PUT", "DELETE"])
 @roles_required("school_admin", "exam_officer")
 def admin_novel_manage_chapter(novel_id, chapter_id):
-    ch = NovelChapter.query.filter_by(id=chapter_id, novel_id=novel_id).first()
-    if not ch: return api_error("Chapter not found.", 404)
-    novel = db.session.get(Novel, novel_id)
-    if request.method == "DELETE":
-        db.session.delete(ch)
-        remaining = NovelChapter.query.filter_by(novel_id=novel_id).order_by(NovelChapter.position.asc(), NovelChapter.id.asc()).all()
-        for i, c in enumerate(remaining): c.position = i
-        if novel: novel.updated_at = utcnow()
-        db.session.commit(); return jsonify(success=True)
-    data = json_body()
-    if "title" in data: ch.title = normalize_label(data.get("title"))[:255] or ch.title
-    if "content" in data: ch.content = data.get("content") or ""
-    if novel: novel.updated_at = utcnow()
-    db.session.commit()
-    return jsonify(success=True, chapter={"id": ch.id, "novelId": ch.novel_id, "title": ch.title, "content": ch.content, "position": ch.position})
+    try:
+        ensure_novel_schema()
+        novel = db.session.get(Novel, novel_id)
+        if not novel or not _novel_manageable(novel, g.current_user):
+            return api_error("Novel not found.", 404)
+        ch = NovelChapter.query.filter_by(id=chapter_id, novel_id=novel_id).first()
+        if not ch:
+            return api_error("Chapter not found.", 404)
+        if request.method == "DELETE":
+            db.session.delete(ch)
+            remaining = NovelChapter.query.filter_by(novel_id=novel_id).order_by(NovelChapter.position.asc(), NovelChapter.id.asc()).all()
+            for i, c in enumerate(remaining): c.position = i
+            novel.updated_at = utcnow()
+            db.session.commit(); return jsonify(success=True)
+        data = json_body()
+        if "title" in data: ch.title = normalize_label(data.get("title"))[:255] or ch.title
+        if "content" in data: ch.content = data.get("content") or ""
+        if "position" in data:
+            try: ch.position = max(0, int(data.get("position")))
+            except Exception: pass
+        novel.updated_at = utcnow()
+        db.session.commit()
+        return jsonify(success=True, chapter={"id": ch.id, "novelId": ch.novel_id, "title": ch.title, "content": ch.content, "position": ch.position})
+    except SQLAlchemyError:
+        app.logger.exception("Failed to manage chapter %s for novel %s", chapter_id, novel_id)
+        try: db.session.rollback()
+        except Exception: pass
+        return api_error("Could not save chapter at this time.", 500)
+    except Exception:
+        app.logger.exception("Unexpected error managing chapter %s for novel %s", chapter_id, novel_id)
+        try: db.session.rollback()
+        except Exception: pass
+        return api_error("Could not save chapter at this time.", 500)
 
 @app.route("/api/admin/novels/<int:novel_id>/chapters/reorder", methods=["POST"])
 @roles_required("school_admin", "exam_officer")
 def admin_novel_reorder_chapters(novel_id):
-    novel = db.session.get(Novel, novel_id)
-    if not novel: return api_error("Novel not found.", 404)
-    order = (json_body() or {}).get("order") or []
-    if not isinstance(order, list): return api_error("order must be a list of chapter IDs.")
-    chapters = {c.id: c for c in NovelChapter.query.filter_by(novel_id=novel_id).all()}
-    for i, cid in enumerate(order):
-        try: cid = int(cid)
-        except Exception: continue
-        if cid in chapters: chapters[cid].position = i
-    novel.updated_at = utcnow(); db.session.commit(); return jsonify(success=True)
+    try:
+        ensure_novel_schema()
+        novel = db.session.get(Novel, novel_id)
+        if not novel or not _novel_manageable(novel, g.current_user):
+            return api_error("Novel not found.", 404)
+        order = (json_body() or {}).get("order") or []
+        if not isinstance(order, list):
+            return api_error("order must be a list of chapter IDs.")
+        chapters = {c.id: c for c in NovelChapter.query.filter_by(novel_id=novel_id).all()}
+        for i, cid in enumerate(order):
+            try: cid = int(cid)
+            except Exception: continue
+            if cid in chapters: chapters[cid].position = i
+        novel.updated_at = utcnow(); db.session.commit(); return jsonify(success=True)
+    except SQLAlchemyError:
+        app.logger.exception("Failed to reorder chapters for novel %s", novel_id)
+        try: db.session.rollback()
+        except Exception: pass
+        return api_error("Could not reorder chapters at this time.", 500)
+    except Exception:
+        app.logger.exception("Unexpected error reordering chapters for novel %s", novel_id)
+        try: db.session.rollback()
+        except Exception: pass
+        return api_error("Could not reorder chapters at this time.", 500)
 
 @app.route("/api/admin/novels/<int:novel_id>/questions", methods=["GET", "POST"])
 @roles_required("school_admin", "exam_officer")
 def admin_novel_questions(novel_id):
-    novel = db.session.get(Novel, novel_id)
-    if not novel: return api_error("Novel not found.", 404)
-    if request.method == "GET":
-        qs = NovelQuestion.query.filter_by(novel_id=novel_id).order_by(NovelQuestion.id.asc()).all()
-        return jsonify({"questions": [novel_question_to_dict(q) for q in qs]})
-    data = request.form.to_dict() if request.form else (json_body() or {})
-    question = (data.get("question") or "").strip()
-    options = data.get("options")
-    if isinstance(options, str):
-        try: options = json.loads(options)
-        except Exception: options = None
-    if isinstance(options, list):
-        options = {"A": options[0] if len(options)>0 else "", "B": options[1] if len(options)>1 else "", "C": options[2] if len(options)>2 else "", "D": options[3] if len(options)>3 else ""}
-    answer = str(data.get("correctAnswer") or data.get("answer") or "A").strip().upper()
-    if not question or not isinstance(options, dict) or answer not in "ABCD":
-        return api_error("question, options(A-D), and correctAnswer are required.")
-    if not all(str(options.get(k,"")).strip() for k in "ABCD"):
-        return api_error("All options A-D are required.")
-    image_path = None
-    img = request.files.get("image")
-    if img and img.filename:
-        path, e = store_question_image(img)
-        if e: return api_error(e, 503 if "unavailable" in e else 400)
-        image_path = path
-    q = NovelQuestion(novel_id=novel.id, question=question, options={k: str(options[k]).strip() for k in "ABCD"}, answer=answer, explanation=(data.get("explanation") or "").strip() or None, image_path=image_path, topic=normalize_label(data.get("topic")) or None)
-    db.session.add(q); novel.updated_at = utcnow(); db.session.commit()
-    return jsonify(success=True, question=novel_question_to_dict(q)), 201
+    try:
+        ensure_novel_schema()
+        novel = db.session.get(Novel, novel_id)
+        if not novel or not _novel_manageable(novel, g.current_user):
+            return api_error("Novel not found.", 404)
+        if request.method == "GET":
+            qs = NovelQuestion.query.filter_by(novel_id=novel_id).order_by(NovelQuestion.id.asc()).all()
+            return jsonify({"questions": [novel_question_to_dict(q) for q in qs]})
+        data = request.form.to_dict() if request.form else (json_body() or {})
+        question = (data.get("question") or "").strip()
+        options = data.get("options")
+        if isinstance(options, str):
+            try: options = json.loads(options)
+            except Exception: options = None
+        if isinstance(options, list):
+            options = {"A": options[0] if len(options)>0 else "", "B": options[1] if len(options)>1 else "", "C": options[2] if len(options)>2 else "", "D": options[3] if len(options)>3 else ""}
+        answer = str(data.get("correctAnswer") or data.get("answer") or "A").strip().upper()
+        if not question or not isinstance(options, dict) or answer not in "ABCD":
+            return api_error("question, options(A-D), and correctAnswer are required.")
+        if not all(str(options.get(k,"")).strip() for k in "ABCD"):
+            return api_error("All options A-D are required.")
+        image_path = None
+        img = request.files.get("image")
+        if img and img.filename:
+            path, e = store_question_image(img)
+            if e: return api_error(e, 503 if "unavailable" in e else 400)
+            image_path = path
+        q = NovelQuestion(novel_id=novel.id, question=question, options={k: str(options[k]).strip() for k in "ABCD"}, answer=answer, explanation=(data.get("explanation") or "").strip() or None, image_path=image_path, topic=normalize_label(data.get("topic")) or None)
+        db.session.add(q); novel.updated_at = utcnow(); db.session.commit()
+        return jsonify(success=True, question=novel_question_to_dict(q)), 201
+    except SQLAlchemyError:
+        app.logger.exception("Failed to manage novel questions for %s", novel_id)
+        try: db.session.rollback()
+        except Exception: pass
+        return api_error("Could not save novel question at this time.", 500)
+    except Exception:
+        app.logger.exception("Unexpected error managing novel questions for %s", novel_id)
+        try: db.session.rollback()
+        except Exception: pass
+        return api_error("Could not save novel question at this time.", 500)
 
 @app.route("/api/admin/novels/<int:novel_id>/questions/<int:question_id>", methods=["PUT", "DELETE"])
 @roles_required("school_admin", "exam_officer")
 def admin_novel_manage_question(novel_id, question_id):
-    q = NovelQuestion.query.filter_by(id=question_id, novel_id=novel_id).first()
-    if not q: return api_error("Question not found.", 404)
-    novel = db.session.get(Novel, novel_id)
-    if request.method == "DELETE":
-        if q.image_path: remove_stored_file(q.image_path)
-        db.session.delete(q)
-        if novel: novel.updated_at = utcnow()
-        db.session.commit(); return jsonify(success=True)
-    data = request.form.to_dict() if request.form else (json_body() or {})
-    if "question" in data: q.question = (data.get("question") or q.question).strip()
-    options = data.get("options")
-    if isinstance(options, str):
-        try: options = json.loads(options)
-        except Exception: options = None
-    if isinstance(options, list):
-        options = {"A": options[0] if len(options)>0 else "", "B": options[1] if len(options)>1 else "", "C": options[2] if len(options)>2 else "", "D": options[3] if len(options)>3 else ""}
-    if isinstance(options, dict) and all(str(options.get(k,"")).strip() for k in "ABCD"):
-        q.options = {k: str(options[k]).strip() for k in "ABCD"}
-    ans = str(data.get("correctAnswer") or data.get("answer") or q.answer or "A").strip().upper()
-    if ans in "ABCD": q.answer = ans
-    if "explanation" in data: q.explanation = (data.get("explanation") or "").strip() or None
-    if "topic" in data: q.topic = normalize_label(data.get("topic")) or None
-    img = request.files.get("image")
-    if img and img.filename:
-        path, e = store_question_image(img)
-        if e: return api_error(e, 503 if "unavailable" in e else 400)
-        if q.image_path: remove_stored_file(q.image_path)
-        q.image_path = path
-    if novel: novel.updated_at = utcnow()
-    db.session.commit()
-    return jsonify(success=True, question=novel_question_to_dict(q))
+    try:
+        ensure_novel_schema()
+        novel = db.session.get(Novel, novel_id)
+        if not novel or not _novel_manageable(novel, g.current_user):
+            return api_error("Novel not found.", 404)
+        q = NovelQuestion.query.filter_by(id=question_id, novel_id=novel_id).first()
+        if not q:
+            return api_error("Question not found.", 404)
+        if request.method == "DELETE":
+            if q.image_path: remove_stored_file(q.image_path)
+            db.session.delete(q)
+            novel.updated_at = utcnow()
+            db.session.commit(); return jsonify(success=True)
+        data = request.form.to_dict() if request.form else (json_body() or {})
+        if "question" in data: q.question = (data.get("question") or q.question).strip()
+        options = data.get("options")
+        if isinstance(options, str):
+            try: options = json.loads(options)
+            except Exception: options = None
+        if isinstance(options, list):
+            options = {"A": options[0] if len(options)>0 else "", "B": options[1] if len(options)>1 else "", "C": options[2] if len(options)>2 else "", "D": options[3] if len(options)>3 else ""}
+        if isinstance(options, dict) and all(str(options.get(k,"")).strip() for k in "ABCD"):
+            q.options = {k: str(options[k]).strip() for k in "ABCD"}
+        ans = str(data.get("correctAnswer") or data.get("answer") or q.answer or "A").strip().upper()
+        if ans in "ABCD": q.answer = ans
+        if "explanation" in data: q.explanation = (data.get("explanation") or "").strip() or None
+        if "topic" in data: q.topic = normalize_label(data.get("topic")) or None
+        img = request.files.get("image")
+        if img and img.filename:
+            path, e = store_question_image(img)
+            if e: return api_error(e, 503 if "unavailable" in e else 400)
+            if q.image_path: remove_stored_file(q.image_path)
+            q.image_path = path
+        novel.updated_at = utcnow()
+        db.session.commit()
+        return jsonify(success=True, question=novel_question_to_dict(q))
+    except SQLAlchemyError:
+        app.logger.exception("Failed to manage novel question %s for %s", question_id, novel_id)
+        try: db.session.rollback()
+        except Exception: pass
+        return api_error("Could not save novel question at this time.", 500)
+    except Exception:
+        app.logger.exception("Unexpected error managing novel question %s for %s", question_id, novel_id)
+        try: db.session.rollback()
+        except Exception: pass
+        return api_error("Could not save novel question at this time.", 500)
 
 # Student novel APIs
 @app.route("/api/novels", methods=["GET"])
 @require_auth
 def student_novels_list():
-    school_id = g.current_user.school_id
-    q = Novel.query.filter_by(published=True)
-    q = q.filter(or_(Novel.school_id == school_id, Novel.school_id.is_(None)))
-    rows = q.order_by(Novel.updated_at.desc().nullslast(), Novel.id.desc()).all()
-    result = []
-    for n in rows:
-        prog = NovelProgress.query.filter_by(user_id=g.current_user.id, novel_id=n.id).first()
-        result.append(novel_to_dict(n, include_chapters=False, include_questions=False, progress=prog))
-    return jsonify({"novels": result})
+    try:
+        ensure_novel_schema()
+        school_id = getattr(g.current_user, "school_id", None)
+        q = Novel.query.filter_by(published=True)
+        if school_id is not None:
+            q = q.filter(or_(Novel.school_id == school_id, Novel.school_id.is_(None)))
+        else:
+            q = q.filter(Novel.school_id.is_(None))
+        try:
+            rows = q.order_by(Novel.updated_at.desc().nullslast(), Novel.id.desc()).all()
+        except Exception:
+            rows = q.order_by(Novel.id.desc()).all()
+        result = []
+        for n in rows:
+            try:
+                prog = NovelProgress.query.filter_by(user_id=g.current_user.id, novel_id=n.id).first()
+            except Exception:
+                prog = None
+            result.append(novel_to_dict(n, include_chapters=False, include_questions=False, progress=prog))
+        return jsonify({"novels": result})
+    except SQLAlchemyError:
+        app.logger.exception("Failed to load novels")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not load novels at this time.", 503, "novels_unavailable")
+    except Exception:
+        app.logger.exception("Unexpected error loading novels")
+        return api_error("Could not load novels at this time.", 500, "novels_error")
 
 @app.route("/api/novels/<int:novel_id>", methods=["GET"])
 @require_auth
 def student_novel_detail(novel_id):
-    novel = db.session.get(Novel, novel_id)
-    if not novel or not novel.published:
-        return api_error("Novel not found.", 404)
-    prog = NovelProgress.query.filter_by(user_id=g.current_user.id, novel_id=novel.id).first()
-    return jsonify(novel_to_dict(novel, include_chapters=True, include_questions=False, progress=prog))
+    try:
+        ensure_novel_schema()
+        novel = db.session.get(Novel, novel_id)
+        if not novel_accessible_to_user(novel, g.current_user):
+            return api_error("Novel not found.", 404)
+        prog = NovelProgress.query.filter_by(user_id=g.current_user.id, novel_id=novel.id).first()
+        return jsonify(novel_to_dict(novel, include_chapters=True, include_questions=False, progress=prog))
+    except SQLAlchemyError:
+        app.logger.exception("Failed to load novel %s", novel_id)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not load this novel at this time.", 503)
+    except Exception:
+        app.logger.exception("Unexpected error loading novel %s", novel_id)
+        return api_error("Could not load this novel at this time.", 500)
 
 @app.route("/api/novels/<int:novel_id>/questions", methods=["GET"])
 @require_auth
 def student_novel_questions(novel_id):
-    novel = db.session.get(Novel, novel_id)
-    if not novel or not novel.published:
-        return api_error("Novel not found.", 404)
-    qs = NovelQuestion.query.filter_by(novel_id=novel.id).order_by(NovelQuestion.id.asc()).all()
-    return jsonify({"questions": [novel_question_to_dict(q) for q in qs]})
+    try:
+        ensure_novel_schema()
+        novel = db.session.get(Novel, novel_id)
+        if not novel_accessible_to_user(novel, g.current_user):
+            return api_error("Novel not found.", 404)
+        qs = NovelQuestion.query.filter_by(novel_id=novel.id).order_by(NovelQuestion.id.asc()).all()
+        return jsonify({"questions": [novel_question_to_dict(q) for q in qs]})
+    except SQLAlchemyError:
+        app.logger.exception("Failed to load novel questions for %s", novel_id)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not load novel questions at this time.", 503)
+    except Exception:
+        app.logger.exception("Unexpected error loading novel questions for %s", novel_id)
+        return api_error("Could not load novel questions at this time.", 500)
 
 @app.route("/api/novels/<int:novel_id>/progress", methods=["GET", "POST"])
 @require_auth
 def student_novel_progress(novel_id):
-    novel = db.session.get(Novel, novel_id)
-    if not novel or not novel.published:
-        return api_error("Novel not found.", 404)
-    prog = NovelProgress.query.filter_by(user_id=g.current_user.id, novel_id=novel.id).first()
-    if request.method == "GET":
-        return jsonify({"progress": novel_to_dict(novel, progress=prog)["progress"]})
-    data = json_body()
-    if not prog:
-        prog = NovelProgress(user_id=g.current_user.id, novel_id=novel.id)
-        db.session.add(prog)
-    if "chapterId" in data:
-        try: prog.chapter_id = int(data.get("chapterId")) if data.get("chapterId") is not None else None
-        except Exception: pass
-    if "readingPosition" in data:
-        try: prog.reading_position = max(0, int(data.get("readingPosition") or 0))
-        except Exception: pass
-    if "completedChapters" in data and isinstance(data.get("completedChapters"), list):
-        vals = []
-        for x in data.get("completedChapters"):
-            try: vals.append(int(x))
-            except Exception: pass
-        prog.completed_chapters = list(dict.fromkeys(vals))
-    if "bookmarks" in data and isinstance(data.get("bookmarks"), list):
-        prog.bookmarks = data.get("bookmarks")
-    prog.last_read_at = utcnow(); prog.updated_at = utcnow()
-    db.session.commit()
-    return jsonify(success=True, progress=novel_to_dict(novel, progress=prog)["progress"])
+    try:
+        ensure_novel_schema()
+        novel = db.session.get(Novel, novel_id)
+        if not novel_accessible_to_user(novel, g.current_user):
+            return api_error("Novel not found.", 404)
+        prog = NovelProgress.query.filter_by(user_id=g.current_user.id, novel_id=novel.id).first()
+        if request.method == "GET":
+            return jsonify({"progress": novel_to_dict(novel, progress=prog)["progress"]})
+        data = json_body()
+        if not prog:
+            prog = NovelProgress(user_id=g.current_user.id, novel_id=novel.id)
+            db.session.add(prog)
+        if "chapterId" in data:
+            try:
+                prog.chapter_id = int(data.get("chapterId")) if data.get("chapterId") is not None else None
+            except Exception:
+                pass
+        if "readingPosition" in data:
+            try:
+                prog.reading_position = max(0, int(data.get("readingPosition") or 0))
+            except Exception:
+                pass
+        if "completedChapters" in data and isinstance(data.get("completedChapters"), list):
+            vals = []
+            for x in data.get("completedChapters"):
+                try:
+                    vals.append(int(x))
+                except Exception:
+                    pass
+            prog.completed_chapters = list(dict.fromkeys(vals))
+        if "bookmarks" in data and isinstance(data.get("bookmarks"), list):
+            prog.bookmarks = data.get("bookmarks")
+        prog.last_read_at = utcnow(); prog.updated_at = utcnow()
+        db.session.commit()
+        return jsonify(success=True, progress=novel_to_dict(novel, progress=prog)["progress"])
+    except SQLAlchemyError:
+        app.logger.exception("Failed to save novel progress for %s", novel_id)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not save reading progress at this time.", 503)
+    except Exception:
+        app.logger.exception("Unexpected error on novel progress for %s", novel_id)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not save reading progress at this time.", 500)
 
 @app.route("/api/novels/attempts/sync", methods=["POST"])
 @require_auth
 def student_novel_attempts_sync():
-    data = json_body()
-    attempts = data.get("attempts") or []
-    if not isinstance(attempts, list):
-        return api_error("attempts must be a list.")
-    saved = 0
-    for item in attempts:
-        if not isinstance(item, dict): continue
-        cid = str(item.get("clientAttemptId") or item.get("id") or "").strip()
-        if not cid: continue
-        if NovelAttempt.query.filter_by(user_id=g.current_user.id, client_attempt_id=cid).first():
-            continue
-        try: novel_id = int(item.get("novelId"))
-        except Exception: continue
-        if not db.session.get(Novel, novel_id): continue
-        try:
-            score = float(item.get("score") or 0); total = float(item.get("total") or 0)
-        except Exception:
-            score, total = 0.0, 0.0
-        completed_at = None
-        if item.get("completedAt"):
+    try:
+        ensure_novel_schema()
+        data = json_body()
+        attempts = data.get("attempts") or []
+        if not isinstance(attempts, list):
+            return api_error("attempts must be a list.")
+        saved = 0
+        for item in attempts:
+            if not isinstance(item, dict):
+                continue
+            cid = str(item.get("clientAttemptId") or item.get("id") or "").strip()
+            if not cid:
+                continue
+            if NovelAttempt.query.filter_by(user_id=g.current_user.id, client_attempt_id=cid).first():
+                continue
             try:
-                completed_at = datetime.fromisoformat(str(item.get("completedAt")).replace("Z", "+00:00")).replace(tzinfo=None)
+                novel_id = int(item.get("novelId"))
             except Exception:
-                completed_at = utcnow()
-        row = NovelAttempt(user_id=g.current_user.id, novel_id=novel_id, client_attempt_id=cid[:120], score=score, total=total, answers=item.get("answers"), completed_at=completed_at)
-        db.session.add(row); saved += 1
-    if saved:
-        db.session.commit()
-    return jsonify(success=True, saved=saved)
+                continue
+            novel = db.session.get(Novel, novel_id)
+            if not novel_accessible_to_user(novel, g.current_user):
+                continue
+            try:
+                score = float(item.get("score") or 0); total = float(item.get("total") or 0)
+            except Exception:
+                score, total = 0.0, 0.0
+            completed_at = None
+            if item.get("completedAt"):
+                try:
+                    completed_at = datetime.fromisoformat(str(item.get("completedAt")).replace("Z", "+00:00")).replace(tzinfo=None)
+                except Exception:
+                    completed_at = utcnow()
+            row = NovelAttempt(user_id=g.current_user.id, novel_id=novel_id, client_attempt_id=cid[:120], score=score, total=total, answers=item.get("answers"), completed_at=completed_at)
+            db.session.add(row)
+            saved += 1
+        if saved:
+            db.session.commit()
+        return jsonify(success=True, saved=saved)
+    except SQLAlchemyError:
+        app.logger.exception("Failed to sync novel attempts")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not sync novel attempts at this time.", 503)
+    except Exception:
+        app.logger.exception("Unexpected error syncing novel attempts")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return api_error("Could not sync novel attempts at this time.", 500)

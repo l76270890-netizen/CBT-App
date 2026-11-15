@@ -221,10 +221,16 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
     setNovelsLoading(true)
     try {
       await refreshDownloaded(); await syncPending()
-      const data = await apiRequest<any>('/api/novels')
-      setNovels(asArray<any>(data?.novels ?? data))
-      setNovelsError('')
+      if (!navigator.onLine) {
+        setNovels([])
+        setNovelsError('You are offline. Downloaded novels are available below.')
+      } else {
+        const data = await apiRequest<any>('/api/novels')
+        setNovels(asArray<any>(data?.novels ?? data))
+        setNovelsError('')
+      }
     } catch (e) {
+      setNovels([])
       setNovelsError(e instanceof Error ? e.message : 'Could not load novels from server.')
       await refreshDownloaded()
     } finally { setNovelsLoading(false) }
@@ -255,15 +261,22 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
 
   const openNovelDetails = async (id: number) => {
     setNovelView('details')
+    const local = await getDownloadedNovel(id).catch(() => null)
+    if (local) {
+      const prog = await getProgressLocal(id).catch(() => null)
+      setSelectedNovel(prog ? ({ ...local, progress: { ...(local.progress || {}), ...prog } } as any) : local)
+    }
+    if (!navigator.onLine) return
     try {
       const detail = await apiRequest<any>(`/api/novels/${id}`)
-      const lp = await getProgressLocal(id)
+      const lp = await getProgressLocal(id).catch(() => null)
       if (lp) detail.progress = { ...(detail.progress || {}), ...lp }
       setSelectedNovel(detail)
-    } catch {
-      const local = await getDownloadedNovel(id)
-      if (local) { const prog = await getProgressLocal(id); if (prog) local.progress = { ...(local.progress || {}), ...prog }; setSelectedNovel(local) }
-      else setSelectedNovel(null)
+    } catch (e) {
+      if (!local) {
+        setNovelsError(e instanceof Error ? e.message : 'Could not load novel details.')
+        setNovelView('library')
+      }
     }
   }
 

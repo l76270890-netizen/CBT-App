@@ -292,6 +292,275 @@ function StudyManagementSection() {
   );
 }
 
+
+type AdminNovelChapter = { id: number; title: string; content: string; position: number };
+type AdminNovelQuestion = { id: number | string; question: string; options: string[] | {A:string;B:string;C:string;D:string}; answer?: number; correctAnswer?: string; explanation?: string; imageUrl?: string | null; topic?: string | null };
+type AdminNovel = {
+  id: number; title: string; author: string; description?: string; category: string;
+  coverUrl?: string | null; pdfUrl?: string | null; pdfEnabled?: boolean; hasPdf?: boolean;
+  published?: boolean; chapterCount?: number; questionCount?: number; chapters?: AdminNovelChapter[]; questions?: AdminNovelQuestion[];
+};
+
+function NovelManagementSection() {
+  const [novels, setNovels] = useState<AdminNovel[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [msg, setMsg] = useState("");
+  const [editing, setEditing] = useState<AdminNovel | null>(null);
+  const [title, setTitle] = useState(""); const [author, setAuthor] = useState(""); const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<"JAMB"|"WAEC"|"NECO">("JAMB");
+  const [published, setPublished] = useState(false); const [pdfEnabled, setPdfEnabled] = useState(false);
+  const [coverFile, setCoverFile] = useState<File | null>(null); const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [removeCover, setRemoveCover] = useState(false); const [removePdf, setRemovePdf] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [activeNovelId, setActiveNovelId] = useState<number | null>(null);
+  const [chapters, setChapters] = useState<AdminNovelChapter[]>([]);
+  const [chapterTitle, setChapterTitle] = useState(""); const [chapterContent, setChapterContent] = useState(""); const [editingChapterId, setEditingChapterId] = useState<number | null>(null);
+  const [chapterBusy, setChapterBusy] = useState(false);
+
+  const [novelQuestions, setNovelQuestions] = useState<AdminNovelQuestion[]>([]);
+  const [qQuestion, setQQuestion] = useState(""); const [qOptions, setQOptions] = useState(["","","",""]); const [qCorrect, setQCorrect] = useState("A");
+  const [qExplanation, setQExplanation] = useState(""); const [qTopic, setQTopic] = useState(""); const [qImage, setQImage] = useState<File | null>(null); const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
+  const [qBusy, setQBusy] = useState(false);
+
+  const loadNovels = async () => {
+    setLoading(true); setError("");
+    try {
+      const res = await apiRequest<any>("/api/admin/novels");
+      setNovels(asArray<AdminNovel>(res?.novels ?? res));
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not load novels."); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void loadNovels(); }, []);
+
+  const resetNovelForm = () => {
+    setEditing(null); setTitle(""); setAuthor(""); setDescription(""); setCategory("JAMB"); setPublished(false); setPdfEnabled(false);
+    setCoverFile(null); setPdfFile(null); setRemoveCover(false); setRemovePdf(false);
+  };
+  const startEditNovel = (n: AdminNovel) => {
+    setEditing(n); setTitle(n.title || ""); setAuthor(n.author || ""); setDescription(n.description || "");
+    setCategory((["JAMB","WAEC","NECO"].includes(String(n.category||"").toUpperCase()) ? String(n.category).toUpperCase() : "JAMB") as any);
+    setPublished(Boolean(n.published)); setPdfEnabled(Boolean(n.pdfEnabled ?? n.hasPdf)); setCoverFile(null); setPdfFile(null); setRemoveCover(false); setRemovePdf(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const saveNovel = async (e: React.FormEvent) => {
+    e.preventDefault(); setError(""); setMsg("");
+    if (!title.trim() || !author.trim()) { setError("Title and author are required."); return; }
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      fd.append("title", title.trim()); fd.append("author", author.trim()); fd.append("description", description);
+      fd.append("category", category); fd.append("published", String(published)); fd.append("pdfEnabled", String(pdfEnabled));
+      if (removeCover) fd.append("removeCover", "true"); if (removePdf) fd.append("removePdf", "true");
+      if (coverFile) fd.append("cover", coverFile); if (pdfFile) fd.append("pdf", pdfFile);
+      const path = editing ? `/api/admin/novels/${editing.id}` : "/api/admin/novels";
+      const res = await apiRequest<any>(path, { method: editing ? "PUT" : "POST", body: fd });
+      setMsg(editing ? "Novel updated." : "Novel created."); resetNovelForm();
+      await loadNovels();
+      if (!editing && res?.novel?.id) { void openNovelManager(Number(res.novel.id)); }
+      setTimeout(()=>setMsg(""), 3000);
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not save novel."); }
+    finally { setSaving(false); }
+  };
+
+  const deleteNovel = async (id: number) => {
+    if (!confirm("Delete this novel and all its chapters, questions, progress, and attempts? This cannot be undone.")) return;
+    try {
+      await apiRequest(`/api/admin/novels/${id}`, { method: "DELETE" });
+      setNovels(ns => ns.filter(n => n.id !== id)); if (activeNovelId === id) { setActiveNovelId(null); setChapters([]); setNovelQuestions([]); }
+      setMsg("Novel deleted."); setTimeout(()=>setMsg(""), 2500);
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not delete novel."); }
+  };
+
+  const togglePublish = async (n: AdminNovel) => {
+    try {
+      const fd = new FormData(); fd.append("published", String(!n.published));
+      await apiRequest(`/api/admin/novels/${n.id}`, { method: "PUT", body: fd });
+      await loadNovels();
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not update publish status."); }
+  };
+
+  const openNovelManager = async (id: number) => {
+    setActiveNovelId(id); setError("");
+    const n = novels.find(x => x.id === id);
+    if (n?.chapters) setChapters([...n.chapters].sort((a,b)=>(a.position??0)-(b.position??0)));
+    try {
+      const qs = await apiRequest<any>(`/api/admin/novels/${id}/questions`);
+      setNovelQuestions(asArray<AdminNovelQuestion>(qs?.questions ?? qs));
+      // refresh list to get chapters
+      const res = await apiRequest<any>("/api/admin/novels");
+      const list = asArray<AdminNovel>(res?.novels ?? res);
+      setNovels(list);
+      const fresh = list.find(x => x.id === id);
+      setChapters([...(fresh?.chapters || [])].sort((a,b)=>(a.position??0)-(b.position??0)));
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not load novel details."); }
+  };
+
+  const saveChapter = async (novelId: number) => {
+    if (!chapterTitle.trim()) { setError("Chapter title is required."); return; }
+    setChapterBusy(true); setError("");
+    try {
+      if (editingChapterId) {
+        await apiRequest(`/api/admin/novels/${novelId}/chapters/${editingChapterId}`, { method: "PUT", body: JSON.stringify({ title: chapterTitle.trim(), content: chapterContent }) });
+      } else {
+        await apiRequest(`/api/admin/novels/${novelId}/chapters`, { method: "POST", body: JSON.stringify({ title: chapterTitle.trim(), content: chapterContent }) });
+      }
+      setChapterTitle(""); setChapterContent(""); setEditingChapterId(null);
+      await loadNovels(); await openNovelManager(novelId);
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not save chapter."); }
+    finally { setChapterBusy(false); }
+  };
+  const editChapter = (ch: AdminNovelChapter) => { setEditingChapterId(ch.id); setChapterTitle(ch.title||""); setChapterContent(ch.content||""); };
+  const deleteChapter = async (novelId: number, chapterId: number) => {
+    if (!confirm("Delete this chapter?")) return;
+    try { await apiRequest(`/api/admin/novels/${novelId}/chapters/${chapterId}`, { method: "DELETE" }); await loadNovels(); await openNovelManager(novelId); }
+    catch (e) { setError(e instanceof Error ? e.message : "Could not delete chapter."); }
+  };
+  const moveChapter = async (novelId: number, idx: number, dir: -1|1) => {
+    const arr = [...chapters]; const j = idx + dir; if (j < 0 || j >= arr.length) return;
+    [arr[idx], arr[j]] = [arr[j], arr[idx]];
+    setChapters(arr);
+    try { await apiRequest(`/api/admin/novels/${novelId}/chapters/reorder`, { method: "POST", body: JSON.stringify({ order: arr.map(c => c.id) }) }); }
+    catch (e) { setError(e instanceof Error ? e.message : "Could not reorder chapters."); await openNovelManager(novelId); }
+  };
+
+  const resetQuestionForm = () => { setEditingQuestionId(null); setQQuestion(""); setQOptions(["","","",""]); setQCorrect("A"); setQExplanation(""); setQTopic(""); setQImage(null); };
+  const startEditQuestion = (q: AdminNovelQuestion) => {
+    const opts = Array.isArray(q.options) ? q.options : [q.options.A,q.options.B,q.options.C,q.options.D];
+    const ans = q.correctAnswer || (typeof q.answer === 'number' ? "ABCD"[q.answer] : "A") || "A";
+    setEditingQuestionId(typeof q.id === 'string' ? Number(q.questionId || q.id) : q.id); setQQuestion(q.question || ""); setQOptions([opts[0]||"",opts[1]||"",opts[2]||"",opts[3]||""]); setQCorrect(ans); setQExplanation(q.explanation || ""); setQTopic((q.topic as string) || ""); setQImage(null);
+  };
+  const saveNovelQuestion = async (novelId: number) => {
+    if (!qQuestion.trim() || qOptions.some(o => !o.trim())) { setError("Question and all options A-D are required."); return; }
+    setQBusy(true); setError("");
+    try {
+      const fd = new FormData();
+      fd.append("question", qQuestion.trim()); fd.append("correctAnswer", qCorrect); fd.append("explanation", qExplanation); fd.append("topic", qTopic);
+      fd.append("options", JSON.stringify({ A: qOptions[0], B: qOptions[1], C: qOptions[2], D: qOptions[3] }));
+      if (qImage) fd.append("image", qImage);
+      if (editingQuestionId) await apiRequest(`/api/admin/novels/${novelId}/questions/${editingQuestionId}`, { method: "PUT", body: fd });
+      else await apiRequest(`/api/admin/novels/${novelId}/questions`, { method: "POST", body: fd });
+      resetQuestionForm(); await openNovelManager(novelId); await loadNovels();
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not save novel question."); }
+    finally { setQBusy(false); }
+  };
+  const deleteNovelQuestion = async (novelId: number, q: AdminNovelQuestion) => {
+    if (!confirm("Delete this novel question?")) return;
+    const id = typeof q.id === 'string' ? Number(q.questionId || q.id) : q.id;
+    try { await apiRequest(`/api/admin/novels/${novelId}/questions/${id}`, { method: "DELETE" }); await openNovelManager(novelId); await loadNovels(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Could not delete question."); }
+  };
+
+  const activeNovel = novels.find(n => n.id === activeNovelId) || null;
+
+  return (
+    <section className="admin-students-view">
+      <div className="admin-view-heading"><div><p className="admin-eyebrow">SCHOOL WORKSPACE</p><h2>Novel Management</h2><p>Create, publish, and manage novels, chapters, PDFs, and CBT questions.</p></div></div>
+      {msg && <div className="admin-toast success">{msg}</div>}
+      {error && <p className="admin-error" role="alert">{error}</p>}
+
+      <form onSubmit={saveNovel} className="admin-form">
+        <h3 style={{color:'#fff', margin:0}}>{editing ? "Edit Novel" : "Add Novel"}</h3>
+        <div className="admin-row">
+          <div className="admin-field"><label>Title *</label><input value={title} onChange={e=>setTitle(e.target.value)} required style={{background:'#1a1a1a', color:'#fff'}}/></div>
+          <div className="admin-field"><label>Author *</label><input value={author} onChange={e=>setAuthor(e.target.value)} required style={{background:'#1a1a1a', color:'#fff'}}/></div>
+          <div className="admin-field"><label>Category *</label><select value={category} onChange={e=>setCategory(e.target.value as any)}><option value="JAMB">JAMB</option><option value="WAEC">WAEC</option><option value="NECO">NECO</option></select></div>
+        </div>
+        <div className="admin-field"><label>Description</label><textarea value={description} onChange={e=>setDescription(e.target.value)} rows={3} style={{background:'#1a1a1a', color:'#fff', border:'1px solid #333'}}/></div>
+        <div className="admin-row">
+          <label style={{display:'flex',alignItems:'center',gap:8,color:'#e5e7eb'}}><input type="checkbox" checked={published} onChange={e=>setPublished(e.target.checked)} /> Published</label>
+          <label style={{display:'flex',alignItems:'center',gap:8,color:'#e5e7eb'}}><input type="checkbox" checked={pdfEnabled} onChange={e=>setPdfEnabled(e.target.checked)} /> Enable PDF download</label>
+        </div>
+        <div className="admin-row">
+          <div className="admin-field"><label>Cover image</label><input type="file" accept="image/*" onChange={e=>setCoverFile(e.target.files?.[0]||null)} />{editing?.coverUrl && <label style={{fontSize:12,color:'#9ca3af'}}><input type="checkbox" checked={removeCover} onChange={e=>setRemoveCover(e.target.checked)} /> Remove existing cover</label>}</div>
+          <div className="admin-field"><label>PDF file</label><input type="file" accept="application/pdf,.pdf" onChange={e=>setPdfFile(e.target.files?.[0]||null)} />{(editing?.pdfUrl || editing?.hasPdf) && <label style={{fontSize:12,color:'#9ca3af'}}><input type="checkbox" checked={removePdf} onChange={e=>setRemovePdf(e.target.checked)} /> Remove existing PDF</label>}</div>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button className="admin-btn primary lg" disabled={saving} style={{flex:1}}>{saving?"Saving...":(editing?"Update Novel":"Create Novel")}</button>
+          {editing && <button type="button" className="admin-btn ghost" onClick={resetNovelForm}>Cancel edit</button>}
+        </div>
+      </form>
+
+      <section className="admin-overview-card" style={{marginTop:20}}>
+        <div className="admin-section-heading"><div><h3>Novels</h3><p>Manage library, publishing, chapters, and questions.</p></div><button onClick={()=>void loadNovels()} disabled={loading}>Refresh</button></div>
+        {loading ? <p className="admin-empty-note">Loading novels...</p> : novels.length === 0 ? <p className="admin-empty-note">No novels yet.</p> : (
+          <div className="csv-preview-table-wrap"><table className="csv-preview-table"><thead><tr><th>Title</th><th>Author</th><th>Category</th><th>Chapters</th><th>Questions</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+            {novels.map(n => (
+              <tr key={n.id}>
+                <td>{n.title}{n.coverUrl ? <div style={{fontSize:12,color:'#9ca3af'}}>Cover uploaded</div> : null}</td>
+                <td>{n.author}</td><td>{n.category}</td><td>{n.chapterCount ?? (n.chapters?.length||0)}</td><td>{n.questionCount ?? (n.questions?.length||0)}</td>
+                <td>{n.published ? "Published" : "Unpublished"}{(n.pdfEnabled || n.hasPdf) ? " • PDF" : ""}</td>
+                <td><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  <button type="button" className="admin-btn sm" onClick={()=>startEditNovel(n)}>Edit</button>
+                  <button type="button" className="admin-btn sm" onClick={()=>void togglePublish(n)}>{n.published?"Unpublish":"Publish"}</button>
+                  <button type="button" className="admin-btn sm" onClick={()=>void openNovelManager(n.id)}>Manage</button>
+                  <button type="button" className="del-btn" onClick={()=>void deleteNovel(n.id)}>Delete</button>
+                </div></td>
+              </tr>
+            ))}
+          </tbody></table></div>
+        )}
+      </section>
+
+      {activeNovel && (
+        <section className="admin-overview-card" style={{marginTop:20}}>
+          <div className="admin-section-heading"><div><h3>Manage: {activeNovel.title}</h3><p>Chapters, PDF settings, and CBT questions for this novel.</p></div><button onClick={()=>{setActiveNovelId(null); setChapters([]); setNovelQuestions([]);}}>Close</button></div>
+          <div className="admin-row" style={{alignItems:'flex-start'}}>
+            <div style={{flex:1, minWidth:280}}>
+              <h4 style={{color:'#fff'}}>Chapters</h4>
+              <div className="admin-field"><label>Chapter title</label><input value={chapterTitle} onChange={e=>setChapterTitle(e.target.value)} style={{background:'#1a1a1a',color:'#fff'}}/></div>
+              <div className="admin-field"><label>Chapter content</label><textarea value={chapterContent} onChange={e=>setChapterContent(e.target.value)} rows={6} style={{background:'#1a1a1a',color:'#fff',border:'1px solid #333'}}/></div>
+              <div style={{display:'flex',gap:8}}><button type="button" className="admin-btn primary" onClick={()=>void saveChapter(activeNovel.id)} disabled={chapterBusy}>{chapterBusy?"Saving...":(editingChapterId?"Update Chapter":"Add Chapter")}</button>{editingChapterId && <button type="button" className="admin-btn ghost" onClick={()=>{setEditingChapterId(null);setChapterTitle("");setChapterContent("");}}>Cancel</button>}</div>
+              <div style={{marginTop:12, display:'grid', gap:8}}>
+                {chapters.length === 0 ? <p className="admin-empty-note">No chapters yet.</p> : chapters.map((ch, idx) => (
+                  <div key={ch.id} style={{border:'1px solid #2a2a2a', borderRadius:10, padding:10, background:'#141414'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><strong style={{color:'#fff'}}>{idx+1}. {ch.title}</strong><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      <button type="button" className="admin-btn sm" onClick={()=>moveChapter(activeNovel.id, idx, -1)} disabled={idx===0}>↑</button>
+                      <button type="button" className="admin-btn sm" onClick={()=>moveChapter(activeNovel.id, idx, 1)} disabled={idx===chapters.length-1}>↓</button>
+                      <button type="button" className="admin-btn sm" onClick={()=>editChapter(ch)}>Edit</button>
+                      <button type="button" className="del-btn" onClick={()=>void deleteChapter(activeNovel.id, ch.id)}>Delete</button>
+                    </div></div>
+                    <p style={{color:'#9ca3af', fontSize:12, marginTop:6, whiteSpace:'pre-wrap'}}>{(ch.content||"").slice(0,180)}{(ch.content||"").length>180?"…":""}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{flex:1, minWidth:280}}>
+              <h4 style={{color:'#fff'}}>CBT Questions</h4>
+              <div className="admin-field"><label>Question</label><textarea value={qQuestion} onChange={e=>setQQuestion(e.target.value)} rows={3} style={{background:'#1a1a1a',color:'#fff',border:'1px solid #333'}}/></div>
+              <div className="admin-options-grid">
+                {["A","B","C","D"].map((o,i)=>(<div key={o} className={`admin-field option-field ${qCorrect===o?'is-correct':''}`}><label>Option {o}</label><input value={qOptions[i]} onChange={e=>{const n=[...qOptions]; n[i]=e.target.value; setQOptions(n);}} style={{background:'#1a1a1a',color:'#fff'}}/></div>))}
+              </div>
+              <div className="admin-row">
+                <div className="admin-field"><label>Correct</label><select value={qCorrect} onChange={e=>setQCorrect(e.target.value)}><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
+                <div className="admin-field"><label>Topic</label><input value={qTopic} onChange={e=>setQTopic(e.target.value)} style={{background:'#1a1a1a',color:'#fff'}}/></div>
+              </div>
+              <div className="admin-field"><label>Explanation</label><input value={qExplanation} onChange={e=>setQExplanation(e.target.value)} style={{background:'#1a1a1a',color:'#fff'}}/></div>
+              <div className="admin-field"><label>Question image (optional)</label><input type="file" accept="image/*" onChange={e=>setQImage(e.target.files?.[0]||null)} /></div>
+              <div style={{display:'flex',gap:8}}><button type="button" className="admin-btn primary" onClick={()=>void saveNovelQuestion(activeNovel.id)} disabled={qBusy}>{qBusy?"Saving...":(editingQuestionId?"Update Question":"Add Question")}</button>{editingQuestionId && <button type="button" className="admin-btn ghost" onClick={resetQuestionForm}>Cancel</button>}</div>
+              <div style={{marginTop:12, display:'grid', gap:8}}>
+                {novelQuestions.length === 0 ? <p className="admin-empty-note">No questions yet.</p> : novelQuestions.map((q, idx) => {
+                  const opts = Array.isArray(q.options) ? q.options : [q.options?.A,q.options?.B,q.options?.C,q.options?.D];
+                  const ans = q.correctAnswer || (typeof q.answer === 'number' ? "ABCD"[q.answer] : "");
+                  return (
+                    <div key={String(q.id)} style={{border:'1px solid #2a2a2a', borderRadius:10, padding:10, background:'#141414'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',gap:8}}><strong style={{color:'#fff'}}>Q{idx+1}</strong><div style={{display:'flex',gap:6}}><button type="button" className="admin-btn sm" onClick={()=>startEditQuestion(q)}>Edit</button><button type="button" className="del-btn" onClick={()=>void deleteNovelQuestion(activeNovel.id, q)}>Delete</button></div></div>
+                      <div style={{color:'#e5e7eb', fontSize:13, marginTop:4}}>{q.question}</div>
+                      <div style={{color:'#9ca3af', fontSize:12, marginTop:4}}>A: {opts[0]} · B: {opts[1]} · C: {opts[2]} · D: {opts[3]} · Ans: {ans}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+    </section>
+  );
+}
+
 export default function AdminDashboard({ setActivePage }: { setActivePage: (p:string)=>void }) {
   const [authState, setAuthState] = useState<"checking" | "signedOut" | "denied" | "authenticated">("checking");
   const [email, setEmail] = useState("");
@@ -317,7 +586,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [questionsLoading, setQuestionsLoading] = useState(false);
   const [questionsError, setQuestionsError] = useState("");
 
-  const [adminView, setAdminView] = useState<"overview"|"students"|"exams"|"study">("overview");
+  const [adminView, setAdminView] = useState<"overview"|"students"|"exams"|"study"|"novels">("overview");
   const [examTab, setExamTab] = useState<"exams"|"questions">("exams");
   const [exams, setExams] = useState<Exam[]>([]);
   const [allSubjects] = useState(defaultSubjects);
@@ -853,6 +1122,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         <button className={adminView === "students" ? "active" : ""} onClick={() => setAdminView("students")}><UsersRound size={16} /> Students</button>
         <button className={adminView === "exams" ? "active" : ""} onClick={() => setAdminView("exams")}><BookOpen size={16} /> Exams</button>
         <button className={adminView === "study" ? "active" : ""} onClick={() => setAdminView("study")}><GraduationCap size={16} /> Study Management</button>
+        <button className={adminView === "novels" ? "active" : ""} onClick={() => setAdminView("novels")}><BookOpen size={16} /> Novel Management</button>
       </nav>
 
       {msg && <div className="admin-toast success">{msg}</div>}
@@ -1170,8 +1440,10 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         </>
       )}
         </>
-      ) : (
+      ) : adminView === "study" ? (
         <StudyManagementSection />
+      ) : (
+        <NovelManagementSection />
       )}
     </div></div>
   );
