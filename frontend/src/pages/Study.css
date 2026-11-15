@@ -103,3 +103,86 @@
 .study-loading { text-align: center; padding: 24px; color: #8f9091; background: #1e1e1e; border-radius: 12px; border: 1px solid #2a2a2a; }
 .study-inline-retry { background: #2a2a2a; color: #fff; border: 1px solid #3a3a3a; border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 12px; margin-left: 6px; }
 @media (min-width: 640px) { .study-mode-grid { grid-template-columns: repeat(2,1fr); } }
+
+
+/* ===== Subjects & Novels home cards ===== */
+.study-home-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0 20px; }
+.study-home-card {
+  appearance: none; width: 100%; text-align: left; cursor: pointer;
+  border: 2px solid var(--border, #2a2a2a); border-radius: 18px; padding: 18px 16px;
+  background: var(--bg-card, #1e1e1e); color: var(--text-main, #fff);
+  display: flex; flex-direction: column; gap: 8px; min-height: 140px;
+  transition: transform .15s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.study-home-card:hover { transform: translateY(-1px); border-color: var(--primary, #1d4be3); }
+.study-home-card.selected {
+  border-color: var(--primary, #1d4be3);
+  background: color-mix(in srgb, var(--primary, #1d4be3) 12%, var(--bg-card, #1e1e1e));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary, #1d4be3) 25%, transparent);
+}
+.study-home-card-icon {
+  width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--primary, #1d4be3) 14%, transparent); color: var(--primary, #3b82f6);
+}
+.study-home-card.selected .study-home-card-icon { background: var(--primary, #1d4be3); color: #fff; }
+.study-home-card-title { font-size: 18px; font-weight: 800; color: var(--text-main, #fff); }
+.study-home-card-desc { font-size: 13px; line-height: 1.4; color: var(--text-secondary, #8f9091); }
+
+.novel-library-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.novel-library-tools .search-wrapper { min-width: 220px; }
+.novel-list { display: flex; flex-direction: column; gap: 12px; }
+.novel-card { display: flex; gap: 12px; padding: 12px; background: var(--bg-card, #1e1e1e); border: 1px solid var(--border, #2a2a2a); border-radius: 16px; }
+.novel-cover { width: 72px; height: 96px; border-radius: 10px; object-fit: cover; flex-shrink: 0; background: #2a2a2a; }
+.novel-cover.placeholder, .novel-cover-lg.placeholder { display:flex; align-items:center; justify-content:center; color:#9ca3af; }
+.novel-card-body { flex: 1; min-width: 0; }
+.novel-desc { font-size: 13px; color: var(--text-secondary, #8f9091); margin: 6px 0; line-height: 1.45; }
+.novel-desc.small { margin: 4px 0 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.novel-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.novel-status { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; white-space: nowrap; background: var(--bg-raised, #2a2a2a); color: var(--text-secondary, #9ca3af); }
+.novel-status.downloaded { background: rgba(22,163,74,.15); color: #16a34a; }
+.novel-status.downloading { background: rgba(29,75,227,.15); color: #3b82f6; }
+.novel-status.failed { background: rgba(239,68,68,.15); color: #ef4444; }
+.novel-progress-bar { height: 8px; background: var(--bg-raised, #2a2a2a); border-radius: 999px; overflow: hidden; margin: 8px 0; }
+.novel-progress-bar > div { height: 100%; background: var(--primary, #1d4be3); border-radius: 999px; }
+.novel-details-card { background: var(--bg-card, #1e1e1e); border: 1px solid var(--border, #2a2a2a); border-radius: 16px; padding: 16px; }
+.novel-details-top { display: flex; gap: 16px; align-items: flex-start; }
+.novel-cover-lg { width: 140px; height: 190px; border-radius: 12px; object-fit: cover; background: #2a2a2a; flex-shrink: 0; }
+.novel-details-meta { flex: 1; min-width: 0; }
+.novel-meta-row { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: var(--text-secondary, #9ca3af); margin: 8px 0; }
+.novel-actions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 16px; }
+.novel-actions-grid .start-test-btn { justify-content: center; width: 100%; }
+.novel-storage { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary, #9ca3af); margin-bottom: 12px; padding: 8px 12px; background: var(--bg-card, #1e1e1e); border: 1px solid var(--border, #2a2a2a); border-radius: 10px; }
+.novel-reader-layout { display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: start; }
+.novel-chapter-list { background: var(--bg-card, #1e1e1e); border: 1px solid var(--border, #2a2a2a); border-radius: 14px; padding: 10px; max-height: 70vh; overflow: auto; }
+.novel-chapter-list-title { font-weight: 700; font-size: 13px; margin: 4px 6px 8px; color: var(--text-main, #fff); display:flex; gap:6px; align-items:center; }
+.novel-chapter-item { width:100%; text-align:left; border:1px solid transparent; background: transparent; color: var(--text-secondary, #9ca3af); padding:8px 10px; border-radius:10px; cursor:pointer; font-size:13px; }
+.novel-chapter-item:hover { background: var(--hover, #2a2a2a); color: var(--text-main, #fff); }
+.novel-chapter-item.active { background: color-mix(in srgb, var(--primary,#1d4be3) 18%, transparent); color: var(--text-main,#fff); border-color: color-mix(in srgb, var(--primary,#1d4be3) 35%, transparent); }
+.novel-reader-content { background: var(--bg-card, #1e1e1e); border: 1px solid var(--border, #2a2a2a); border-radius: 14px; padding: 14px; }
+.novel-reader-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+.novel-reader-controls button { background: var(--bg-raised, #2a2a2a); color: var(--text-main,#fff); border:1px solid var(--border,#333); border-radius:8px; padding:6px 10px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.novel-reader-text h2 { margin: 0 0 12px; font-size: 20px; color: var(--text-main,#fff); }
+.novel-reader-text { color: var(--text-main,#e5e7eb); }
+.novel-reader-nav { display:flex; justify-content:space-between; gap:10px; margin-top:16px; }
+.novel-pdf-wrap { background: var(--bg-card,#1e1e1e); border:1px solid var(--border,#2a2a2a); border-radius:14px; padding:10px; }
+.novel-pdf-frame { width:100%; height:75vh; border:0; border-radius:10px; background:#111; }
+.novel-pdf-note { font-size:12px; color: var(--text-secondary,#9ca3af); margin-top:8px; }
+@media (max-width: 700px) {
+  .novel-details-top { flex-direction: column; }
+  .novel-cover-lg { width: 120px; height: 160px; }
+  .novel-reader-layout { grid-template-columns: 1fr; }
+  .novel-chapter-list { max-height: 180px; }
+}
+@media (max-width: 520px) {
+  .study-home-cards { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .study-home-card { min-height: 128px; padding: 14px 12px; }
+  .study-home-card-title { font-size: 16px; }
+  .study-home-card-desc { font-size: 12px; }
+}
+[data-theme="light"] .study-home-card { background: var(--bg-card) !important; border-color: var(--border) !important; }
+[data-theme="light"] .study-home-card.selected { background: #EEF4FF !important; border-color: var(--primary) !important; }
+[data-theme="light"] .study-home-card-title { color: var(--text-main) !important; }
+[data-theme="light"] .study-home-card-desc { color: var(--text-secondary) !important; }
+[data-theme="light"] .novel-card, [data-theme="light"] .novel-details-card, [data-theme="light"] .novel-reader-content, [data-theme="light"] .novel-chapter-list, [data-theme="light"] .novel-pdf-wrap, [data-theme="light"] .novel-storage { background: #FFFFFF !important; border-color: #E6EEFA !important; }
+[data-theme="light"] .novel-chapter-item:hover { background: #F1F5FF !important; }
+[data-theme="light"] .novel-reader-controls button { background: #F1F5FF !important; border-color: #E6EEFA !important; color: #0F172A !important; }

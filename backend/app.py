@@ -157,10 +157,35 @@ def ensure_question_columns():
             "Could not verify the questions table schema at startup; continuing.")
 
 
+def ensure_novel_schema():
+    """Create novel tables/columns safely without resetting existing data."""
+    try:
+        inspector = db.inspect(db.engine)
+        existing = set(inspector.get_table_names())
+        if not {"novels", "novel_chapters", "novel_questions", "novel_progress", "novel_attempts"}.issubset(existing):
+            db.create_all()
+            inspector = db.inspect(db.engine)
+            existing = set(inspector.get_table_names())
+        def add_col(table, col, ddl):
+            if table in existing:
+                cols = {c["name"] for c in inspector.get_columns(table)}
+                if col not in cols:
+                    with db.engine.connect() as conn:
+                        conn.execute(db.text(ddl)); conn.commit()
+        add_col("novels", "pdf_enabled", "ALTER TABLE novels ADD COLUMN pdf_enabled BOOLEAN DEFAULT FALSE")
+        add_col("novels", "published", "ALTER TABLE novels ADD COLUMN published BOOLEAN DEFAULT FALSE")
+        add_col("novels", "download_size", "ALTER TABLE novels ADD COLUMN download_size INTEGER")
+        add_col("novels", "updated_at", "ALTER TABLE novels ADD COLUMN updated_at TIMESTAMP")
+        add_col("novel_chapters", "position", "ALTER TABLE novel_chapters ADD COLUMN position INTEGER DEFAULT 0")
+        add_col("novel_progress", "reading_position", "ALTER TABLE novel_progress ADD COLUMN reading_position INTEGER DEFAULT 0")
+    except Exception:
+        app.logger.exception("Could not verify novel schema at startup; continuing.")
+
 # Run once at import time so login and other routes don't 500 on missing columns.
 with app.app_context():
     ensure_user_columns()
     ensure_question_columns()
+    ensure_novel_schema()
 
 BASEDIR = os.path.abspath(os.path.dirname(__file__))
 is_serverless = is_vercel or bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
@@ -172,9 +197,17 @@ QUESTION_STORAGE_IS_PERSISTENT = not is_serverless or bool(
     os.environ.get("UPLOAD_FOLDER"))
 AVATAR_FOLDER = os.path.join(UPLOAD_FOLDER, "avatars")
 QUESTION_FOLDER = os.path.join(UPLOAD_FOLDER, "questions")
+NOVEL_COVER_FOLDER = os.path.join(UPLOAD_FOLDER, "novel_covers")
+NOVEL_PDF_FOLDER = os.path.join(UPLOAD_FOLDER, "novel_pdfs")
 os.makedirs(AVATAR_FOLDER, exist_ok=True)
 os.makedirs(QUESTION_FOLDER, exist_ok=True)
+os.makedirs(NOVEL_COVER_FOLDER, exist_ok=True)
+os.makedirs(NOVEL_PDF_FOLDER, exist_ok=True)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "jfif"}
+NOVEL_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
+NOVEL_PDF_EXTENSIONS = {"pdf"}
+MAX_NOVEL_COVER_BYTES = 10 * 1024 * 1024
+MAX_NOVEL_PDF_BYTES = 60 * 1024 * 1024
 MAX_QUESTION_ARCHIVE_BYTES = 25 * 1024 * 1024
 MAX_QUESTION_ARCHIVE_TOTAL_BYTES = 50 * 1024 * 1024
 MAX_QUESTION_CSV_BYTES = 5 * 1024 * 1024
@@ -418,6 +451,122 @@ def store_question_image(file):
         app.logger.exception("Question image could not be saved")
         return None, "Question image could not be saved to permanent storage."
     return f"questions/{filename}", None
+
+
+def store_novel_file(file, folder_name, cloud_folder, local_dir, allowed_exts, kind_label, max_bytes=25 * 1024 * 1024):
+    if not file or not file.filename:
+        return None, f"No {kind_label} file was provided."
+    ext = file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
+    if ext not in allowed_exts:
+        return None, f"Invalid {kind_label} file type."
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+    if size > max_bytes:
+        return None, f"{kind_label} file is too large."
+    cloud_url = None
+    if ext != "pdf":
+        cloud_url = upload_to_cloudinary(file, cloud_folder)
+    elif HAS_CLOUDINARY and os.environ.get("CLOUDINARY_CLOUD_NAME"):
+        try:
+            file.seek(0)
+            result = cloudinary.uploader.upload(file, folder=cloud_folder, resource_type="raw")
+            cloud_url = result.get("secure_url")
+        except Exception:
+            app.logger.exception("Cloud novel upload failed")
+            cloud_url = None
+            file.seek(0)
+    if cloud_url:
+        return cloud_url, None
+    if not QUESTION_STORAGE_IS_PERSISTENT:
+        return None, "Permanent file storage is unavailable. Configure Cloudinary or set UPLOAD_FOLDER to a persistent volume."
+    original_name = file.filename.replace("\\", "/").rsplit("/", 1)[-1]
+    filename = f"novel_{secrets.token_hex(12)}_{secure_filename(original_name)}"
+    try:
+        file.save(os.path.join(local_dir, filename))
+    except OSError:
+        app.logger.exception("Novel file could not be saved")
+        return None, f"{kind_label} file could not be saved to permanent storage."
+    return f"{folder_name}/{filename}", None
+
+def remove_stored_file(path):
+    if not path or str(path).startswith(("http://", "https://")):
+        return
+    base = os.path.abspath(UPLOAD_FOLDER)
+    stored_path = os.path.abspath(os.path.join(UPLOAD_FOLDER, path))
+    try:
+        if os.path.commonpath((base, stored_path)) != base:
+            return
+    except Exception:
+        return
+    try:
+        os.remove(stored_path)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        app.logger.exception("Could not remove stored file: %s", path)
+
+def novel_question_to_dict(q):
+    opts = q.options or {}
+    if isinstance(opts, dict):
+        options_list = [opts.get("A", ""), opts.get("B", ""), opts.get("C", ""), opts.get("D", "")]
+    elif isinstance(opts, list):
+        options_list = (list(opts) + ["", "", "", ""])[:4]
+    else:
+        options_list = ["", "", "", ""]
+    ans = str(q.answer or "A").strip().upper()
+    ans_idx = {"A": 0, "B": 1, "C": 2, "D": 3}.get(ans, 0)
+    return {
+        "id": f"novel-{q.novel_id}-{q.id}",
+        "questionId": q.id,
+        "novelId": q.novel_id,
+        "question": q.question,
+        "options": options_list,
+        "answer": ans_idx,
+        "correctAnswer": ans,
+        "explanation": q.explanation or "",
+        "imageUrl": get_image_url(q.image_path),
+        "topic": q.topic or "",
+        "subject": "Novel",
+    }
+
+def novel_to_dict(novel, include_chapters=False, include_questions=False, progress=None):
+    chapters = NovelChapter.query.filter_by(novel_id=novel.id).order_by(NovelChapter.position.asc(), NovelChapter.id.asc()).all()
+    questions_count = NovelQuestion.query.filter_by(novel_id=novel.id).count()
+    completed = (progress.completed_chapters if progress and isinstance(progress.completed_chapters, list) else []) or []
+    total_ch = len(chapters)
+    pct = int(round((len(set(completed)) / total_ch) * 100)) if total_ch else 0
+    data = {
+        "id": novel.id,
+        "title": novel.title,
+        "author": novel.author or "",
+        "description": novel.description or "",
+        "category": novel.category or "",
+        "coverUrl": get_image_url(novel.cover_path),
+        "pdfUrl": get_image_url(novel.pdf_path) if (novel.pdf_path and novel.pdf_enabled) else None,
+        "hasPdf": bool(novel.pdf_path),
+        "pdfEnabled": bool(novel.pdf_enabled and novel.pdf_path),
+        "published": bool(novel.published),
+        "chapterCount": total_ch,
+        "questionCount": questions_count,
+        "downloadSize": novel.download_size,
+        "updatedAt": iso_utc(novel.updated_at or novel.created_at),
+        "progress": {
+            "chapterId": progress.chapter_id if progress else None,
+            "readingPosition": progress.reading_position if progress else 0,
+            "completedChapters": completed,
+            "bookmarks": (progress.bookmarks if progress and isinstance(progress.bookmarks, list) else []) or [],
+            "percent": pct,
+            "lastReadAt": iso_utc(progress.last_read_at) if progress and progress.last_read_at else None,
+        } if progress is not None else None,
+    }
+    if include_chapters:
+        data["chapters"] = [{"id": c.id, "novelId": c.novel_id, "title": c.title, "content": c.content or "", "position": c.position, "updatedAt": iso_utc(c.updated_at)} for c in chapters]
+    if include_questions:
+        qs = NovelQuestion.query.filter_by(novel_id=novel.id).order_by(NovelQuestion.id.asc()).all()
+        data["questions"] = [novel_question_to_dict(q) for q in qs]
+    return data
+
 
 
 def remove_stored_question_images(image_paths):
@@ -773,6 +922,70 @@ class PaystackPayment(db.Model):
     email_sent_at = db.Column(db.DateTime, nullable=True)
     verified_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+class Novel(db.Model):
+    __tablename__ = "novels"
+    id = db.Column(db.Integer, primary_key=True)
+    school_id = db.Column(db.Integer, db.ForeignKey("schools.id"), nullable=True, index=True)
+    title = db.Column(db.String(255), nullable=False)
+    author = db.Column(db.String(255), nullable=False, default="")
+    description = db.Column(db.Text, nullable=False, default="")
+    category = db.Column(db.String(40), nullable=False, default="JAMB", index=True)
+    cover_path = db.Column(db.String(1000), nullable=True)
+    pdf_path = db.Column(db.String(1000), nullable=True)
+    pdf_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    published = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    download_size = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+class NovelChapter(db.Model):
+    __tablename__ = "novel_chapters"
+    id = db.Column(db.Integer, primary_key=True)
+    novel_id = db.Column(db.Integer, db.ForeignKey("novels.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False, default="")
+    position = db.Column(db.Integer, nullable=False, default=0, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+class NovelQuestion(db.Model):
+    __tablename__ = "novel_questions"
+    id = db.Column(db.Integer, primary_key=True)
+    novel_id = db.Column(db.Integer, db.ForeignKey("novels.id", ondelete="CASCADE"), nullable=False, index=True)
+    question = db.Column(db.Text, nullable=False)
+    options = db.Column(db.JSON, nullable=False)
+    answer = db.Column(db.String(10), nullable=False)
+    explanation = db.Column(db.Text, nullable=True)
+    image_path = db.Column(db.String(1000), nullable=True)
+    topic = db.Column(db.String(120), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+class NovelProgress(db.Model):
+    __tablename__ = "novel_progress"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    novel_id = db.Column(db.Integer, db.ForeignKey("novels.id", ondelete="CASCADE"), nullable=False, index=True)
+    chapter_id = db.Column(db.Integer, nullable=True)
+    reading_position = db.Column(db.Integer, nullable=False, default=0)
+    completed_chapters = db.Column(db.JSON, nullable=True)
+    bookmarks = db.Column(db.JSON, nullable=True)
+    last_read_at = db.Column(db.DateTime, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    __table_args__ = (db.UniqueConstraint("user_id", "novel_id", name="uq_novel_progress_user_novel"),)
+
+class NovelAttempt(db.Model):
+    __tablename__ = "novel_attempts"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    novel_id = db.Column(db.Integer, db.ForeignKey("novels.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_attempt_id = db.Column(db.String(120), nullable=False)
+    score = db.Column(db.Float, nullable=False, default=0)
+    total = db.Column(db.Float, nullable=False, default=0)
+    answers = db.Column(db.JSON, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    __table_args__ = (db.UniqueConstraint("user_id", "client_attempt_id", name="uq_novel_attempt_client"),)
 
 
 def api_error(message, status=400, code=None):
@@ -3243,3 +3456,341 @@ def study_questions():
         })
     return jsonify(result)
 
+
+# ---------------- Novel management & reading/practice APIs ----------------
+
+def _novel_category(value):
+    v = normalize_label(value).upper()
+    if v in {"JAMB", "WAEC", "NECO"}:
+        return v
+    return None
+
+def _novel_payload(source, existing=None):
+    def get(k, *alts):
+        for key in (k,)+alts:
+            if key in source and source.get(key) is not None:
+                return source.get(key)
+        return None
+    title = normalize_label(get("title") or (existing.title if existing else ""))
+    author = normalize_label(get("author") or (existing.author if existing else ""))
+    description = (get("description") or (existing.description if existing else "") or "").strip()
+    category = _novel_category(get("category") or (existing.category if existing else ""))
+    if not title:
+        return None, "Novel title is required."
+    if not author:
+        return None, "Author is required."
+    if not category:
+        return None, "Category must be JAMB, WAEC, or NECO."
+    pdf_enabled_raw = get("pdfEnabled", "pdf_enabled")
+    published_raw = get("published")
+    pdf_enabled = bool(existing.pdf_enabled) if existing else False
+    published = bool(existing.published) if existing else False
+    if pdf_enabled_raw is not None:
+        pdf_enabled = str(pdf_enabled_raw).lower() in {"1", "true", "yes", "on"}
+    if published_raw is not None:
+        published = str(published_raw).lower() in {"1", "true", "yes", "on"}
+    download_size = get("downloadSize", "download_size")
+    try:
+        download_size = int(download_size) if download_size not in (None, "", False) else (existing.download_size if existing else None)
+    except Exception:
+        download_size = existing.download_size if existing else None
+    return {
+        "title": title[:255], "author": author[:255], "description": description,
+        "category": category, "pdf_enabled": pdf_enabled, "published": published,
+        "download_size": download_size,
+    }, None
+
+@app.route("/api/admin/novels", methods=["GET"])
+@roles_required("school_admin", "exam_officer", "teacher")
+def admin_novels_list():
+    rows = Novel.query.order_by(Novel.updated_at.desc().nullslast(), Novel.id.desc()).all()
+    return jsonify({"novels": [novel_to_dict(n, include_chapters=True, include_questions=False, progress=None) for n in rows]})
+
+@app.route("/api/admin/novels", methods=["POST"])
+@roles_required("school_admin", "exam_officer")
+def admin_novel_create():
+    data = request.form.to_dict() if request.form else (json_body() or {})
+    payload, err = _novel_payload(data)
+    if err:
+        return api_error(err)
+    novel = Novel(school_id=g.current_user.school_id, **payload)
+    db.session.add(novel); db.session.flush()
+    cover = request.files.get("cover")
+    if cover and cover.filename:
+        path, e = store_novel_file(cover, "novel_covers", "examcore/novel_covers", NOVEL_COVER_FOLDER, NOVEL_IMAGE_EXTENSIONS, "cover image", max_bytes=MAX_NOVEL_COVER_BYTES)
+        if e: db.session.rollback(); return api_error(e, 503 if "unavailable" in e else 400)
+        novel.cover_path = path
+    pdf = request.files.get("pdf")
+    if pdf and pdf.filename:
+        path, e = store_novel_file(pdf, "novel_pdfs", "examcore/novel_pdfs", NOVEL_PDF_FOLDER, NOVEL_PDF_EXTENSIONS, "PDF", max_bytes=MAX_NOVEL_PDF_BYTES)
+        if e: db.session.rollback(); return api_error(e, 503 if "unavailable" in e else 400)
+        novel.pdf_path = path
+        if novel.download_size is None:
+            try:
+                pdf.seek(0, os.SEEK_END); novel.download_size = pdf.tell()
+            except Exception:
+                pass
+    db.session.commit()
+    return jsonify(success=True, novel=novel_to_dict(novel, include_chapters=True)), 201
+
+@app.route("/api/admin/novels/<int:novel_id>", methods=["PUT"])
+@roles_required("school_admin", "exam_officer")
+def admin_novel_update(novel_id):
+    novel = db.session.get(Novel, novel_id)
+    if not novel:
+        return api_error("Novel not found.", 404, "novel_not_found")
+    data = request.form.to_dict() if request.form else (json_body() or {})
+    payload, err = _novel_payload(data, existing=novel)
+    if err:
+        return api_error(err)
+    for k, v in payload.items():
+        setattr(novel, k, v)
+    if str(data.get("removeCover", "")).lower() == "true" and novel.cover_path:
+        remove_stored_file(novel.cover_path); novel.cover_path = None
+    if str(data.get("removePdf", "")).lower() == "true" and novel.pdf_path:
+        remove_stored_file(novel.pdf_path); novel.pdf_path = None
+    cover = request.files.get("cover")
+    if cover and cover.filename:
+        path, e = store_novel_file(cover, "novel_covers", "examcore/novel_covers", NOVEL_COVER_FOLDER, NOVEL_IMAGE_EXTENSIONS, "cover image", max_bytes=MAX_NOVEL_COVER_BYTES)
+        if e: return api_error(e, 503 if "unavailable" in e else 400)
+        if novel.cover_path: remove_stored_file(novel.cover_path)
+        novel.cover_path = path
+    pdf = request.files.get("pdf")
+    if pdf and pdf.filename:
+        path, e = store_novel_file(pdf, "novel_pdfs", "examcore/novel_pdfs", NOVEL_PDF_FOLDER, NOVEL_PDF_EXTENSIONS, "PDF", max_bytes=MAX_NOVEL_PDF_BYTES)
+        if e: return api_error(e, 503 if "unavailable" in e else 400)
+        if novel.pdf_path: remove_stored_file(novel.pdf_path)
+        novel.pdf_path = path
+        try:
+            pdf.seek(0, os.SEEK_END); novel.download_size = pdf.tell()
+        except Exception:
+            pass
+    novel.updated_at = utcnow()
+    db.session.commit()
+    return jsonify(success=True, novel=novel_to_dict(novel, include_chapters=True))
+
+@app.route("/api/admin/novels/<int:novel_id>", methods=["DELETE"])
+@roles_required("school_admin", "exam_officer")
+def admin_novel_delete(novel_id):
+    novel = db.session.get(Novel, novel_id)
+    if not novel:
+        return api_error("Novel not found.", 404, "novel_not_found")
+    if novel.cover_path: remove_stored_file(novel.cover_path)
+    if novel.pdf_path: remove_stored_file(novel.pdf_path)
+    for q in NovelQuestion.query.filter_by(novel_id=novel.id).all():
+        if q.image_path: remove_stored_file(q.image_path)
+    NovelChapter.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
+    NovelQuestion.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
+    NovelProgress.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
+    NovelAttempt.query.filter_by(novel_id=novel.id).delete(synchronize_session=False)
+    db.session.delete(novel); db.session.commit()
+    return jsonify(success=True)
+
+@app.route("/api/admin/novels/<int:novel_id>/chapters", methods=["POST"])
+@roles_required("school_admin", "exam_officer")
+def admin_novel_add_chapter(novel_id):
+    novel = db.session.get(Novel, novel_id)
+    if not novel: return api_error("Novel not found.", 404)
+    data = json_body()
+    title = normalize_label(data.get("title"))
+    content = (data.get("content") or "")
+    if not title: return api_error("Chapter title is required.")
+    pos = NovelChapter.query.filter_by(novel_id=novel.id).count()
+    ch = NovelChapter(novel_id=novel.id, title=title[:255], content=content, position=pos)
+    db.session.add(ch); novel.updated_at = utcnow(); db.session.commit()
+    return jsonify(success=True, chapter={"id": ch.id, "novelId": ch.novel_id, "title": ch.title, "content": ch.content, "position": ch.position})
+
+@app.route("/api/admin/novels/<int:novel_id>/chapters/<int:chapter_id>", methods=["PUT", "DELETE"])
+@roles_required("school_admin", "exam_officer")
+def admin_novel_manage_chapter(novel_id, chapter_id):
+    ch = NovelChapter.query.filter_by(id=chapter_id, novel_id=novel_id).first()
+    if not ch: return api_error("Chapter not found.", 404)
+    novel = db.session.get(Novel, novel_id)
+    if request.method == "DELETE":
+        db.session.delete(ch)
+        remaining = NovelChapter.query.filter_by(novel_id=novel_id).order_by(NovelChapter.position.asc(), NovelChapter.id.asc()).all()
+        for i, c in enumerate(remaining): c.position = i
+        if novel: novel.updated_at = utcnow()
+        db.session.commit(); return jsonify(success=True)
+    data = json_body()
+    if "title" in data: ch.title = normalize_label(data.get("title"))[:255] or ch.title
+    if "content" in data: ch.content = data.get("content") or ""
+    if novel: novel.updated_at = utcnow()
+    db.session.commit()
+    return jsonify(success=True, chapter={"id": ch.id, "novelId": ch.novel_id, "title": ch.title, "content": ch.content, "position": ch.position})
+
+@app.route("/api/admin/novels/<int:novel_id>/chapters/reorder", methods=["POST"])
+@roles_required("school_admin", "exam_officer")
+def admin_novel_reorder_chapters(novel_id):
+    novel = db.session.get(Novel, novel_id)
+    if not novel: return api_error("Novel not found.", 404)
+    order = (json_body() or {}).get("order") or []
+    if not isinstance(order, list): return api_error("order must be a list of chapter IDs.")
+    chapters = {c.id: c for c in NovelChapter.query.filter_by(novel_id=novel_id).all()}
+    for i, cid in enumerate(order):
+        try: cid = int(cid)
+        except Exception: continue
+        if cid in chapters: chapters[cid].position = i
+    novel.updated_at = utcnow(); db.session.commit(); return jsonify(success=True)
+
+@app.route("/api/admin/novels/<int:novel_id>/questions", methods=["GET", "POST"])
+@roles_required("school_admin", "exam_officer")
+def admin_novel_questions(novel_id):
+    novel = db.session.get(Novel, novel_id)
+    if not novel: return api_error("Novel not found.", 404)
+    if request.method == "GET":
+        qs = NovelQuestion.query.filter_by(novel_id=novel_id).order_by(NovelQuestion.id.asc()).all()
+        return jsonify({"questions": [novel_question_to_dict(q) for q in qs]})
+    data = request.form.to_dict() if request.form else (json_body() or {})
+    question = (data.get("question") or "").strip()
+    options = data.get("options")
+    if isinstance(options, str):
+        try: options = json.loads(options)
+        except Exception: options = None
+    if isinstance(options, list):
+        options = {"A": options[0] if len(options)>0 else "", "B": options[1] if len(options)>1 else "", "C": options[2] if len(options)>2 else "", "D": options[3] if len(options)>3 else ""}
+    answer = str(data.get("correctAnswer") or data.get("answer") or "A").strip().upper()
+    if not question or not isinstance(options, dict) or answer not in "ABCD":
+        return api_error("question, options(A-D), and correctAnswer are required.")
+    if not all(str(options.get(k,"")).strip() for k in "ABCD"):
+        return api_error("All options A-D are required.")
+    image_path = None
+    img = request.files.get("image")
+    if img and img.filename:
+        path, e = store_question_image(img)
+        if e: return api_error(e, 503 if "unavailable" in e else 400)
+        image_path = path
+    q = NovelQuestion(novel_id=novel.id, question=question, options={k: str(options[k]).strip() for k in "ABCD"}, answer=answer, explanation=(data.get("explanation") or "").strip() or None, image_path=image_path, topic=normalize_label(data.get("topic")) or None)
+    db.session.add(q); novel.updated_at = utcnow(); db.session.commit()
+    return jsonify(success=True, question=novel_question_to_dict(q)), 201
+
+@app.route("/api/admin/novels/<int:novel_id>/questions/<int:question_id>", methods=["PUT", "DELETE"])
+@roles_required("school_admin", "exam_officer")
+def admin_novel_manage_question(novel_id, question_id):
+    q = NovelQuestion.query.filter_by(id=question_id, novel_id=novel_id).first()
+    if not q: return api_error("Question not found.", 404)
+    novel = db.session.get(Novel, novel_id)
+    if request.method == "DELETE":
+        if q.image_path: remove_stored_file(q.image_path)
+        db.session.delete(q)
+        if novel: novel.updated_at = utcnow()
+        db.session.commit(); return jsonify(success=True)
+    data = request.form.to_dict() if request.form else (json_body() or {})
+    if "question" in data: q.question = (data.get("question") or q.question).strip()
+    options = data.get("options")
+    if isinstance(options, str):
+        try: options = json.loads(options)
+        except Exception: options = None
+    if isinstance(options, list):
+        options = {"A": options[0] if len(options)>0 else "", "B": options[1] if len(options)>1 else "", "C": options[2] if len(options)>2 else "", "D": options[3] if len(options)>3 else ""}
+    if isinstance(options, dict) and all(str(options.get(k,"")).strip() for k in "ABCD"):
+        q.options = {k: str(options[k]).strip() for k in "ABCD"}
+    ans = str(data.get("correctAnswer") or data.get("answer") or q.answer or "A").strip().upper()
+    if ans in "ABCD": q.answer = ans
+    if "explanation" in data: q.explanation = (data.get("explanation") or "").strip() or None
+    if "topic" in data: q.topic = normalize_label(data.get("topic")) or None
+    img = request.files.get("image")
+    if img and img.filename:
+        path, e = store_question_image(img)
+        if e: return api_error(e, 503 if "unavailable" in e else 400)
+        if q.image_path: remove_stored_file(q.image_path)
+        q.image_path = path
+    if novel: novel.updated_at = utcnow()
+    db.session.commit()
+    return jsonify(success=True, question=novel_question_to_dict(q))
+
+# Student novel APIs
+@app.route("/api/novels", methods=["GET"])
+@require_auth
+def student_novels_list():
+    school_id = g.current_user.school_id
+    q = Novel.query.filter_by(published=True)
+    q = q.filter(or_(Novel.school_id == school_id, Novel.school_id.is_(None)))
+    rows = q.order_by(Novel.updated_at.desc().nullslast(), Novel.id.desc()).all()
+    result = []
+    for n in rows:
+        prog = NovelProgress.query.filter_by(user_id=g.current_user.id, novel_id=n.id).first()
+        result.append(novel_to_dict(n, include_chapters=False, include_questions=False, progress=prog))
+    return jsonify({"novels": result})
+
+@app.route("/api/novels/<int:novel_id>", methods=["GET"])
+@require_auth
+def student_novel_detail(novel_id):
+    novel = db.session.get(Novel, novel_id)
+    if not novel or not novel.published:
+        return api_error("Novel not found.", 404)
+    prog = NovelProgress.query.filter_by(user_id=g.current_user.id, novel_id=novel.id).first()
+    return jsonify(novel_to_dict(novel, include_chapters=True, include_questions=False, progress=prog))
+
+@app.route("/api/novels/<int:novel_id>/questions", methods=["GET"])
+@require_auth
+def student_novel_questions(novel_id):
+    novel = db.session.get(Novel, novel_id)
+    if not novel or not novel.published:
+        return api_error("Novel not found.", 404)
+    qs = NovelQuestion.query.filter_by(novel_id=novel.id).order_by(NovelQuestion.id.asc()).all()
+    return jsonify({"questions": [novel_question_to_dict(q) for q in qs]})
+
+@app.route("/api/novels/<int:novel_id>/progress", methods=["GET", "POST"])
+@require_auth
+def student_novel_progress(novel_id):
+    novel = db.session.get(Novel, novel_id)
+    if not novel or not novel.published:
+        return api_error("Novel not found.", 404)
+    prog = NovelProgress.query.filter_by(user_id=g.current_user.id, novel_id=novel.id).first()
+    if request.method == "GET":
+        return jsonify({"progress": novel_to_dict(novel, progress=prog)["progress"]})
+    data = json_body()
+    if not prog:
+        prog = NovelProgress(user_id=g.current_user.id, novel_id=novel.id)
+        db.session.add(prog)
+    if "chapterId" in data:
+        try: prog.chapter_id = int(data.get("chapterId")) if data.get("chapterId") is not None else None
+        except Exception: pass
+    if "readingPosition" in data:
+        try: prog.reading_position = max(0, int(data.get("readingPosition") or 0))
+        except Exception: pass
+    if "completedChapters" in data and isinstance(data.get("completedChapters"), list):
+        vals = []
+        for x in data.get("completedChapters"):
+            try: vals.append(int(x))
+            except Exception: pass
+        prog.completed_chapters = list(dict.fromkeys(vals))
+    if "bookmarks" in data and isinstance(data.get("bookmarks"), list):
+        prog.bookmarks = data.get("bookmarks")
+    prog.last_read_at = utcnow(); prog.updated_at = utcnow()
+    db.session.commit()
+    return jsonify(success=True, progress=novel_to_dict(novel, progress=prog)["progress"])
+
+@app.route("/api/novels/attempts/sync", methods=["POST"])
+@require_auth
+def student_novel_attempts_sync():
+    data = json_body()
+    attempts = data.get("attempts") or []
+    if not isinstance(attempts, list):
+        return api_error("attempts must be a list.")
+    saved = 0
+    for item in attempts:
+        if not isinstance(item, dict): continue
+        cid = str(item.get("clientAttemptId") or item.get("id") or "").strip()
+        if not cid: continue
+        if NovelAttempt.query.filter_by(user_id=g.current_user.id, client_attempt_id=cid).first():
+            continue
+        try: novel_id = int(item.get("novelId"))
+        except Exception: continue
+        if not db.session.get(Novel, novel_id): continue
+        try:
+            score = float(item.get("score") or 0); total = float(item.get("total") or 0)
+        except Exception:
+            score, total = 0.0, 0.0
+        completed_at = None
+        if item.get("completedAt"):
+            try:
+                completed_at = datetime.fromisoformat(str(item.get("completedAt")).replace("Z", "+00:00")).replace(tzinfo=None)
+            except Exception:
+                completed_at = utcnow()
+        row = NovelAttempt(user_id=g.current_user.id, novel_id=novel_id, client_attempt_id=cid[:120], score=score, total=total, answers=item.get("answers"), completed_at=completed_at)
+        db.session.add(row); saved += 1
+    if saved:
+        db.session.commit()
+    return jsonify(success=True, saved=saved)

@@ -135,6 +135,19 @@ export default function Test({ setActivePage, testConfig }: Props) {
       fromStudy: !!testConfig.fromStudy
     }
     localStorage.setItem('lastTestResult', JSON.stringify(result))
+    // Novel CBT practice: save offline and sync later (dedupe via clientAttemptId)
+    try {
+      const novelCtx = localStorage.getItem('current_novel_practice')
+      if (novelCtx) {
+        const ctx = JSON.parse(novelCtx)
+        const attempt = { clientAttemptId: `novel-${ctx.novelId || 'x'}-${result.id}`, novelId: ctx.novelId, score: result.score, total: result.total, answers: result.answers, completedAt: result.date }
+        const key = 'novel_pending_attempts'
+        const pending = JSON.parse(localStorage.getItem(key) || '[]')
+        if (!pending.find((p:any)=>p.clientAttemptId===attempt.clientAttemptId)) { pending.push(attempt); localStorage.setItem(key, JSON.stringify(pending)) }
+        try { await apiRequest('/api/novels/attempts/sync', { method: 'POST', body: JSON.stringify({ attempts: [attempt] }) }); const left = (JSON.parse(localStorage.getItem(key)||'[]') as any[]).filter((p:any)=>p.clientAttemptId!==attempt.clientAttemptId); localStorage.setItem(key, JSON.stringify(left)) } catch {}
+        localStorage.removeItem('current_novel_practice')
+      }
+    } catch {}
     if (examId && testConfig.mode === 'exam') {
       const subjectsToRecord = [...new Set(questions.map(question => question.subject).filter(Boolean))]
       try {
