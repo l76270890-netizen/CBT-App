@@ -1056,6 +1056,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           body: JSON.stringify({
             examId: selectedExam,
             subject: row.subject,
+            year: row.year,
             question: row.question,
             options: { A: row.optionA, B: row.optionB, C: row.optionC, D: row.optionD },
             correctAnswer: row.correctAnswer,
