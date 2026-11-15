@@ -27,21 +27,53 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
   const allSubjects = (testConfig.subjects || []) as SubjectLike[]
   const availabilityKnown = hasYearAvailability(allSubjects)
 
-  const availableYears = useMemo(() => {
-    const set = new Set<string>()
+  const availableYearNumbers = useMemo(() => {
+    const set = new Set<number>()
     for (const s of allSubjects) {
       if (typeof s !== 'object' || !s?.questionsByYear) continue
       for (const [y, c] of Object.entries(s.questionsByYear)) {
-        if (Number(c) > 0) set.add(String(y))
+        const n = Number(y)
+        if (Number.isFinite(n) && Number(c) > 0) set.add(n)
       }
     }
-    return Array.from(set).sort((a, b) => Number(b) - Number(a))
+    return Array.from(set).sort((a, b) => a - b)
   }, [allSubjects])
 
-  const effectiveYear = availableYears.length ? (availableYears.includes(year) ? year : availableYears[0]) : year
+  const yearOptions = useMemo(() => {
+    const opts: { label: string; value: string; years: number[] }[] = []
+    for (let i = 0; i < availableYearNumbers.length; ) {
+      const a = availableYearNumbers[i]
+      const b = availableYearNumbers[i + 1]
+      if (b !== undefined && b === a + 1) {
+        opts.push({ label: `${a}\u2013${b}`, value: `${a},${b}`, years: [a, b] })
+        i += 2
+      } else {
+        opts.push({ label: `${a}`, value: `${a}`, years: [a] })
+        i += 1
+      }
+    }
+    return opts
+  }, [availableYearNumbers])
+
+  const effectiveYear = useMemo(() => {
+    if (!yearOptions.length) return year
+    if (yearOptions.some(o => o.value === year)) return year
+    const n = Number(String(year).split(/[,\u2013-]/)[0])
+    if (Number.isFinite(n)) {
+      const match = yearOptions.find(o => o.years.includes(n))
+      if (match) return match.value
+    }
+    return yearOptions[0].value
+  }, [yearOptions, year])
+
+  const selectedYearNumbers = useMemo(() => {
+    const opt = yearOptions.find(o => o.value === effectiveYear)
+    if (opt) return opt.years
+    return effectiveYear ? effectiveYear.split(',').map(v => Number(v.trim())).filter(v => Number.isFinite(v)) : []
+  }, [yearOptions, effectiveYear])
 
   const subjectsForYear = useMemo(() => {
-    if (!availableYears.length) {
+    if (!selectedYearNumbers.length) {
       return allSubjects.map(s => {
         const name = subjectName(s)
         const base = typeof s === 'object' && s ? s : {}
@@ -61,16 +93,17 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
       const name = subjectName(s)
       const base = typeof s === 'object' && s ? s : {}
       const qby = (base as any).questionsByYear || {}
-      const count = Number(qby[effectiveYear] || 0)
+      const count = selectedYearNumbers.reduce((sum, y) => sum + (Number(qby[String(y)]) || 0), 0)
+      const yearsLabel = selectedYearNumbers.length === 2 ? `${selectedYearNumbers[0]}\u2013${selectedYearNumbers[1]}` : `${selectedYearNumbers[0] || ''}`
       return {
         subject: name,
         questions: count,
-        years: effectiveYear,
+        years: yearsLabel,
         required: !!(base as any).required || name.toLowerCase().includes('english'),
         questionsByYear: qby,
       }
     }).filter(s => s.subject && s.questions > 0)
-  }, [allSubjects, effectiveYear, availableYears.length])
+  }, [allSubjects, selectedYearNumbers])
 
   const totalQuestions = subjectsForYear.reduce((sum, s) => sum + (s.questions || 0), 0)
   const recommendedDuration = Math.max(1, Math.ceil((totalQuestions || 0) * 1.2) || 60)
@@ -149,7 +182,7 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
 
   const selectedSubjectNames = subjectsForYear.map(s => s.subject).filter(Boolean)
   const hasQuestionYearData = allSubjects.some(s => typeof s === 'object' && s?.questionsByYear && Object.keys(s.questionsByYear || {}).length > 0)
-  const noAvailable = (hasQuestionYearData || availabilityKnown) && (!availableYears.length || !subjectsForYear.length || totalQuestions <= 0)
+  const noAvailable = (hasQuestionYearData || availabilityKnown) && (!yearOptions.length || !subjectsForYear.length || totalQuestions <= 0)
 
   return (
     <div className="config-page">
@@ -163,7 +196,7 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
         <div className="selected-subjects-list">
          {subjectsForYear.map((s: any) => {
            const name = subjectName(s)
-           const qs = `${s.questions} Qs • ${effectiveYear || s.years || ''}`
+           const qs = `${s.questions} Qs • ${s.years || ''}`
            return (
             <div key={name} className="selected-subject-item">
               <span className="s-name">{name}</span>
@@ -201,7 +234,7 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
 
       <div className="config-card">
         <h3 className="account-title"><GraduationCap size={16}/> Test Settings</h3>
-        <div className="config-row"><label>Year</label><select className="config-select small" value={effectiveYear || ''} onChange={(e) => handleYearChange(e.target.value)} disabled={!availableYears.length}>{availableYears.length ? availableYears.map(y => <option key={y} value={y}>{y}</option>) : <option value="">No available years</option>}</select></div>
+        <div className="config-row"><label>Year</label><select className="config-select small" value={effectiveYear || ''} onChange={(e) => handleYearChange(e.target.value)} disabled={!yearOptions.length}>{yearOptions.length ? yearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>) : <option value="">No available years</option>}</select></div>
         <div className="config-row"><label>Difficulty</label><select className="config-select small" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}><option value="General">General</option><option value="Easy">Easy</option><option value="Normal">Normal</option><option value="Hard">Hard</option></select></div>
         <div className="config-row"><label>Topic</label><select className="config-select small" value={topic} onChange={(e) => setTopic(e.target.value)}><option value="All Topics">All Topics</option><option value="Random">Random Mix</option></select></div>
       </div>
