@@ -4,8 +4,8 @@ import JSZip from "jszip";
 import { loadQuestionZip } from "../src/questionZip.ts";
 
 const csv = [
-  "Question,Option A,Option B,Option C,Option D,Correct Answer,subject,explanation,imageUrl",
-  "Identify the shape,Triangle,Square,Circle,Rectangle,A,Mathematics,See diagram,triangle.png",
+  "Question,Option A,Option B,Option C,Option D,Correct Answer,subject,year,explanation,imageUrl",
+  "Identify the shape,Triangle,Square,Circle,Rectangle,A,Mathematics,2000,See diagram,triangle.png",
 ].join("\n");
 
 async function createZip(image?: Uint8Array): Promise<File> {

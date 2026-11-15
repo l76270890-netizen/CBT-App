@@ -749,7 +749,7 @@ def parse_question_import_csv(contents, images, exam):
             return None, "questions.csv contains duplicate column names."
         required_headers = {
             "question", "optiona", "optionb", "optionc", "optiond",
-            "correctanswer", "subject", "explanation",
+            "correctanswer", "subject", "explanation", "year",
         }
         missing_headers = sorted(required_headers - set(headers))
         if missing_headers:
@@ -779,9 +779,8 @@ def parse_question_import_csv(contents, images, exam):
                 },
                 "correctAnswer": row.get("correctanswer", "").upper(),
                 "explanation": row.get("explanation", ""),
+                "year": row.get("year", ""),
             }
-            if row.get("year", "") != "":
-                data["year"] = row.get("year", "")
             if row.get("topic", "") != "":
                 data["topic"] = row.get("topic", "")
             image_member = None
@@ -2208,7 +2207,10 @@ def create_exam():
     for subject in data["subjects"]:
         db.session.add(ExamSubject(exam_id=exam.id, name=subject))
     for question in prepared_questions:
-        q_year = question.get("year") if question.get("year") is not None else (exam.year if exam.year is not None else utcnow().year)
+        q_year = question.get("year")
+        if q_year is None:
+            db.session.rollback()
+            return api_error("Each question must include its original examination year.")
         db.session.add(Question(examId=exam.id, school_id=school_id, examType=exam.examType,
                                 subject=question["subject"], topic=question.get("topic"), question=question["question"],
                                 options=question["options"], answer=question["answer"],
@@ -2313,12 +2315,15 @@ def validate_question_payload(data, exam):
         image_path = data.get("image_path")
     topic = data.get("topic")
     topic_value = topic.strip() if isinstance(topic, str) and topic.strip() else None
-    year_value = None
-    if "year" in data and data.get("year") not in (None, ""):
-        try:
-            year_value = int(data.get("year"))
-        except (TypeError, ValueError):
-            return None, "year must be a valid integer."
+    raw_year = data.get("year", None)
+    if raw_year in (None, ""):
+        return None, "year is required for each question."
+    try:
+        year_value = int(raw_year)
+    except (TypeError, ValueError):
+        return None, "year must be a valid integer."
+    if year_value < 1900 or year_value > 2100:
+        return None, "year must be a valid examination year."
     return {"subject": subject.strip(), "question": question.strip(),
             "options": {key: options[key].strip() for key in "ABCD"}, "answer": answer,
             "explanation": data.get("explanation", "") or "", "image_path": image_path,
@@ -2355,15 +2360,9 @@ def add_question():
         if storage_error:
             return api_error(storage_error, 503, "image_storage_unavailable")
         validated["image_path"] = image_path
-    q_year = None
-    raw_q_year = data.get("year", None)
-    if raw_q_year not in (None, ""):
-        try:
-            q_year = int(raw_q_year)
-        except (TypeError, ValueError):
-            q_year = None
+    q_year = validated.get("year")
     if q_year is None:
-        q_year = exam.year if exam.year is not None else utcnow().year
+        return api_error("year is required for each question.")
     row = Question(examId=exam.id, school_id=exam.school_id, examType=exam.examType,
                    subject=validated["subject"], topic=validated.get("topic"), question=validated["question"],
                    options=validated["options"], answer=validated["answer"],
@@ -2440,7 +2439,11 @@ def handle_question_import(is_zip_endpoint):
                     stored_images[image_name] if image_name
                     else question["image_path"]
                 )
-                q_year = question.get("year") if question.get("year") is not None else (exam.year if exam.year is not None else utcnow().year)
+                q_year = question.get("year")
+                if q_year is None:
+                    remove_stored_question_images(stored_images.values())
+                    db.session.rollback()
+                    return api_error("Each question must include its original examination year.")
                 db.session.add(Question(
                     examId=exam.id,
                     school_id=exam.school_id,
@@ -2510,16 +2513,22 @@ def handle_question_import(is_zip_endpoint):
         for question, image_member in prepared:
             image_path = stored_images.get(
                 image_member) if image_member else question["image_path"]
+            q_year = question.get("year")
+            if q_year is None:
+                remove_stored_question_images(stored_images.values())
+                db.session.rollback()
+                return api_error("Each question must include its original examination year.")
             db.session.add(Question(
                 examId=exam.id,
                 school_id=exam.school_id,
                 examType=exam.examType,
                 subject=question["subject"],
+                topic=question.get("topic"),
                 question=question["question"],
                 options=question["options"],
                 answer=question["answer"],
                 explanation=question["explanation"],
-                year=exam.year,
+                year=q_year,
                 image_path=image_path,
             ))
         db.session.flush()

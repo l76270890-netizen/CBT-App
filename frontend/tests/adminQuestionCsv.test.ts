@@ -4,50 +4,47 @@ import { isSupportedQuestionImage, parseQuestionCsv, summarizeQuestionImageMatch
 
 const subjects = ["Mathematics"];
 
-test("imports the existing eight-column CSV without an image", () => {
+test("requires original examination year column for each question", () => {
   const csv = [
     "subject,question,optionA,optionB,optionC,optionD,correctAnswer,explanation",
     'Mathematics,"What is 2 + 2?",3,4,5,6,B,"Basic addition"',
   ].join("\n");
-
-  const [row] = parseQuestionCsv(csv, subjects);
-  assert.equal(row.question, "What is 2 + 2?");
-  assert.equal(row.imageUrl, undefined);
-  assert.deepEqual(row.errors, []);
+  assert.throws(() => parseQuestionCsv(csv, subjects), /Missing required columns: year/);
 });
 
-test("imports the new nine-column CSV and keeps its image URL", () => {
+test("imports CSV with original examination year and keeps its image URL", () => {
   const csv = [
-    "Question,Option A,Option B,Option C,Option D,Correct Answer,subject,explanation,imageUrl",
-    'What is 2 + 2?,3,4,5,6,B,Mathematics,Basic addition,https://cdn.example.com/diagram.png',
+    "Question,Option A,Option B,Option C,Option D,Correct Answer,subject,year,explanation,imageUrl",
+    'What is 2 + 2?,3,4,5,6,B,Mathematics,2000,Basic addition,https://cdn.example.com/diagram.png',
   ].join("\n");
 
   const [row] = parseQuestionCsv(csv, subjects);
+  assert.equal(row.year, "2000");
   assert.equal(row.imageUrl, "https://cdn.example.com/diagram.png");
   assert.deepEqual(row.errors, []);
 });
 
 test("allows an empty optional image URL and rejects malformed image URLs", () => {
   const emptyImage = parseQuestionCsv([
-    "Question,Option A,Option B,Option C,Option D,Correct Answer,subject,explanation,imageUrl",
-    "What is 2 + 2?,3,4,5,6,B,Mathematics,Basic addition,",
+    "Question,Option A,Option B,Option C,Option D,Correct Answer,subject,year,explanation,imageUrl",
+    "What is 2 + 2?,3,4,5,6,B,Mathematics,2001,Basic addition,",
   ].join("\n"), subjects)[0];
   assert.equal(emptyImage.imageUrl, undefined);
   assert.deepEqual(emptyImage.errors, []);
 
   const invalidImage = parseQuestionCsv([
-    "Question,Option A,Option B,Option C,Option D,Correct Answer,subject,explanation,imageUrl",
-    "What is 2 + 2?,3,4,5,6,B,Mathematics,Basic addition,javascript:alert(1)",
+    "Question,Option A,Option B,Option C,Option D,Correct Answer,subject,year,explanation,imageUrl",
+    "What is 2 + 2?,3,4,5,6,B,Mathematics,2001,Basic addition,javascript:alert(1)",
   ].join("\n"), subjects)[0];
   assert.ok(invalidImage.errors.includes("Image URL must be a valid HTTP(S) URL or a relative upload path"));
 });
 
 test("matches selected images by filename and reports missing or ambiguous references", () => {
   const rows = parseQuestionCsv([
-    "subject,question,optionA,optionB,optionC,optionD,correctAnswer,explanation,imageUrl",
-    "Mathematics,First question,A,B,C,D,A,,images/Triangle.png",
-    "Mathematics,Second question,A,B,C,D,A,,missing.jpg",
-    "Mathematics,Third question,A,B,C,D,A,,duplicate.png",
+    "subject,year,question,optionA,optionB,optionC,optionD,correctAnswer,explanation,imageUrl",
+    "Mathematics,2000,First question,A,B,C,D,A,,images/Triangle.png",
+    "Mathematics,2001,Second question,A,B,C,D,A,,missing.jpg",
+    "Mathematics,2001,Third question,A,B,C,D,A,,duplicate.png",
   ].join("\n"), subjects, { allowImageReferences: true });
   const files = [
     new File(["image"], "triangle.png", { type: "image/png" }),
@@ -72,8 +69,8 @@ test("accepts supported image types and rejects unsupported extensions or MIME t
 
 test("matches WEBP image references by filename", () => {
   const rows = parseQuestionCsv([
-    "subject,question,optionA,optionB,optionC,optionD,correctAnswer,explanation,imageUrl",
-    "Mathematics,Question with image,A,B,C,D,A,,images/diagram.webp",
+    "subject,year,question,optionA,optionB,optionC,optionD,correctAnswer,explanation,imageUrl",
+    "Mathematics,2000,Question with image,A,B,C,D,A,,images/diagram.webp",
   ].join("\n"), subjects, { allowImageReferences: true });
 
   const summary = summarizeQuestionImageMatches(rows, [

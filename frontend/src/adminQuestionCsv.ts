@@ -3,6 +3,7 @@ import Papa from "papaparse";
 export type CsvQuestionRow = {
   rowNumber: number;
   subject: string;
+  year: string;
   question: string;
   optionA: string;
   optionB: string;
@@ -16,8 +17,8 @@ export type CsvQuestionRow = {
   importError?: string;
 }
 
-const requiredHeaders = ["subject", "question", "optiona", "optionb", "optionc", "optiond", "correctanswer", "explanation"];
-export const csvTemplateHeaders = ["Question", "Option A", "Option B", "Option C", "Option D", "Correct Answer", "subject", "explanation", "imageUrl"];
+const requiredHeaders = ["subject", "year", "question", "optiona", "optionb", "optionc", "optiond", "correctanswer", "explanation"];
+export const csvTemplateHeaders = ["subject", "year", "question", "optionA", "optionB", "optionC", "optionD", "correctAnswer", "explanation", "imageUrl"];
 const normalizeHeader = (header: string) => header.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export function normalizeImageReference(value: string): string {
@@ -120,6 +121,7 @@ export function parseQuestionCsv(contents: string, subjects: string[], options: 
   const seenQuestions = new Set<string>();
   return results.data.map((row, index): CsvQuestionRow => {
     const rawSubject = String(row.subject ?? "").trim();
+    const rawYear = String(row.year ?? "").trim();
     const question = String(row.question ?? "").trim();
     const optionA = String(row.optiona ?? "").trim();
     const optionB = String(row.optionb ?? "").trim();
@@ -133,6 +135,9 @@ export function parseQuestionCsv(contents: string, subjects: string[], options: 
 
     if (!rawSubject) errors.push("Subject is required");
     else if (!subject) errors.push(`Subject "${rawSubject}" is not listed on this exam`);
+    const yearNum = Number(rawYear);
+    if (!rawYear) errors.push("Original examination year is required");
+    else if (!Number.isInteger(yearNum) || yearNum < 1900 || yearNum > 2100) errors.push("Year must be a valid examination year");
     if (!question) errors.push("Question is required");
     if (!optionA || !optionB || !optionC || !optionD) errors.push("All four options are required");
     if (!["A", "B", "C", "D"].includes(correctAnswer)) errors.push("Correct answer must be A, B, C, or D");
@@ -147,6 +152,7 @@ export function parseQuestionCsv(contents: string, subjects: string[], options: 
     return {
       rowNumber: index + 2,
       subject: subject || rawSubject,
+      year: rawYear,
       question,
       optionA,
       optionB,

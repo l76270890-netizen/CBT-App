@@ -1370,6 +1370,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
                         <tr key={row.rowNumber} className={rowError ? "has-error" : row.status === "imported" ? "is-imported" : ""}>
                           <td>{row.rowNumber}</td>
                           <td>{row.subject || "—"}</td>
+                          <td>{row.year || "—"}</td>
                           <td className="csv-question-cell">{row.question || "(empty question)"}</td>
                           <td>A: {row.optionA} · B: {row.optionB} · C: {row.optionC} · D: {row.optionD}</td>
                           <td>{row.correctAnswer || "—"}</td>
