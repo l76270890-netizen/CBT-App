@@ -60,7 +60,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
           const grouped: SubjectItem[] = examSubjects.map(subject => ({
             subject,
             questions: 0,
-            years: '2024',
+            years: 'No questions yet',
             required: subject.toLowerCase().includes('english'),
             questionsByYear: {},
           }))
@@ -92,7 +92,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
     if (selectedSubjects.length === 0) return
     const totalQuestions = selectedSubjects.reduce((sum, s) => sum + s.questions, 0)
     const allYears = Array.from(new Set(selectedSubjects.flatMap(s => Object.keys(s.questionsByYear || {})))).sort((a, b) => Number(b) - Number(a))
-    const defaultYear = allYears[0] || '2024'
+    const defaultYear = allYears[0] || ''
     setTestConfig((prev: any) => ({ ...prev, examType: selectedExam, subjects: selectedSubjects, totalQuestions, year: defaultYear, duration: Math.ceil(totalQuestions * 1.2) || 60, mode: prev.mode || 'exam', difficulty: prev.difficulty || 'Normal', showAnswers: prev.mode === 'practice', topic: 'All Topics' }))
     setActivePage('testConfig')
   }

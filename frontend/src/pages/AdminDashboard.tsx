@@ -595,7 +595,6 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [eType, setEType] = useState(defaultExamTypes[0]);
   const [customType, setCustomType] = useState("");
   const [showCustomType, setShowCustomType] = useState(false);
-  const [eYear, setEYear] = useState("2024");
   const [eDuration, setEDuration] = useState("60");
   const [eExamDate, setEExamDate] = useState("");
   const [eSubjects, setESubjects] = useState<string[]>(["Mathematics","English"]);
@@ -753,10 +752,10 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setLoading(true);
     try {
       if(editingExam) {
-        await apiRequest(`/api/admin/exam/${encodeURIComponent(editingExam.id)}`, { method: "PUT", body: JSON.stringify({ title:eTitle, examType:eType, year:Number(eYear), duration:Number(eDuration), subjects:eSubjects, scheduledAt }) });
+        await apiRequest(`/api/admin/exam/${encodeURIComponent(editingExam.id)}`, { method: "PUT", body: JSON.stringify({ title:eTitle, examType:eType, duration:Number(eDuration), subjects:eSubjects, scheduledAt }) });
         setMsg(`"${eTitle}" updated!`); setEditingExam(null);
       } else {
-        await apiRequest("/api/admin/create-exam", { method: "POST", body: JSON.stringify({ title:eTitle, examType:eType, year:eYear, duration:eDuration, subjects:eSubjects, scheduledAt, questions:[] }) });
+        await apiRequest("/api/admin/create-exam", { method: "POST", body: JSON.stringify({ title:eTitle, examType:eType, duration:Number(eDuration), subjects:eSubjects, scheduledAt, questions:[] }) });
         setMsg(`"${eTitle}" created with ${eSubjects.length} subjects!`);
       }
       setETitle(""); setEExamDate(""); setESubjects(["Mathematics","English"]); await fetchExams();
@@ -767,7 +766,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const startEdit = (ex: Exam) => {
     setEditingExam(ex);
     setETitle(ex.title); setEType(ex.examType);
-    setEYear(String(ex.year)); setEDuration(String(ex.duration));
+    setEDuration(String(ex.duration || 60));
     setEExamDate(ex.examDate?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? "");
     setESubjects(ex.subjects);
     setAdminView("exams");
@@ -1139,7 +1138,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           </>}
           <div className="admin-overview-columns">
             <section className="admin-overview-card"><div className="admin-section-heading"><div><h3>Exam library</h3><p>Recently configured exams</p></div><button onClick={() => setAdminView("exams")}>View all</button></div>
-              {examsLoading ? <p className="admin-empty-note">Loading exams...</p> : examsError ? <p className="admin-error" role="alert">{examsError}</p> : exams.length ? <div className="admin-recent-exams">{exams.slice(0,5).map(exam=><div className="admin-recent-exam" key={exam.id}><div><strong>{exam.title}</strong><span>{exam.examType} · {exam.year || ""}</span></div><small>{exam.subjects.length} subjects</small></div>)}</div> : <p className="admin-empty-note">No exams are available yet.</p>}
+              {examsLoading ? <p className="admin-empty-note">Loading exams...</p> : examsError ? <p className="admin-error" role="alert">{examsError}</p> : exams.length ? <div className="admin-recent-exams">{exams.slice(0,5).map(exam=><div className="admin-recent-exam" key={exam.id}><div><strong>{exam.title}</strong><span>{exam.examType}</span></div><small>{exam.subjects.length} subjects</small></div>)}</div> : <p className="admin-empty-note">No exams are available yet.</p>}
             </section>
             <section className="admin-overview-card"><div className="admin-section-heading"><div><h3>Recent exam activity</h3><p>Latest completed attempts</p></div><Activity size={18} /></div>
               {asArray<any>(overview?.recentExamActivity).length ? <div className="admin-recent-exams">{asArray<any>(overview?.recentExamActivity).map((item,index)=><div className="admin-recent-exam" key={String(item?.id ?? index)}><div><strong>{item?.studentName ?? item?.displayName ?? item?.examTitle ?? "Exam attempt"}</strong><span>{item?.subject ?? item?.examTitle ?? ""}</span></div><small>{item?.score == null || item?.total == null ? "—" : `${item.score}/${item.total}`}</small></div>)}</div> : <p className="admin-empty-note">No results yet.</p>}
@@ -1182,7 +1181,6 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
                 <div className="custom-box"><input value={customType} onChange={e=>setCustomType(e.target.value)} placeholder="e.g CUSTOM"/><button type="button" className="admin-btn primary sm" onClick={addCustomType}>Add</button></div>
               )}
             </div>
-            <div className="admin-field"><label>Year</label><input type="number" value={eYear} onChange={e=>setEYear(e.target.value)} /></div>
             <div className="admin-field"><label>Duration</label><input type="number" value={eDuration} onChange={e=>setEDuration(e.target.value)} /></div>
           </div>
 
@@ -1214,7 +1212,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
           {exams.map(ex=>(
             <div key={ex.id} className="exam-card" style={{flexDirection:'column', alignItems:'stretch', background:'#1a1a1a', border:'1px solid #2a2a2a'}}>
               <div style={{display:'flex', justifyContent:'space-between', width:'100%'}}>
-                <div className="exam-info"><b style={{color:'#fff'}}>{ex.title}</b><div className="exam-meta"><span className="badge">{ex.examType}</span><span style={{color:'#888'}}>{ex.year} • {ex.duration}min • {ex.subjects?.length} subjects · {ex.totalQuestions ?? "—"} questions</span>{ex.examDate && <span style={{color:'#a5b4fc'}}>Scheduled: {formatExamDate(ex.examDate)}</span>}</div></div>
+                <div className="exam-info"><b style={{color:'#fff'}}>{ex.title}</b><div className="exam-meta"><span className="badge">{ex.examType}</span><span style={{color:'#888'}}>{ex.duration}min • {ex.subjects?.length} subjects · {ex.totalQuestions ?? "—"} questions</span>{ex.examDate && <span style={{color:'#a5b4fc'}}>Scheduled: {formatExamDate(ex.examDate)}</span>}</div></div>
                 <div style={{display:'flex', gap:6}}>
                   <button className="admin-btn sm" onClick={()=>setExpandedExam(expandedExam===ex.id? null : ex.id)}>{expandedExam===ex.id? '▲' : '▼'}</button>
                   <button className="admin-btn sm" onClick={()=>startEdit(ex)}>✏️</button>

@@ -780,6 +780,10 @@ def parse_question_import_csv(contents, images, exam):
                 "correctAnswer": row.get("correctanswer", "").upper(),
                 "explanation": row.get("explanation", ""),
             }
+            if row.get("year", "") != "":
+                data["year"] = row.get("year", "")
+            if row.get("topic", "") != "":
+                data["topic"] = row.get("topic", "")
             image_member = None
             if image_reference.lower().startswith(("http://", "https://")):
                 data["imageUrl"] = image_reference
@@ -2037,7 +2041,18 @@ def get_exams():
 def get_questions():
     exam_id = request.args.get("examId", type=int)
     subject = (request.args.get("subject") or "").strip()
-    year = request.args.get("year", type=int)
+    years_param = request.args.get("years") or request.args.get("year")
+    year_values = []
+    if years_param not in (None, ""):
+        raw = str(years_param)
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                year_values.append(int(part))
+            except (TypeError, ValueError):
+                pass
 
     if not exam_id or not subject:
         return api_error("Both examId and subject are required.")
@@ -2062,8 +2077,9 @@ def get_questions():
         school_id=g.current_user.school_id,
         subject=subject
     )
-    if year is not None:
-        query = query.filter(Question.year == year)
+    # question-level year is the source of truth for test filtering
+    if year_values:
+        query = query.filter(Question.year.in_(year_values))
     questions = query.order_by(Question.id).all()
 
     is_admin = g.current_user.role in ADMIN_ROLES
@@ -2136,13 +2152,19 @@ def validate_exam_payload(data):
     if not isinstance(subjects, list) or not subjects or any(not isinstance(x, str) or not x.strip() for x in subjects):
         return None, "subjects must be a non-empty list of subject names."
     subjects = list(dict.fromkeys(x.strip() for x in subjects))
+    raw_year = data.get("year", None)
+    year = None
+    if raw_year not in (None, ""):
+        try:
+            year = int(raw_year)
+        except (TypeError, ValueError):
+            return None, "year must be a valid integer when provided."
     try:
-        year = int(data.get("year", datetime.utcnow().year))
         duration = int(data.get("duration", 60))
         if duration <= 0:
             raise ValueError
     except (TypeError, ValueError):
-        return None, "year and positive duration must be valid integers."
+        return None, "duration must be a positive integer."
     scheduled_at, error = parse_scheduled_at(data.get("scheduledAt"))
     if error:
         return None, error
@@ -2186,10 +2208,11 @@ def create_exam():
     for subject in data["subjects"]:
         db.session.add(ExamSubject(exam_id=exam.id, name=subject))
     for question in prepared_questions:
+        q_year = question.get("year") if question.get("year") is not None else (exam.year if exam.year is not None else utcnow().year)
         db.session.add(Question(examId=exam.id, school_id=school_id, examType=exam.examType,
-                                subject=question["subject"], question=question["question"],
+                                subject=question["subject"], topic=question.get("topic"), question=question["question"],
                                 options=question["options"], answer=question["answer"],
-                                explanation=question["explanation"], year=exam.year,
+                                explanation=question["explanation"], year=q_year,
                                 image_path=question["image_path"]))
     db.session.commit()
     return jsonify(success=True, exam_id=exam.id, message=f"{exam.title} saved"), 201
@@ -2217,15 +2240,20 @@ def manage_exam(exam_id):
         exam.title = data["title"].strip()
     if "examType" in data and isinstance(data["examType"], str) and data["examType"].strip():
         exam.examType = data["examType"].strip()
-    for key in ("year", "duration"):
-        if key in data:
-            try:
-                value = int(data[key])
-                if key == "duration" and value <= 0:
-                    raise ValueError
-                setattr(exam, key, value)
-            except (TypeError, ValueError):
-                return api_error(f"{key} must be a valid integer" + (" greater than zero." if key == "duration" else "."))
+    if "duration" in data:
+        try:
+            value = int(data["duration"])
+            if value <= 0:
+                raise ValueError
+            exam.duration = value
+        except (TypeError, ValueError):
+            return api_error("duration must be a valid integer greater than zero.")
+    # exam-level year is not required/used for question filtering; keep only for backward-compatible records
+    if "year" in data and data.get("year") not in (None, ""):
+        try:
+            exam.year = int(data["year"])
+        except (TypeError, ValueError):
+            pass
     if "scheduledAt" in data:
         scheduled_at, error = parse_scheduled_at(data["scheduledAt"])
         if error:
@@ -2285,10 +2313,16 @@ def validate_question_payload(data, exam):
         image_path = data.get("image_path")
     topic = data.get("topic")
     topic_value = topic.strip() if isinstance(topic, str) and topic.strip() else None
+    year_value = None
+    if "year" in data and data.get("year") not in (None, ""):
+        try:
+            year_value = int(data.get("year"))
+        except (TypeError, ValueError):
+            return None, "year must be a valid integer."
     return {"subject": subject.strip(), "question": question.strip(),
             "options": {key: options[key].strip() for key in "ABCD"}, "answer": answer,
             "explanation": data.get("explanation", "") or "", "image_path": image_path,
-            "topic": topic_value}, None
+            "topic": topic_value, "year": year_value}, None
 
 
 @app.route("/api/admin/add-question", methods=["POST"])
@@ -2321,10 +2355,19 @@ def add_question():
         if storage_error:
             return api_error(storage_error, 503, "image_storage_unavailable")
         validated["image_path"] = image_path
+    q_year = None
+    raw_q_year = data.get("year", None)
+    if raw_q_year not in (None, ""):
+        try:
+            q_year = int(raw_q_year)
+        except (TypeError, ValueError):
+            q_year = None
+    if q_year is None:
+        q_year = exam.year if exam.year is not None else utcnow().year
     row = Question(examId=exam.id, school_id=exam.school_id, examType=exam.examType,
                    subject=validated["subject"], topic=validated.get("topic"), question=validated["question"],
                    options=validated["options"], answer=validated["answer"],
-                   explanation=validated["explanation"], year=exam.year, image_path=validated["image_path"])
+                   explanation=validated["explanation"], year=q_year, image_path=validated["image_path"])
     db.session.add(row)
     db.session.flush()
     exam.totalQuestions = Question.query.filter_by(
@@ -2397,6 +2440,7 @@ def handle_question_import(is_zip_endpoint):
                     stored_images[image_name] if image_name
                     else question["image_path"]
                 )
+                q_year = question.get("year") if question.get("year") is not None else (exam.year if exam.year is not None else utcnow().year)
                 db.session.add(Question(
                     examId=exam.id,
                     school_id=exam.school_id,
@@ -2407,7 +2451,7 @@ def handle_question_import(is_zip_endpoint):
                     options=question["options"],
                     answer=question["answer"],
                     explanation=question["explanation"],
-                    year=exam.year,
+                    year=q_year,
                     image_path=image_path,
                 ))
             db.session.flush()
