@@ -10,9 +10,11 @@ type Props = {
   selectedExam: string
   selectedExamId?: string
   configuredSubjects?: Array<string | { subject?: string; name?: string }>
+  testConfig?: any
 }
 
-export default function Subjects({ setActivePage, setTestConfig, selectedExam, selectedExamId, configuredSubjects = [] }: Props) {
+export default function Subjects({ setActivePage, setTestConfig, selectedExam, selectedExamId, configuredSubjects = [], testConfig }: Props) {
+  const isJamb = String(selectedExam || testConfig?.examType || '').toUpperCase() === 'JAMB' || !!testConfig?.jambFlow
   const [selectedSubjects, setSelectedSubjects] = useState<SubjectItem[]>([])
   const [search, setSearch] = useState("")
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
@@ -76,14 +78,44 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
     fetchSubjects()
   }, [selectedExam, selectedExamId, configuredSubjects])
 
-  const maxSubjects = subjects.length
+  const maxSubjects = isJamb ? 1 : subjects.length
   useEffect(() => {
+    if (isJamb) {
+      setSelectedSubjects([])
+      return
+    }
     const required = subjects.filter(s => s.required)
     if (required.length && selectedSubjects.length === 0) { setSelectedSubjects(required) }
-  }, [subjects])
+  }, [subjects, isJamb])
 
   const filtered = useMemo(() => { if (!search) return subjects; return subjects.filter(s => s.subject.toLowerCase().includes(search.toLowerCase())) }, [search, subjects])
   const toggleSubject = (subjectData: SubjectItem) => {
+    if (isJamb) {
+      const allYears = Array.from(new Set(Object.keys(subjectData.questionsByYear || {}))).sort((a, b) => Number(b) - Number(a))
+      setSelectedSubjects([subjectData])
+      setTestConfig((prev: any) => ({
+        ...prev,
+        examType: 'JAMB',
+        examId: selectedExamId || prev.examId || prev.customExamId || '',
+        customExamId: selectedExamId || prev.customExamId || prev.examId || '',
+        subjects: [subjectData],
+        subject: subjectData.subject,
+        selectedSubject: subjectData.subject,
+        totalQuestions: subjectData.questions || 0,
+        year: allYears[0] ? String(allYears[0]) : '',
+        years: undefined,
+        yearRangeLabel: undefined,
+        yearRange: undefined,
+        jambFlow: true,
+        jambLockedSelection: false,
+        mode: prev.mode || 'exam',
+        difficulty: prev.difficulty || 'General',
+        topic: 'All Topics',
+        showAnswers: prev.mode === 'practice',
+      }))
+      setActivePage('questionYears')
+      return
+    }
     const isSelected = selectedSubjects.find(s => s.subject === subjectData.subject)
     if (isSelected) { if (subjectData.required) return; setSelectedSubjects(selectedSubjects.filter(s => s.subject !== subjectData.subject)) }
     else { if (selectedSubjects.length >= maxSubjects) return; setSelectedSubjects([...selectedSubjects, subjectData]) }
@@ -104,11 +136,11 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
       <div className="exams-topbar">
         <div className="topbar-main">
           <button className="back-btn1" onClick={() => setActivePage('home')}><ArrowLeft size={18} /></button>
-          <div><h1>{selectedExam}</h1><p>Select {maxSubjects} subjects</p></div>
-          <div className="count-badge">{selectedSubjects.length}/{maxSubjects}</div>
+          <div><h1>{selectedExam}</h1><p>{isJamb ? 'Select 1 subject' : `Select ${maxSubjects} subjects`}</p></div>
+          {!isJamb && <div className="count-badge">{selectedSubjects.length}/{maxSubjects}</div>}
         </div>
         <div className="search-wrapper small"><Search size={16} className="search-icon" /><input placeholder="Search subject..." value={search} onChange={e => setSearch(e.target.value)} /></div>
-        <div className="alert-card"><div className="alert-icon">i</div><div className="alert-text">Subjects for {selectedExam}. Year-specific availability is applied on the next step.</div></div>
+        <div className="alert-card"><div className="alert-icon">i</div><div className="alert-text">{isJamb ? 'Choose one JAMB subject to continue to Question Years.' : `Subjects for ${selectedExam}. Year-specific availability is applied on the next step.`}</div></div>
       </div>
       {loading ? <div className="no-result">Loading {selectedExam} subjects...</div> :
         loadError ? <div className="no-result" role="alert">{loadError}</div> : filtered.length === 0 ? <div className="no-result">No subjects for {selectedExam}. Add in Admin.</div> :
@@ -126,7 +158,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
             })}
           </div>
       }
-      {selectedSubjects.length > 0 && (
+      {!isJamb && selectedSubjects.length > 0 && (
         <div className="sticky-continue">
           <div className="selected-summary"><span>{selectedSubjects.map(s => s.subject.split(' ')[0]).join(' + ')}</span><b>{selectedSubjects.length}/{maxSubjects} • {totalQs} Qs</b></div>
           <button className="btn-continue" onClick={handleContinue}>CONTINUE TO SETUP</button>

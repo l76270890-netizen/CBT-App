@@ -173,25 +173,33 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
   }, [examsFromDb])
 
   // Clicking one of the five exam cards opens that exam type's subjects.
-  // The subject picker then hands over to the existing Configure Test page.
+  // JAMB uses a dedicated flow: Subjects (single) -> Question Years -> Config -> Instructions -> Exam.
+  // Other exam types keep the existing flow.
   // If the admin has imported this exam type on the backend, its exam ID is
   // passed along so the imported questions are used (same as the Exams page).
   const openExamType = (examKey: string) => {
     const dbExam = examsFromDb.find(exam => examTypeMatches(exam.examType, examKey))
-    setSelectedExam(dbExam ? dbExam.examType : examKey)
+    const resolvedType = dbExam ? dbExam.examType : examKey
+    setSelectedExam(resolvedType)
     setTestConfig((prev: any) => ({
       ...prev,
-      examType: dbExam ? dbExam.examType : examKey,
+      examType: resolvedType,
       examId: dbExam?.id || '',
       customExamId: dbExam?.id || '',
       examTitle: dbExam?.title || '',
       customTitle: dbExam?.title || '',
       subjects: dbExam?.subjects || [],
       totalQuestions: 0,
-      year: dbExam ? String(dbExam.year) : '2024',
+      year: '',
       mode: 'exam',
       showAnswers: false,
       topic: 'All Topics',
+      jambFlow: String(resolvedType).toUpperCase() === 'JAMB',
+      jambLockedSelection: false,
+      selectedSubject: undefined,
+      years: undefined,
+      yearRangeLabel: undefined,
+      yearRange: undefined,
     }))
     setActivePage('subjects')
   }

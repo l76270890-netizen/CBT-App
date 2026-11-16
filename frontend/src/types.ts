@@ -26,6 +26,12 @@ export type TestConfigType = {
   title?: string
   examTitle?: string
   subject?: string
+  selectedSubject?: string
+  years?: number[]
+  yearRangeLabel?: string
+  yearRange?: { startYear: number; endYear: number }
+  jambFlow?: boolean
+  jambLockedSelection?: boolean
 }
 
 export type Question = {

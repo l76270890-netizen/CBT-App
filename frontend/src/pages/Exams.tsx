@@ -92,20 +92,27 @@ export default function Exams({ setActivePage, setSelectedExam, setTestConfig }:
 
   const openExamType = (examKey: string) => {
     const dbExam = examsFromDb.find(exam => examTypeMatches(exam.examType, examKey))
-    setSelectedExam(dbExam ? dbExam.examType : examKey)
+    const resolvedType = dbExam ? dbExam.examType : examKey
+    setSelectedExam(resolvedType)
     setTestConfig((prev: any) => ({
       ...prev,
-      examType: dbExam ? dbExam.examType : examKey,
+      examType: resolvedType,
       examId: dbExam?.id || '',
       customExamId: dbExam?.id || '',
       examTitle: dbExam?.title || '',
       customTitle: dbExam?.title || '',
       subjects: dbExam?.subjects || [],
       totalQuestions: 0,
-      year: dbExam ? String(dbExam.year) : '2024',
+      year: '',
       mode: 'exam',
       showAnswers: false,
       topic: 'All Topics',
+      jambFlow: String(resolvedType).toUpperCase() === 'JAMB',
+      jambLockedSelection: false,
+      selectedSubject: undefined,
+      years: undefined,
+      yearRangeLabel: undefined,
+      yearRange: undefined,
     }))
     setActivePage('subjects')
   }

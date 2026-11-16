@@ -13,6 +13,7 @@ import PracticeHistory from './pages/PracticeHistory'
 import Review from './pages/Review'
 import AdminDashboard from './pages/AdminDashboard'
 import TestInstructions from './pages/TestInstructions'
+import QuestionYears from './pages/QuestionYears'
 import GeneralKnowledge from './pages/GeneralKnowledge'
 import LandingMobile from './pages/LandingMobile'
 import Login from './pages/Login'
@@ -105,7 +106,7 @@ function AppShell() {
     setPage(p)
   }
 
-  const hideNavbarPages = ['landing', 'login', 'register', 'payment', 'paymentReceived', 'activation', 'renew', 'subscriptionExpired', 'subjects', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
+  const hideNavbarPages = ['landing', 'login', 'register', 'payment', 'paymentReceived', 'activation', 'renew', 'subscriptionExpired', 'subjects', 'questionYears', 'testConfig', 'testInstructions', 'test', 'result', 'review', 'admin', 'generalKnowledge']
   const AdminAny = AdminDashboard as any
 
   // The backend answers 403 once the subscription lapses. Until it is renewed,
@@ -141,7 +142,7 @@ function AppShell() {
         />
       )}
 
-      <main className={`app-main${showNavbar ? ' app-main-sidebar' : ''}${['testConfig', 'testInstructions'].includes(page) ? ' app-main-setup' : ''}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+      <main className={`app-main${showNavbar ? ' app-main-sidebar' : ''}${['questionYears', 'testConfig', 'testInstructions'].includes(page) ? ' app-main-setup' : ''}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {showNavbar && <SubscriptionBanner onRenew={() => navigateTo('renew')} />}
         {effectivePage === 'subscriptionExpired' && <SubscriptionExpired setActivePage={navigateTo} />}
         {effectivePage === 'renew' && <Renew setActivePage={navigateTo} />}
@@ -163,7 +164,8 @@ function AppShell() {
 
           {page === 'home' && <Home setActivePage={navigateTo} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} searchQuery={homeSearchQuery} setSearchQuery={setHomeSearchQuery} />}
           {page === 'exams' && <Exams setActivePage={navigateTo} setSelectedExam={setSelectedExam} setTestConfig={setTestConfig} />}
-          {page === 'subjects' && <Subjects setActivePage={navigateTo} setTestConfig={setTestConfig} selectedExam={selectedExam} selectedExamId={testConfig.examId || testConfig.customExamId} configuredSubjects={testConfig.subjects} />}
+          {page === 'subjects' && <Subjects setActivePage={navigateTo} setTestConfig={setTestConfig} selectedExam={selectedExam} selectedExamId={testConfig.examId || testConfig.customExamId} configuredSubjects={testConfig.subjects} testConfig={testConfig} />}
+          {page === 'questionYears' && <QuestionYears setActivePage={navigateTo} testConfig={testConfig} setTestConfig={setTestConfig} />}
           {page === 'testConfig' && <TestConfig setActivePage={navigateTo} testConfig={testConfig} setTestConfig={setTestConfig} selectedExam={selectedExam} />}
           {page === 'testInstructions' && <TestInstructions setActivePage={navigateTo} testConfig={testConfig} />}
           {page === 'test' && <Test setActivePage={navigateTo} testConfig={testConfig} />}
