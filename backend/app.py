@@ -195,6 +195,32 @@ def ensure_novel_schema():
     except Exception:
         app.logger.exception("Could not verify novel schema at startup; continuing.")
 
+
+
+def ensure_question_year_integrity():
+    """Report questions with missing/invalid years. Never invent or delete data."""
+    try:
+        inspector = db.inspect(db.engine)
+        if "questions" not in inspector.get_table_names():
+            return
+        rows = db.session.execute(db.text(
+            'SELECT id, "examId", "examType", subject, year FROM questions '
+            "WHERE year IS NULL OR trim(cast(year as text)) = '' "
+            'OR cast(year as integer) < 1000 OR cast(year as integer) > 9999'
+        )).fetchall()
+        if rows:
+            sample = [{"id": r[0], "examId": r[1], "examType": r[2], "subject": r[3], "year": r[4]} for r in rows[:100]]
+            app.logger.error(
+                "Question year integrity: %s question(s) have missing/invalid four-digit years and require manual correction (no years invented). Sample: %s",
+                len(rows), sample,
+            )
+        else:
+            total = db.session.execute(db.text('SELECT COUNT(*) FROM questions')).scalar() or 0
+            app.logger.info("Question year integrity: all %s question(s) have valid four-digit years.", total)
+    except Exception:
+        app.logger.exception("Could not verify question year integrity")
+
+
 # Run once at import time so login and other routes don't 500 on missing columns.
 with app.app_context():
     ensure_user_columns()
@@ -890,7 +916,7 @@ class Question(db.Model):
     options = db.Column(db.JSON)
     answer = db.Column(db.String(10))
     explanation = db.Column(db.Text)
-    year = db.Column(db.Integer, default=2024)
+    year = db.Column(db.Integer, nullable=False)
     image_path = db.Column(db.String(1000), nullable=True)
     school_id = db.Column(db.Integer, db.ForeignKey(
         "schools.id"), nullable=True, index=True)
@@ -2319,15 +2345,74 @@ def validate_question_payload(data, exam):
     if raw_year in (None, ""):
         return None, "year is required for each question."
     try:
-        year_value = int(raw_year)
+        year_value = int(str(raw_year).strip())
     except (TypeError, ValueError):
-        return None, "year must be a valid integer."
-    if year_value < 1900 or year_value > 2100:
-        return None, "year must be a valid examination year."
+        return None, "year must be a valid four-digit year (1000-9999)."
+    if year_value < 1000 or year_value > 9999:
+        return None, "year must be a valid four-digit year (1000-9999)."
     return {"subject": subject.strip(), "question": question.strip(),
             "options": {key: options[key].strip() for key in "ABCD"}, "answer": answer,
             "explanation": data.get("explanation", "") or "", "image_path": image_path,
             "topic": topic_value, "year": year_value}, None
+
+
+@app.route("/api/admin/question/<int:question_id>", methods=["PUT", "DELETE"])
+@roles_required("school_admin", "exam_officer")
+def admin_manage_exam_question(question_id):
+    q = Question.query.filter_by(id=question_id, school_id=g.current_user.school_id).first()
+    if not q or q.examId is None:
+        return api_error("Question not found.", 404, "question_not_found")
+    exam = Exam.query.filter_by(id=q.examId, school_id=g.current_user.school_id).first()
+    if not exam:
+        return api_error("Exam not found.", 404, "exam_not_found")
+    if request.method == "DELETE":
+        image_path = q.image_path
+        db.session.delete(q)
+        db.session.flush()
+        exam.totalQuestions = Question.query.filter_by(examId=exam.id, school_id=g.current_user.school_id).count()
+        db.session.commit()
+        if image_path:
+            remove_stored_file(image_path)
+        return jsonify(success=True)
+
+    data = json_body()
+    existing_year = q.year
+    payload = {
+        "subject": data.get("subject", q.subject),
+        "question": data.get("question", q.question),
+        "options": data.get("options", q.options),
+        "correctAnswer": data.get("correctAnswer", data.get("answer", q.answer)),
+        "explanation": data.get("explanation", q.explanation or ""),
+        "topic": data.get("topic", q.topic),
+        "year": data.get("year", existing_year),
+        "imageUrl": data.get("imageUrl", data.get("image_path", q.image_path)),
+    }
+    if "year" in data and str(data.get("year", "")).strip() == "" and existing_year is not None:
+        payload["year"] = existing_year
+    validated, error = validate_question_payload(payload, exam)
+    if error:
+        return api_error(error)
+    if validated.get("year") is None:
+        if existing_year is None:
+            return api_error("year is required for each question.")
+        validated["year"] = existing_year
+
+    q.subject = validated["subject"]
+    q.topic = validated.get("topic")
+    q.question = validated["question"]
+    q.options = validated["options"]
+    q.answer = validated["answer"]
+    q.explanation = validated["explanation"]
+    q.year = validated["year"]
+    if "imageUrl" in data or "image_path" in data:
+        q.image_path = validated["image_path"]
+    db.session.commit()
+    return jsonify(success=True, question={
+        "id": q.id, "examId": q.examId, "subject": q.subject, "topic": q.topic,
+        "question": q.question, "options": q.options, "answer": q.answer,
+        "explanation": q.explanation, "year": q.year,
+        "image_path": q.image_path, "image_url": get_image_url(q.image_path),
+    })
 
 
 @app.route("/api/admin/add-question", methods=["POST"])
@@ -3120,6 +3205,7 @@ def is_valid_question_image_url(value):
 # Best-effort owner access provisioning (runs after models/helpers are defined).
 with app.app_context():
     ensure_owner_access()
+    ensure_question_year_integrity()
 
 
 def study_question_to_dict(q, include_answer=True):
@@ -3172,12 +3258,14 @@ def validate_study_question_payload(data, school_id=None, exclude_id=None):
         return None, "options must contain non-empty A, B, C, and D values."
     if answer not in {"A", "B", "C", "D"}:
         return None, "correctAnswer must be A, B, C, or D."
+    if year_raw in (None, ""):
+        return None, "year is required for each question."
     try:
-        year = int(year_raw)
-        if year < 1980 or year > 2100:
+        year = int(str(year_raw).strip())
+        if year < 1000 or year > 9999:
             raise ValueError
     except (TypeError, ValueError):
-        return None, "year must be a valid year."
+        return None, "year must be a valid four-digit year (1000-9999)."
     if not isinstance(explanation, str):
         explanation = str(explanation)
     image_url, image_error = validate_study_image_url(data.get("imageUrl") or data.get("image_url") or data.get("image_path"))
@@ -3288,6 +3376,7 @@ def admin_study_question_manage(question_id):
         return jsonify(success=True)
     data = json_body()
     # merge current values for partial-ish edit convenience
+    existing_year = row.year
     merged = study_question_to_dict(row, include_answer=True)
     merged.update({
         "examType": data.get("examType", data.get("exam_type", merged["examType"])),
@@ -3300,6 +3389,8 @@ def admin_study_question_manage(question_id):
         "explanation": data.get("explanation", merged.get("explanation", "")),
         "imageUrl": data.get("imageUrl", data.get("image_url", merged.get("imageUrl"))),
     })
+    if "year" in data and str(data.get("year", "")).strip() == "" and existing_year is not None:
+        merged["year"] = existing_year
     validated, error = validate_study_question_payload(merged, school_id=g.current_user.school_id, exclude_id=row.id)
     if error:
         return api_error(error)
@@ -3416,7 +3507,7 @@ def admin_study_import():
             "examType": cell_text(exam_type_raw),
             "subject": cell_text(subject_raw),
             "topic": cell_text(topic_raw),
-            "year": cell_text(year_raw) if year_raw not in (None, "") else year_raw,
+            "year": cell_text(year_raw) if year_raw not in (None, "") else "",
             "question": cell_text(question_raw),
             "options": {
                 "A": cell_text(opt_a),

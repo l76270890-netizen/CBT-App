@@ -18,7 +18,7 @@ export type CsvQuestionRow = {
 }
 
 const requiredHeaders = ["subject", "year", "question", "optiona", "optionb", "optionc", "optiond", "correctanswer", "explanation"];
-export const csvTemplateHeaders = ["subject", "year", "question", "optionA", "optionB", "optionC", "optionD", "correctAnswer", "explanation", "imageUrl"];
+export const csvTemplateHeaders = ["Question", "Option A", "Option B", "Option C", "Option D", "Correct Answer", "subject", "year", "explanation", "imageUrl"];
 const normalizeHeader = (header: string) => header.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export function normalizeImageReference(value: string): string {
@@ -137,7 +137,7 @@ export function parseQuestionCsv(contents: string, subjects: string[], options: 
     else if (!subject) errors.push(`Subject "${rawSubject}" is not listed on this exam`);
     const yearNum = Number(rawYear);
     if (!rawYear) errors.push("Original examination year is required");
-    else if (!Number.isInteger(yearNum) || yearNum < 1900 || yearNum > 2100) errors.push("Year must be a valid examination year");
+    else if (!/^[0-9]{4}$/.test(rawYear) || !Number.isInteger(yearNum) || yearNum < 1000 || yearNum > 9999) errors.push("Year must be a valid four-digit year (e.g. 2000)");
     if (!question) errors.push("Question is required");
     if (!optionA || !optionB || !optionC || !optionD) errors.push("All four options are required");
     if (!["A", "B", "C", "D"].includes(correctAnswer)) errors.push("Correct answer must be A, B, C, or D");

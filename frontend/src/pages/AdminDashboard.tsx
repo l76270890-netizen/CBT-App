@@ -606,6 +606,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [selectedExam, setSelectedExam] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
   const [question, setQuestion] = useState("");
+  const [questionYear, setQuestionYear] = useState("");
   const [questionImage, setQuestionImage] = useState<File | null>(null);
   const [questionImagePreview, setQuestionImagePreview] = useState("");
   const [uploadedQuestionImageUrl, setUploadedQuestionImageUrl] = useState("");
@@ -799,6 +800,8 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const addQuestion = async (e:React.FormEvent) => {
     e.preventDefault();
     if(!selectedExam || !selectedSubject) return alert("Select exam and subject");
+    const yearValue = questionYear.trim();
+    if(!/^\d{4}$/.test(yearValue)) { setQuestionSubmitError("Year must be a valid four-digit year (e.g. 2000)."); return; }
     setQuestionSubmitError("");
     setLoading(true);
     try {
@@ -808,12 +811,12 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         setUploadedQuestionImageUrl(imageUrl);
       }
       await apiRequest("/api/admin/add-question", { method: "POST", body: JSON.stringify({
-        examId: selectedExam, subject: selectedSubject, question,
+        examId: selectedExam, subject: selectedSubject, question, year: Number(yearValue),
         options: {A:options[0], B:options[1], C:options[2], D:options[3]},
         correctAnswer: correct, ...(explanation.trim() ? { explanation } : {}),
         ...(imageUrl ? { imageUrl } : {}),
       }) });
-      setMsg(`Added to ${selectedSubject}!`); setQuestion(""); setOptions(["","","",""]); setExplanation("");
+      setMsg(`Added to ${selectedSubject}!`); setQuestion(""); setQuestionYear(""); setOptions(["","","",""]); setExplanation("");
       setQuestionImage(null); setQuestionImagePreview(""); setUploadedQuestionImageUrl(""); setQuestionImageError("");
       setQuestionSubmitError("");
       if (questionImageInput.current) questionImageInput.current.value = "";
@@ -1251,7 +1254,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         <section className="admin-overview-card" aria-live="polite">
           <div className="admin-section-heading"><div><h3>Questions</h3><p>{selectedSubject || "Select a subject in the form below"}</p></div></div>
           {questionsError && <p className="admin-error" role="alert">{questionsError}</p>}
-          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><strong>{item?.question || "Question text unavailable"}</strong>{(item?.imageUrl || item?.image_url) && <QuestionImage key={item.imageUrl || item.image_url} className="admin-question-image" imageUrl={item.imageUrl || item.image_url} /> }<small>{item?.subject || selectedSubject}{item?.topic ? ` • ${item.topic}` : ""}</small></article>)}</div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
+          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><strong>{item?.question || "Question text unavailable"}</strong>{(item?.imageUrl || item?.image_url) && <QuestionImage key={item.imageUrl || item.image_url} className="admin-question-image" imageUrl={item.imageUrl || item.image_url} /> }<small>{item?.subject || selectedSubject}{item?.topic ? ` • ${item.topic}` : ""}{item?.year != null && item?.year !== "" ? ` • ${item.year}` : ""}</small></article>)}</div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
         </section>
 
         <section className="csv-import-panel" aria-labelledby="csv-import-title">
@@ -1408,6 +1411,9 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
                 <option value="">-- Subject --</option>
                 {exams.find(x=>x.id===selectedExam)?.subjects?.map((s:string)=><option key={s} value={s}>{s}</option>)}
               </select>
+            </div>
+            <div className="admin-field" style={{maxWidth:180}}><label htmlFor="exam-question-year">Year *</label>
+              <input id="exam-question-year" type="text" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} placeholder="e.g. 2000" value={questionYear} onChange={e=>setQuestionYear(e.target.value.replace(/[^0-9]/g,'').slice(0,4))} required style={{background:'#1a1a1a', color:'#fff'}} />
             </div>
           </div>
           <div className="admin-field"><label>Question</label><textarea value={question} onChange={e=>setQuestion(e.target.value)} rows={4} required style={{background:'#1a1a1a', color:'#fff', border:'1px solid #333'}}/></div>

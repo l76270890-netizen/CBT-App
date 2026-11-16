@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isSupportedQuestionImage, parseQuestionCsv, summarizeQuestionImageMatches } from "../src/adminQuestionCsv.ts";
+import { csvTemplateHeaders, isSupportedQuestionImage, parseQuestionCsv, summarizeQuestionImageMatches } from "../src/adminQuestionCsv.ts";
 
 const subjects = ["Mathematics"];
 
@@ -22,6 +22,37 @@ test("imports CSV with original examination year and keeps its image URL", () =>
   assert.equal(row.year, "2000");
   assert.equal(row.imageUrl, "https://cdn.example.com/diagram.png");
   assert.deepEqual(row.errors, []);
+});
+
+test("rejects missing, empty, malformed, and out-of-range years", () => {
+  const missing = parseQuestionCsv([
+    "subject,year,question,optionA,optionB,optionC,optionD,correctAnswer,explanation",
+    "Mathematics,,What is 2 + 2?,3,4,5,6,B,Basic addition",
+  ].join("\n"), subjects)[0];
+  assert.ok(missing.errors.some(e => /Original examination year is required/i.test(e)));
+
+  const nonNumeric = parseQuestionCsv([
+    "subject,year,question,optionA,optionB,optionC,optionD,correctAnswer,explanation",
+    "Mathematics,20AB,What is 2 + 2?,3,4,5,6,B,Basic addition",
+  ].join("\n"), subjects)[0];
+  assert.ok(nonNumeric.errors.some(e => /valid four-digit year/i.test(e)));
+
+  const shortYear = parseQuestionCsv([
+    "subject,year,question,optionA,optionB,optionC,optionD,correctAnswer,explanation",
+    "Mathematics,999,What is 2 + 2?,3,4,5,6,B,Basic addition",
+  ].join("\n"), subjects)[0];
+  assert.ok(shortYear.errors.some(e => /valid four-digit year/i.test(e)));
+
+  const longYear = parseQuestionCsv([
+    "subject,year,question,optionA,optionB,optionC,optionD,correctAnswer,explanation",
+    "Mathematics,20245,What is 2 + 2?,3,4,5,6,B,Basic addition",
+  ].join("\n"), subjects)[0];
+  assert.ok(longYear.errors.some(e => /valid four-digit year/i.test(e)));
+});
+
+test("downloadable CSV template includes year column", () => {
+  assert.ok(csvTemplateHeaders.includes("year"));
+  assert.deepEqual(csvTemplateHeaders, ["Question","Option A","Option B","Option C","Option D","Correct Answer","subject","year","explanation","imageUrl"]);
 });
 
 test("allows an empty optional image URL and rejects malformed image URLs", () => {
