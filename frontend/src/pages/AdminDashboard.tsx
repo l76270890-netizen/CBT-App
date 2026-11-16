@@ -6,7 +6,7 @@ import QuestionImage from "../components/QuestionImage";
 import { csvTemplateHeaders, isSupportedQuestionImage, normalizeImageReference, parseQuestionCsv, summarizeQuestionImageMatches, type CsvQuestionRow } from "../adminQuestionCsv";
 import { loadQuestionZip } from "../questionZip";
 
-const defaultSubjects = ["Mathematics","English","Physics","Chemistry","Biology","Government","Economics","Literature","CRS","Geography"];
+const defaultSubjects = ["Mathematics","English Language","Physics","Chemistry","Biology","Government","Economics","Literature in English","Christian Religious Studies","Geography","Agricultural Science","Commerce","Principles of Accounting","History","Business Studies","General Knowledge","Current Affairs","Computer Science"];
 const defaultExamTypes = ["JAMB","WAEC","NECO","POSTUTME"];
 
 type Exam = { id: string; title: string; examType: string; year: number; duration: number; subjects: string[]; totalQuestions?: number; examDate?: string }

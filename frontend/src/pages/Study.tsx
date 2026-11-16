@@ -81,12 +81,12 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
     { id: 'history', name: 'History', icon: Landmark, color: '#92400E', dept: 'ART' },
     { id: 'economics', name: 'Economics', icon: BarChart3, color: '#059669', dept: 'COMMERCIAL' },
     { id: 'commerce', name: 'Commerce', icon: ShoppingBag, color: '#0891B2', dept: 'COMMERCIAL' },
-    { id: 'accounting', name: 'Financial Accounting', icon: Calculator, color: '#0F766E', dept: 'COMMERCIAL' },
+    { id: 'accounting', name: 'Principles of Accounting', icon: Calculator, color: '#0F766E', dept: 'COMMERCIAL' },
     { id: 'business', name: 'Business Studies', icon: Scale, color: '#4338CA', dept: 'COMMERCIAL' },
     { id: 'geography', name: 'Geography', icon: Landmark, color: '#2563EB', dept: 'ART' },
     { id: 'gk', name: 'General Knowledge', icon: BookOpen, color: '#0EA5E9', dept: 'ALL' },
     { id: 'current', name: 'Current Affairs', icon: BookOpen, color: '#F97316', dept: 'ALL' },
-    { id: 'computer', name: 'Computer Studies', icon: BookOpen, color: '#14B8A6', dept: 'SCIENCE' },
+    { id: 'computer', name: 'Computer Science', icon: BookOpen, color: '#14B8A6', dept: 'SCIENCE' },
   ]
   const fallbackTopics: Record<string,string[]> = {
     'English Language': ['Lexis & Structure', 'Oral English', 'Comprehension', 'Summary'],
@@ -101,12 +101,12 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
     'History': ['Pre-Colonial', 'Colonial Era', 'Independence', 'World History'],
     'Economics': ['Micro Economics', 'Macro Economics', 'Demand & Supply', 'Market Structure'],
     'Commerce': ['Trade', 'Business Organization', 'Finance', 'Marketing'],
-    'Financial Accounting': ['Double Entry', 'Trial Balance', 'Final Accounts', 'Partnership'],
+    'Principles of Accounting': ['Double Entry', 'Trial Balance', 'Final Accounts', 'Partnership'],
     'Business Studies': ['Office Practice', 'Business Law', 'Management', 'Entrepreneurship'],
     'Geography': ['Physical Geography', 'Human Geography', 'Map Reading'],
     'General Knowledge': ['Current Affairs', 'Science & Technology', 'Civics'],
     'Current Affairs': ['National Affairs', 'International Affairs', 'Education'],
-    'Computer Studies': ['Computer Fundamentals', 'Programming Basics', 'Networking'],
+    'Computer Science': ['Computer Fundamentals', 'Programming Basics', 'Networking', 'Data Processing'],
   }
 
   const topicsFor = (subjectName: string) => {

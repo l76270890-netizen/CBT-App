@@ -221,6 +221,67 @@ def ensure_question_year_integrity():
         app.logger.exception("Could not verify question year integrity")
 
 
+def ensure_subject_renames():
+    """Idempotently rename legacy subjects, preserving records and avoiding duplicates."""
+    renames = {
+        "Financial Accounting": "Principles of Accounting",
+        "Computer Studies": "Computer Science",
+    }
+    try:
+        inspector = db.inspect(db.engine)
+        tables = set(inspector.get_table_names())
+
+        if "exam_subjects" in tables:
+            for old, new in renames.items():
+                old_rows = ExamSubject.query.filter(func.lower(ExamSubject.name) == old.lower()).all()
+                for row in old_rows:
+                    existing = ExamSubject.query.filter(
+                        ExamSubject.exam_id == row.exam_id,
+                        func.lower(ExamSubject.name) == new.lower(),
+                        ExamSubject.id != row.id,
+                    ).first()
+                    if existing:
+                        db.session.delete(row)
+                    else:
+                        row.name = new
+
+        if "questions" in tables:
+            for old, new in renames.items():
+                Question.query.filter(func.lower(Question.subject) == old.lower()).update(
+                    {Question.subject: new}, synchronize_session=False
+                )
+
+        if "exams" in tables:
+            exams = Exam.query.all()
+            for exam in exams:
+                if not exam.subject:
+                    continue
+                parts = [p.strip() for p in str(exam.subject).split(",") if p.strip()]
+                changed = False
+                out = []
+                seen = set()
+                for part in parts:
+                    replacement = part
+                    for old, new in renames.items():
+                        if part.lower() == old.lower():
+                            replacement = new
+                            changed = True
+                            break
+                    key = replacement.lower()
+                    if key in seen:
+                        changed = True
+                        continue
+                    seen.add(key)
+                    out.append(replacement)
+                if changed:
+                    exam.subject = ",".join(out)
+
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Could not apply subject renames; continuing.")
+
+
 # Run once at import time so login and other routes don't 500 on missing columns.
 with app.app_context():
     ensure_user_columns()
@@ -3076,19 +3137,19 @@ STUDY_SUBJECTS_BY_EXAM = {
     "JAMB": [
         "English Language", "Mathematics", "Physics", "Chemistry", "Biology",
         "Government", "Economics", "Literature in English", "Christian Religious Studies",
-        "Geography", "Agricultural Science", "Commerce", "Financial Accounting",
+        "Geography", "Agricultural Science", "Commerce", "Principles of Accounting",
         "History", "Business Studies",
     ],
     "WAEC": [
         "English Language", "Mathematics", "Physics", "Chemistry", "Biology",
         "Government", "Economics", "Literature in English", "Christian Religious Studies",
-        "Geography", "Agricultural Science", "Commerce", "Financial Accounting",
+        "Geography", "Agricultural Science", "Commerce", "Principles of Accounting",
         "History",
     ],
     "NECO": [
         "English Language", "Mathematics", "Physics", "Chemistry", "Biology",
         "Government", "Economics", "Literature in English", "Christian Religious Studies",
-        "Geography", "Agricultural Science", "Commerce", "Financial Accounting",
+        "Geography", "Agricultural Science", "Commerce", "Principles of Accounting",
     ],
     "Post-UTME": [
         "English Language", "Mathematics", "Physics", "Chemistry", "Biology",
@@ -3096,7 +3157,7 @@ STUDY_SUBJECTS_BY_EXAM = {
     ],
     "CBT": [
         "English Language", "Mathematics", "Physics", "Chemistry", "Biology",
-        "Government", "Economics", "General Knowledge", "Computer Studies",
+        "Government", "Economics", "General Knowledge", "Computer Science",
     ],
 }
 STUDY_TOPICS_BY_SUBJECT = {
@@ -3112,12 +3173,12 @@ STUDY_TOPICS_BY_SUBJECT = {
     "Geography": ["Physical Geography", "Human Geography", "Map Reading", "Environmental Studies"],
     "Agricultural Science": ["Crop Production", "Animal Husbandry", "Soil Science", "Farm Management"],
     "Commerce": ["Trade", "Business Organization", "Finance", "Marketing"],
-    "Financial Accounting": ["Double Entry", "Trial Balance", "Final Accounts", "Partnership"],
+    "Principles of Accounting": ["Double Entry", "Trial Balance", "Final Accounts", "Partnership"],
     "History": ["Pre-Colonial", "Colonial Era", "Independence", "World History"],
     "Business Studies": ["Office Practice", "Business Law", "Management", "Entrepreneurship"],
     "General Knowledge": ["Current Affairs", "Science & Technology", "Civics", "General Studies"],
     "Current Affairs": ["National Affairs", "International Affairs", "Education", "Sports"],
-    "Computer Studies": ["Computer Fundamentals", "Programming Basics", "Networking", "Data Processing"],
+    "Computer Science": ["Computer Fundamentals", "Programming Basics", "Networking", "Data Processing"],
 }
 
 
