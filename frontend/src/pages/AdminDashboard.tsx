@@ -584,6 +584,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
   const [examsError, setExamsError] = useState("");
   const [questions, setQuestions] = useState<any[]>([]);
   const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<number[]>([]);
   const [questionsError, setQuestionsError] = useState("");
 
   const [adminView, setAdminView] = useState<"overview"|"students"|"exams"|"study"|"novels">("overview");
@@ -734,14 +735,16 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     } catch (error) { setQuestionsError(error instanceof Error ? error.message : "Could not load questions."); setQuestions([]); }
     finally { setQuestionsLoading(false); }
   };
-  const deleteExamQuestion = async (id: number) => {
-    if (!confirm("Delete this question?")) return;
+  const deleteSelectedExamQuestions = async () => {
+    if (!selectedQuestionIds.length) return;
+    if (!confirm(`Delete ${selectedQuestionIds.length} selected question(s)?`)) return;
     try {
-      await apiRequest(`/api/admin/question/${id}`, { method: "DELETE" });
-      setQuestions(qs => qs.filter(q => q.id !== id));
-      setMsg("Question deleted."); setTimeout(()=>setMsg(""), 2500);
+      await Promise.all(selectedQuestionIds.map(id => apiRequest(`/api/admin/question/${id}`, { method: "DELETE" })));
+      setQuestions(qs => qs.filter(q => !selectedQuestionIds.includes(Number(q.id))));
+      setSelectedQuestionIds([]);
+      setMsg("Selected questions deleted."); setTimeout(()=>setMsg(""), 2500);
       await fetchQuestions();
-    } catch (error) { setQuestionsError(error instanceof Error ? error.message : "Could not delete question."); }
+    } catch (error) { setQuestionsError(error instanceof Error ? error.message : "Could not delete selected questions."); }
   };
   const toggleSubjectInNewExam = (sub: string) => {
     setESubjects(prev => prev.includes(sub)? prev.filter(s=>s!==sub) : [...prev, sub]);
@@ -1263,7 +1266,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
         <section className="admin-overview-card" aria-live="polite">
           <div className="admin-section-heading"><div><h3>Questions</h3><p>{selectedSubject || "Select a subject in the form below"}</p></div></div>
           {questionsError && <p className="admin-error" role="alert">{questionsError}</p>}
-          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><strong>{item?.question || "Question text unavailable"}</strong>{(item?.imageUrl || item?.image_url) && <QuestionImage key={item.imageUrl || item.image_url} className="admin-question-image" imageUrl={item.imageUrl || item.image_url} /> }<small>{item?.subject || selectedSubject}{item?.topic ? ` • ${item.topic}` : ""}{item?.year != null && item?.year !== "" ? ` • ${item.year}` : ""}</small><div style={{marginTop:8}}><button type="button" className="del-btn" onClick={()=>void deleteExamQuestion(Number(item.id))}>Delete</button></div></article>)}</div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
+          {questionsLoading ? <p className="admin-empty-note">Loading questions...</p> : questions.length ? <div><div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}><label><input type="checkbox" checked={selectedQuestionIds.length === questions.length && questions.length>0} onChange={e=>{ if(e.target.checked) setSelectedQuestionIds(questions.map(q=>Number(q.id))); else setSelectedQuestionIds([]); }} /> Select all</label><span>{selectedQuestionIds.length} selected</span>{selectedQuestionIds.length>0 && <button type="button" className="del-btn" onClick={()=>void deleteSelectedExamQuestions()}>Delete Selected</button>}</div><div className="admin-question-list">{questions.map((item,index)=><article key={String(item?.id ?? index)}><label style={{marginRight:8}}><input type="checkbox" checked={selectedQuestionIds.includes(Number(item.id))} onChange={e=>{ const id=Number(item.id); setSelectedQuestionIds(prev=> e.target.checked ? [...prev,id] : prev.filter(x=>x!==id)); }} /></label><strong>{item?.question || "Question text unavailable"}</strong>{(item?.imageUrl || item?.image_url) && <QuestionImage key={item.imageUrl || item.image_url} className="admin-question-image" imageUrl={item.imageUrl || item.image_url} /> }<small>{item?.subject || selectedSubject}{item?.topic ? ` • ${item.topic}` : ""}{item?.year != null && item?.year !== "" ? ` • ${item.year}` : ""}</small><div style={{marginTop:8}}><button type="button" className="del-btn" onClick={()=>void deleteExamQuestion(Number(item.id))}>Delete</button></div></article>)}</div></div> : <p className="admin-empty-note">No questions found for this exam and subject.</p>}
         </section>
 
         <section className="csv-import-panel" aria-labelledby="csv-import-title">
