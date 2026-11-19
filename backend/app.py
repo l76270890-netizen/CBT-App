@@ -694,8 +694,8 @@ def novel_question_to_dict(q):
         options_list = (list(opts) + ["", "", "", ""])[:4]
     else:
         options_list = ["", "", "", ""]
-    ans = str(q.answer or "A").strip().upper()
-    ans_idx = {"A": 0, "B": 1, "C": 2, "D": 3}.get(ans, 0)
+    ans = str(q.answer or "").strip().upper()
+    ans_idx = {"A": 0, "B": 1, "C": 2, "D": 3}.get(ans, -1)
     return {
         "id": f"novel-{q.novel_id}-{q.id}",
         "questionId": q.id,
@@ -2249,7 +2249,6 @@ def get_questions():
         query = query.filter(Question.year.in_(year_values))
     questions = query.order_by(Question.id).all()
 
-    is_admin = g.current_user.role in ADMIN_ROLES
     result = []
 
     for q in questions:
@@ -2266,9 +2265,11 @@ def get_questions():
             "image_url": get_image_url(q.image_path),
         }
 
-        if is_admin:
-            item["answer"] = q.answer
-            item["explanation"] = q.explanation
+        answer = str(q.answer or "").strip().upper()
+        if answer in {"A", "B", "C", "D"}:
+            item["answer"] = answer
+            item["correctAnswer"] = answer
+        item["explanation"] = q.explanation or ""
 
         result.append(item)
 
@@ -3930,8 +3931,8 @@ def study_questions():
             options_list = (opts + ["", "", "", ""])[:4]
         else:
             options_list = ["", "", "", ""]
-        ans = str(q.answer or "A").strip().upper()
-        ans_idx = {"A": 0, "B": 1, "C": 2, "D": 3}.get(ans, 0)
+        ans = str(q.answer or "").strip().upper()
+        ans_idx = {"A": 0, "B": 1, "C": 2, "D": 3}.get(ans, -1)
         result.append({
             "id": q.id,
             "examType": q.examType,

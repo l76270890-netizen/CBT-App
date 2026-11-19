@@ -1,5 +1,6 @@
 import { offlineDb, type StudyActivity, type StudyQuestion } from "./db";
 import { cacheQuestionImage } from "./questions";
+import { toAnswerIndex } from "../answerUtils";
 
 function normalizeStudyQuestion(raw: any, examType: string, subject: string): StudyQuestion | null {
   if (!raw || !raw.question) return null;
@@ -7,9 +8,7 @@ function normalizeStudyQuestion(raw: any, examType: string, subject: string): St
     ? raw.options
     : [raw.options?.A, raw.options?.B, raw.options?.C, raw.options?.D];
   if (options.length < 4 || options.some((option: unknown) => typeof option !== "string")) return null;
-  const answer = typeof raw.answer === "number"
-    ? raw.answer
-    : Math.max(0, ["A", "B", "C", "D"].indexOf(String(raw.correctAnswer || raw.answer || "A").toUpperCase()));
+  const answer = toAnswerIndex(raw.answer ?? raw.correctAnswer);
   const year = Number(raw.year);
   return {
     cacheKey: `${examType}:${raw.id ?? `${subject}-${String(raw.question).slice(0, 40)}`}`,

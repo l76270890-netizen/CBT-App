@@ -7,6 +7,7 @@ type Props = {
 import { useState, useMemo, useEffect } from 'react'
 import { BookOpen, Calculator, Atom, Beaker, Zap, Landmark, Search, X, ChevronRight, ArrowLeft, Feather, Scale, ShoppingBag, Leaf, BarChart3, Layers, CalendarDays, Library, Download, FileText, PlayCircle, Trash2, RefreshCw, HardDrive, Bookmark, Minus, Plus, List, BookMarked } from 'lucide-react'
 import { apiRequest, asArray } from '../api'
+import { toAnswerIndex } from '../answerUtils'
 import type { Novel, NovelProgress } from '../novelTypes'
 import { getDownloadedNovels, getDownloadedNovel, saveNovelDownload, removeDownloadedNovel, getNovelBlob, saveProgressLocal, getProgressLocal, getPendingAttempts, clearPendingAttempts, estimateStorage } from '../novelStore'
 import { cacheStudyMeta, loadStudyMeta, cacheStudyQuestions, loadStudyQuestions } from '../offline/study'
@@ -200,7 +201,7 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
         question: d.question,
         imageUrl: d.imageUrl || d.image_url || undefined,
         options: Array.isArray(d.options) ? d.options : [d.options?.A, d.options?.B, d.options?.C, d.options?.D],
-        answer: typeof d.answer === 'number' ? d.answer : Math.max(0, ['A','B','C','D'].indexOf(String(d.correctAnswer || d.answer || 'A').toUpperCase())),
+        answer: toAnswerIndex(d.answer ?? d.correctAnswer),
         explanation: d.explanation || '',
       })).filter((q: any) => q.question && Array.isArray(q.options) && q.options.length === 4)
       if (!questions.length) {
@@ -397,7 +398,7 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
     const mapped = qs.map((q: any, i: number) => ({
       id: q.id ?? `nq-${novel.id}-${i}`, subject: novel.title, question: q.question, imageUrl: q.imageUrl,
       options: Array.isArray(q.options) ? q.options : [q.options?.A, q.options?.B, q.options?.C, q.options?.D],
-      answer: typeof q.answer === 'number' ? q.answer : Math.max(0, ['A','B','C','D'].indexOf(String(q.correctAnswer || q.answer || 'A').toUpperCase())),
+      answer: toAnswerIndex(q.answer ?? q.correctAnswer),
       explanation: q.explanation || '', topic: q.topic || 'Novel',
     })).filter((q: any) => q.question && Array.isArray(q.options) && q.options.length === 4)
     localStorage.setItem('current_questions', JSON.stringify(mapped))

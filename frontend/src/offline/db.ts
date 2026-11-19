@@ -7,7 +7,7 @@ export type CachedQuestion = {
   subject: string;
   question: string;
   options: string[];
-  answer: number | string;
+  answer: number;
   explanation?: string;
   imageUrl?: string;
   year?: number;

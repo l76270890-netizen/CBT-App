@@ -1,25 +1,14 @@
 import { apiRequest, resolveQuestionImageUrl } from "../api";
 import type { TestConfigType } from "../types";
 import { offlineDb, type CachedQuestion, type OfflineExam } from "./db";
+import { toAnswerIndex } from "../answerUtils";
 
 const IMAGE_CACHE = "examcore-images-v1";
-const LETTERS = ["A", "B", "C", "D", "E"];
 
 function subjectName(subject: unknown): string {
   if (typeof subject === "string") return subject;
   const value = subject as { subject?: string; name?: string } | null;
   return value?.subject || value?.name || "";
-}
-
-function answerIndex(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const index = LETTERS.indexOf(value.trim().toUpperCase());
-    if (index >= 0) return index;
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) return numeric;
-  }
-  return 0;
 }
 
 export function normalizeCachedQuestion(raw: any, examId: string, fallbackSubject: string): CachedQuestion | null {
@@ -35,7 +24,7 @@ export function normalizeCachedQuestion(raw: any, examId: string, fallbackSubjec
     subject: raw.subject || fallbackSubject,
     question: String(raw.question),
     options: options.map((value: unknown) => String(value)),
-    answer: typeof answerValue === "string" ? answerValue : answerIndex(answerValue),
+    answer: toAnswerIndex(answerValue),
     explanation: raw.explanation || "",
     imageUrl: raw.imageUrl || raw.image_url || undefined,
     year: Number.isFinite(yearValue) ? yearValue : undefined,

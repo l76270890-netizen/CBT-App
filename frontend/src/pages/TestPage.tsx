@@ -8,6 +8,7 @@ import { loadCachedQuestions } from '../offline/questions'
 import { saveOfflineAttempt, saveDraft, loadDraft, clearDraft } from '../offline/attempts'
 import { syncPendingAttempts } from '../offline/sync'
 import { queueStudyActivity } from '../offline/study'
+import { toAnswerIndex } from '../answerUtils'
 
 type Props = { setActivePage: (page: string) => void; testConfig: TestConfigType }
 type Question = { id: string; subject: string; question: string; imageUrl?: string; options: string[]; answer: number; explanation?: string; topic?: string }
@@ -50,7 +51,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
             question: d.question,
             imageUrl: d.imageUrl || d.image_url || undefined,
             options: Array.isArray(d.options)? d.options : [d.options.A, d.options.B, d.options.C, d.options.D],
-            answer: typeof d.answer === 'number'? d.answer : ['A','B','C','D'].indexOf(d.answer || 'A'),
+            answer: toAnswerIndex(d.answer ?? d.correctAnswer),
             explanation: d.explanation || '',
             topic: d.topic || ''
           }))
@@ -81,11 +82,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
                     imageUrl: d.imageUrl || d.image_url || undefined,
                     options: Array.isArray(d.options)? d.options : Object.values(d.options || {}),
                     // Imported questions use correctAnswer: "A"; the test uses index numbers
-                    answer: typeof d.answer === 'string'
-                      ? ['A','B','C','D'].indexOf(d.answer.toUpperCase())
-                      : typeof d.answer === 'number'
-                        ? d.answer
-                        : Math.max(0, ['A','B','C','D'].indexOf(String(d.correctAnswer || 'A').toUpperCase())),
+                    answer: toAnswerIndex(d.answer ?? d.correctAnswer),
                     explanation: d.explanation || '',
                     topic: d.topic || ''
                   })).filter((d: any) => d.question && Array.isArray(d.options) && d.options.length > 0)
@@ -109,7 +106,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
             question: d.question,
             imageUrl: d.imageUrl,
             options: d.options,
-            answer: typeof d.answer === 'number' ? d.answer : ['A','B','C','D','E'].indexOf(String(d.answer).toUpperCase()),
+            answer: toAnswerIndex(d.answer),
             explanation: d.explanation || '',
             topic: d.topic || ''
           })).filter((d) => d.question && Array.isArray(d.options) && d.options.length > 0)
