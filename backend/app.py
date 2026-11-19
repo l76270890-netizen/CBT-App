@@ -112,6 +112,8 @@ def ensure_user_columns():
         missing = []
         if "username" not in existing_cols:
             missing.append('ALTER TABLE users ADD COLUMN username VARCHAR(80)')
+        if "password" not in existing_cols:
+            missing.append('ALTER TABLE users ADD COLUMN password VARCHAR(200)')
         if "profile_image" not in existing_cols:
             missing.append('ALTER TABLE users ADD COLUMN profile_image VARCHAR(1000)')
         if "school_id" not in existing_cols:
