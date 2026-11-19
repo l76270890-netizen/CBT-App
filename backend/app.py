@@ -90,7 +90,7 @@ def configured_frontend_origins(environment):
 
 FRONTEND_ORIGINS = configured_frontend_origins(os.environ)
 CORS(app, resources={r"/api/*": {"origins": FRONTEND_ORIGINS}},
-     supports_credentials=True)
+     supports_credentials=True, expose_headers=["Retry-After"])
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
@@ -155,6 +155,23 @@ def ensure_question_columns():
     except Exception:
         app.logger.exception(
             "Could not verify the questions table schema at startup; continuing.")
+
+
+def ensure_attempt_columns():
+    """Add idempotency columns for offline synchronization."""
+    try:
+        inspector = db.inspect(db.engine)
+        for table in ("results", "attempts"):
+            if table not in inspector.get_table_names():
+                continue
+            existing = {col["name"] for col in inspector.get_columns(table)}
+            if "client_attempt_id" not in existing:
+                with db.engine.connect() as conn:
+                    conn.execute(db.text(f"ALTER TABLE {table} ADD COLUMN client_attempt_id VARCHAR(120)"))
+                    conn.commit()
+                app.logger.info("Added missing column: %s.client_attempt_id", table)
+    except Exception:
+        app.logger.exception("Could not verify attempt columns; continuing.")
 
 
 def ensure_novel_schema():
@@ -286,6 +303,7 @@ def ensure_subject_renames():
 with app.app_context():
     ensure_user_columns()
     ensure_question_columns()
+    ensure_attempt_columns()
     ensure_novel_schema()
 
 BASEDIR = os.path.abspath(os.path.dirname(__file__))
@@ -538,9 +556,12 @@ def get_image_url(path):
 
 
 def store_question_image(file):
-    cloud_url = upload_to_cloudinary(file, "examcore/questions")
-    if cloud_url:
-        return cloud_url, None
+    if HAS_CLOUDINARY and os.environ.get("CLOUDINARY_CLOUD_NAME"):
+        cloud_url = upload_to_cloudinary(file, "cbt-questions")
+        if cloud_url:
+            return cloud_url, None
+        return None, "Cloudinary image upload failed. Check the Cloudinary configuration and try again."
+
     if not QUESTION_STORAGE_IS_PERSISTENT:
         return None, "Permanent image storage is unavailable. Configure Cloudinary or set UPLOAD_FOLDER to a persistent volume."
 
@@ -590,8 +611,44 @@ def store_novel_file(file, folder_name, cloud_folder, local_dir, allowed_exts, k
         return None, f"{kind_label} file could not be saved to permanent storage."
     return f"{folder_name}/{filename}", None
 
+def cloudinary_public_id_from_url(path):
+    if not isinstance(path, str) or not path.startswith(("http://", "https://")):
+        return None
+    parsed = urlsplit(path)
+    if "cloudinary.com" not in (parsed.netloc or ""):
+        return None
+    parts = [part for part in (parsed.path or "").strip("/").split("/") if part]
+    try:
+        upload_index = parts.index("upload")
+    except ValueError:
+        return None
+    public_parts = parts[upload_index + 1:]
+    if public_parts and re.fullmatch(r"v\d+", public_parts[0]):
+        public_parts = public_parts[1:]
+    if not public_parts:
+        return None
+    public_id = "/".join(public_parts)
+    if "." in public_id:
+        public_id = public_id.rsplit(".", 1)[0]
+    return public_id or None
+
+
 def remove_stored_file(path):
-    if not path or str(path).startswith(("http://", "https://")):
+    if not path:
+        return
+    if str(path).startswith(("http://", "https://")):
+        if ("cloudinary.com" in str(path)
+                and HAS_CLOUDINARY
+                and os.environ.get("CLOUDINARY_CLOUD_NAME")):
+            try:
+                # Avoid deleting an asset that is still referenced by another question.
+                if Question.query.filter_by(image_path=path).count() > 0:
+                    return
+                public_id = cloudinary_public_id_from_url(path)
+                if public_id:
+                    cloudinary.uploader.destroy(public_id)
+            except Exception:
+                app.logger.exception("Could not remove Cloudinary image: %s", path)
         return
     base = os.path.abspath(UPLOAD_FOLDER)
     stored_path = os.path.abspath(os.path.join(UPLOAD_FOLDER, path))
@@ -1004,6 +1061,7 @@ class CBTResult(db.Model):
         "exams.id"), nullable=True, index=True)
     subject_name = db.Column(db.String(120), nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True, index=True)
+    client_attempt_id = db.Column(db.String(120), nullable=True, index=True)
 
 
 class Attempt(db.Model):
@@ -1020,6 +1078,7 @@ class Attempt(db.Model):
     total = db.Column(db.Float, nullable=False)
     completed_at = db.Column(db.DateTime, nullable=False,
                              default=utcnow, index=True)
+    client_attempt_id = db.Column(db.String(120), nullable=True, index=True)
 
     @property
     def percentage(self):
@@ -2381,22 +2440,8 @@ def validate_question_payload(data, exam):
         return None, "correctAnswer must be A, B, C, or D."
     image_url = data.get("imageUrl")
     if image_url not in (None, ""):
-        if not isinstance(image_url, str) or len(image_url) > 1000 or re.search(r"%(?![0-9a-fA-F]{2})", image_url):
-            return None, "imageUrl must be a valid HTTP or HTTPS URL."
-        try:
-            parsed_image_url = urlsplit(image_url)
-            valid_image_url = (
-                parsed_image_url.scheme.lower() in {"http", "https"}
-                and bool(parsed_image_url.hostname)
-                and not parsed_image_url.username
-                and not parsed_image_url.password
-                and not any(character.isspace() for character in image_url)
-            )
-            parsed_image_url.port
-        except ValueError:
-            valid_image_url = False
-        if not valid_image_url:
-            return None, "imageUrl must be a valid HTTP or HTTPS URL."
+        if not is_valid_question_image_url(image_url):
+            return None, "imageUrl must be a valid HTTP(S) URL or a relative upload path."
         image_path = image_url
     else:
         image_path = data.get("image_path")
@@ -2466,7 +2511,11 @@ def admin_manage_exam_question(question_id):
     q.explanation = validated["explanation"]
     q.year = validated["year"]
     if "imageUrl" in data or "image_path" in data:
-        q.image_path = validated["image_path"]
+        old_image_path = q.image_path
+        new_image_path = validated["image_path"]
+        if old_image_path and old_image_path != new_image_path:
+            remove_stored_file(old_image_path)
+        q.image_path = new_image_path
     db.session.commit()
     return jsonify(success=True, question={
         "id": q.id, "examId": q.examId, "subject": q.subject, "topic": q.topic,
@@ -2702,8 +2751,14 @@ def upload_question_image():
     file = request.files.get("image")
     if not file or not file.filename:
         return api_error("No image file was provided.")
-    if not allowed_file(file.filename):
-        return api_error("Invalid image type.")
+    extension = file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
+    if extension not in {"png", "jpg", "jpeg", "webp"}:
+        return api_error("Invalid image type. Use PNG, JPG, JPEG, or WEBP.")
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+    if size > 5 * 1024 * 1024:
+        return api_error("Image must be 5 MB or smaller.")
     path, storage_error = store_question_image(file)
     if storage_error:
         return api_error(storage_error, 503, "image_storage_unavailable")
@@ -2899,10 +2954,27 @@ def submit_attempt():
         return api_error("Exam not found.", 404, "exam_not_found")
     if not isinstance(subject, str) or subject.strip() not in subjects_for_exam(exam):
         return api_error("subject must be configured for this exam.")
+    client_attempt_id = data.get("clientAttemptId")
+    if client_attempt_id is not None:
+        client_attempt_id = str(client_attempt_id).strip()[:120] or None
+    if client_attempt_id:
+        existing = Attempt.query.filter_by(
+            student_id=g.current_user.id,
+            school_id=g.current_user.school_id,
+            exam_id=exam.id,
+            subject=subject.strip(),
+            client_attempt_id=client_attempt_id,
+        ).first()
+        if existing:
+            return jsonify(success=True, duplicate=True, attempt={
+                "id": existing.id, "examId": existing.exam_id, "subject": existing.subject,
+                "score": existing.score, "total": existing.total,
+                "percentage": existing.percentage,
+                "completedAt": iso_utc(existing.completed_at)})
     completed_at = utcnow()
     row = Attempt(student_id=g.current_user.id, school_id=g.current_user.school_id,
                   exam_id=exam.id, subject=subject.strip(), score=score, total=total,
-                  completed_at=completed_at)
+                  completed_at=completed_at, client_attempt_id=client_attempt_id)
     # Reportable attempts feed the school dashboard. The result screen writes
     # the single aggregate row to the student's personal history endpoint.
     db.session.add(row)
@@ -2927,6 +2999,17 @@ def save_history_alias():
             raise ValueError
     except (TypeError, ValueError):
         return api_error("score and positive total must be valid; score cannot exceed total.")
+    client_attempt_id = data.get("clientAttemptId")
+    if client_attempt_id is not None:
+        client_attempt_id = str(client_attempt_id).strip()[:120] or None
+    if client_attempt_id:
+        existing_result = CBTResult.query.filter_by(
+            user_id=g.current_user.id,
+            school_id=g.current_user.school_id,
+            client_attempt_id=client_attempt_id,
+        ).first()
+        if existing_result:
+            return jsonify(success=True, duplicate=True, id=existing_result.id, attemptId=None)
     attempt = None
     exam = None
     subject = None
@@ -2943,9 +3026,18 @@ def save_history_alias():
         if not isinstance(subject, str) or subject.strip() not in subjects_for_exam(exam):
             return api_error("subject must be configured for this exam.")
         subject = subject.strip()
-        attempt = Attempt(student_id=g.current_user.id, school_id=g.current_user.school_id,
-                          exam_id=exam.id, subject=subject, score=score, total=total,
-                          completed_at=utcnow())
+        attempt = Attempt.query.filter_by(
+            student_id=g.current_user.id,
+            school_id=g.current_user.school_id,
+            exam_id=exam.id,
+            subject=subject,
+            client_attempt_id=f"{client_attempt_id}:{subject}" if client_attempt_id else None,
+        ).first() if client_attempt_id else None
+        if attempt is None:
+            attempt = Attempt(student_id=g.current_user.id, school_id=g.current_user.school_id,
+                              exam_id=exam.id, subject=subject, score=score, total=total,
+                              completed_at=utcnow(),
+                              client_attempt_id=f"{client_attempt_id}:{subject}" if client_attempt_id else None)
     completed_at = attempt.completed_at if attempt else utcnow()
     row = CBTResult(user_id=g.current_user.id, email=g.current_user.email,
                     title=str(data.get("title", "Practice Test"))[
@@ -2957,7 +3049,8 @@ def save_history_alias():
                     school_id=g.current_user.school_id, date=completed_at,
                     exam_id=exam.id if exam else None,
                     subject_name=subject,
-                    completed_at=completed_at if exam else None)
+                    completed_at=completed_at if exam else None,
+                    client_attempt_id=client_attempt_id)
     db.session.add(row)
     if attempt:
         db.session.add(attempt)
@@ -3466,6 +3559,136 @@ def admin_study_question_manage(question_id):
     row.image_path = validated["image_path"]
     db.session.commit()
     return jsonify(success=True, question=study_question_to_dict(row, include_answer=True))
+
+
+@app.route("/api/admin/bulk-upload-question-images", methods=["POST"])
+@roles_required("school_admin", "exam_officer")
+def admin_bulk_upload_question_images():
+    school_id = g.current_user.school_id
+    exam_type = normalize_study_exam_type(request.form.get("examType") or request.form.get("exam_type") or "")
+    subject = normalize_label(request.form.get("subject") or "")
+    year_raw = request.form.get("year")
+    try:
+        year = int(str(year_raw).strip())
+    except (TypeError, ValueError):
+        return api_error("year must be a valid integer.")
+    overwrite = str(request.form.get("overwrite") or "").strip().lower() in {"1", "true", "yes", "on"}
+    if not exam_type:
+        return api_error("examType is required.")
+    if not valid_study_subject(exam_type, subject):
+        return api_error("subject is not valid for this exam type.")
+    if year < 1000 or year > 9999:
+        return api_error("year must be a valid four-digit year.")
+
+    questions = Question.query.filter_by(
+        school_id=school_id,
+        examId=None,
+        examType=exam_type,
+        subject=subject,
+        year=year,
+    ).order_by(Question.id.asc()).all()
+
+    files = [f for f in request.files.getlist("images") if f and f.filename]
+    if not files:
+        return api_error("No images were uploaded.")
+
+    def filename_number(filename):
+        stem = os.path.splitext(filename or "")[0]
+        matches = re.findall(r"(\d+)", stem)
+        return int(matches[-1]) if matches else None
+
+    seen_numbers = set()
+    duplicate_numbers = set()
+    results = []
+    uploaded = 0
+    failed = 0
+    conflicts = 0
+
+    for file in files:
+        original_name = file.filename.replace("\\", "/").rsplit("/", 1)[-1]
+        extension = original_name.rsplit(".", 1)[1].lower() if "." in original_name else ""
+        if extension not in {"png", "jpg", "jpeg", "webp"}:
+            failed += 1
+            results.append({"filename": original_name, "status": "failed", "error": "Invalid image type. Use PNG, JPG, JPEG, or WEBP."})
+            continue
+        file.seek(0, os.SEEK_END)
+        size = file.tell()
+        file.seek(0)
+        if size > 5 * 1024 * 1024:
+            failed += 1
+            results.append({"filename": original_name, "status": "failed", "error": "Image must be 5 MB or smaller."})
+            continue
+
+        number = filename_number(original_name)
+        if number is None:
+            failed += 1
+            results.append({"filename": original_name, "status": "failed", "error": "Filename must include a question number."})
+            continue
+        if number in seen_numbers:
+            duplicate_numbers.add(number)
+            failed += 1
+            results.append({"filename": original_name, "status": "failed", "error": f"Duplicate image number {number}."})
+            continue
+        seen_numbers.add(number)
+        if number < 1 or number > len(questions):
+            failed += 1
+            results.append({"filename": original_name, "status": "failed", "questionNumber": number, "error": f"No question number {number} for this selection."})
+            continue
+
+        question = questions[number - 1]
+        if question.image_path and not overwrite:
+            conflicts += 1
+            results.append({
+                "filename": original_name,
+                "status": "conflict",
+                "questionId": question.id,
+                "questionNumber": number,
+                "imageUrl": get_image_url(question.image_path),
+                "error": "Question already has an image.",
+            })
+            continue
+
+        image_path, storage_error = store_question_image(file)
+        if storage_error:
+            failed += 1
+            results.append({"filename": original_name, "status": "failed", "questionId": question.id, "questionNumber": number, "error": storage_error})
+            continue
+
+        question.image_path = image_path
+        db.session.add(question)
+        uploaded += 1
+        results.append({
+            "filename": original_name,
+            "status": "uploaded",
+            "questionId": question.id,
+            "questionNumber": number,
+            "imageUrl": get_image_url(image_path),
+        })
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return api_error("Could not save bulk image assignments.", 500, "bulk_image_save_failed")
+
+    unmatched_questions = [
+        {"questionId": q.id, "questionNumber": index + 1}
+        for index, q in enumerate(questions)
+        if (index + 1) not in seen_numbers
+    ]
+    return jsonify(
+        success=True,
+        examType=exam_type,
+        subject=subject,
+        year=year,
+        totalQuestions=len(questions),
+        uploaded=uploaded,
+        failed=failed,
+        conflicts=conflicts,
+        results=results,
+        unmatchedQuestions=unmatched_questions,
+        message=f"Uploaded {uploaded} image(s).",
+    ), 201
 
 
 @app.route("/api/admin/study/import", methods=["POST"])

@@ -4,6 +4,10 @@ import './TestPage.css'
 import { API_URL } from '../config'
 import { apiRequest } from '../api'
 import QuestionImage from '../components/QuestionImage'
+import { loadCachedQuestions } from '../offline/questions'
+import { saveOfflineAttempt, saveDraft, loadDraft, clearDraft } from '../offline/attempts'
+import { syncPendingAttempts } from '../offline/sync'
+import { queueStudyActivity } from '../offline/study'
 
 type Props = { setActivePage: (page: string) => void; testConfig: TestConfigType }
 type Question = { id: string; subject: string; question: string; imageUrl?: string; options: string[]; answer: number; explanation?: string; topic?: string }
@@ -28,6 +32,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
   const filterTopic = (testConfig as any).topic || null
   const singleSubject = (testConfig as any).subject || subjectsList[0] || 'General'
   const examId = (testConfig as any).examId || (testConfig as any).customExamId || (testConfig as any).id || null
+  const draftKey = `cbt-draft:${examId || 'custom'}:${subjectsList.join('|')}:${testConfig.year || ''}`
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -95,6 +100,24 @@ export default function Test({ setActivePage, testConfig }: Props) {
         } catch (e) { console.log("API failed to load imported questions", e) }
       }
 
+      if (fetched.length === 0 && examId) {
+        try {
+          const cached = await loadCachedQuestions(String(examId), subjectsList, String(testConfig.year || ''))
+          fetched = cached.map((d) => ({
+            id: String(d.id),
+            subject: d.subject,
+            question: d.question,
+            imageUrl: d.imageUrl,
+            options: d.options,
+            answer: typeof d.answer === 'number' ? d.answer : ['A','B','C','D','E'].indexOf(String(d.answer).toUpperCase()),
+            explanation: d.explanation || '',
+            topic: d.topic || ''
+          })).filter((d) => d.question && Array.isArray(d.options) && d.options.length > 0)
+        } catch (error) {
+          console.warn('Could not load offline questions', error)
+        }
+      }
+
       // No fallback to fake/local question banks. Only real questions imported
       // from the admin dashboard (via localStorage or the backend API) are used.
       if (fetched.length === 0) {
@@ -102,13 +125,23 @@ export default function Test({ setActivePage, testConfig }: Props) {
       }
 
       const shuffled = fetched.sort(() => 0.5 - Math.random()).slice(0, testConfig.totalQuestions || fetched.length)
+      const draft = await loadDraft(draftKey).catch(() => null)
       setQuestions(shuffled)
-      setAnswers(Array(shuffled.length).fill(null))
+      setAnswers(draft ? shuffled.map((question) => draft.answers[String(question.id)] ?? null) : Array(shuffled.length).fill(null))
+      if (draft) {
+        setCurrent(Math.min(Math.max(0, draft.current || 0), Math.max(0, shuffled.length - 1)))
+        if (draft.timeLeft > 0) setTimeLeft(draft.timeLeft)
+      }
       setExplanationVisible(Array(shuffled.length).fill(false))
       setLoading(false)
     }
     fetchQuestions()
   }, [])
+
+  useEffect(() => {
+    if (loading || !questions.length || submitting.current) return
+    void saveDraft(draftKey, answers, questions, current, timeLeft).catch(() => {})
+  }, [answers, current, timeLeft, questions, loading, draftKey])
 
   const calculateDuration = useCallback(() => { const d = Date.now() - startTime; return `${Math.floor(d/60000)}m ${Math.floor((d%60000)/1000)}s` }, [startTime])
 
@@ -118,8 +151,10 @@ export default function Test({ setActivePage, testConfig }: Props) {
     const score = answers.reduce<number>((a, ans, i) => ans === questions[i]?.answer? a + 1 : a, 0)
     const result = {
       id: Date.now(),
+      clientAttemptId: '',
       title: filterTopic? `${singleSubject} - ${filterTopic}` : `${examType} - ${subjectsList.join(', ')}`,
       examTitle: titleVal,
+      examId: examId ? String(examId) : '',
       subject: subjectsList.join(', '),
       subjects: subjectsList,
       date: new Date().toISOString(),
@@ -134,7 +169,26 @@ export default function Test({ setActivePage, testConfig }: Props) {
       questions,
       fromStudy: !!testConfig.fromStudy
     }
+    result.clientAttemptId = `cbt-${result.id}`
+    if (!testConfig.fromStudy) {
+      try { await saveOfflineAttempt(result) } catch (error) { console.warn('Could not save offline attempt', error) }
+    } else {
+      try {
+        await queueStudyActivity({
+          clientActivityId: `study-${result.id}`,
+          examType,
+          subject: singleSubject,
+          topic: filterTopic || undefined,
+          year: testConfig.year,
+          score: result.score,
+          total: result.total,
+          duration: result.duration,
+          completedAt: result.date,
+        })
+      } catch (error) { console.warn('Could not save study activity', error) }
+    }
     localStorage.setItem('lastTestResult', JSON.stringify(result))
+    await clearDraft(draftKey).catch(() => {})
     // Novel CBT practice: save offline and sync later (dedupe via clientAttemptId)
     try {
       const novelCtx = localStorage.getItem('current_novel_practice')
@@ -159,15 +213,16 @@ export default function Test({ setActivePage, testConfig }: Props) {
         }, 0)
         return apiRequest('/api/attempts', {
           method: 'POST',
-          body: JSON.stringify({ examId, subject, score: subjectScore, total: subjectQuestions.length })
+          body: JSON.stringify({ examId, subject, score: subjectScore, total: subjectQuestions.length, clientAttemptId: `${result.clientAttemptId}:${subject}` })
         })
         }))
       } catch (error) {
         console.error('Could not save school exam attempts:', error)
       }
     }
+    if (navigator.onLine) void syncPendingAttempts()
     setActivePage('result')
-  }, [answers, questions, setActivePage, calculateDuration, examType, subjectsList, titleVal, testConfig.mode, testConfig.fromStudy, filterTopic, singleSubject])
+  }, [answers, questions, setActivePage, calculateDuration, examType, subjectsList, titleVal, testConfig.mode, testConfig.fromStudy, filterTopic, singleSubject, draftKey, examId])
 
   useEffect(() => { if(timeLeft<=0){handleSubmit(); return} const t=setInterval(()=>setTimeLeft(x=>x-1),1000); return()=>clearInterval(t)}, [timeLeft, handleSubmit])
   const formatTime = (s:number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`

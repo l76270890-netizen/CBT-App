@@ -4,6 +4,7 @@ import { examTypes } from '../data/examTypes'
 import './Home.css'
 import './Exams.css'
 import { apiRequest, asArray } from '../api'
+import { loadCachedExams, saveCachedExams } from '../offline/questions'
 
 type ExamData = {
   id: string
@@ -43,8 +44,35 @@ export default function Exams({ setActivePage, setSelectedExam, setTestConfig }:
     const loadExams = async () => {
       try {
         const payload = await apiRequest<unknown>("/api/exams")
-        setExamsFromDb(mapExamRecords(payload))
+        const exams = mapExamRecords(payload)
+        setExamsFromDb(exams)
+        void saveCachedExams(exams.map(exam => ({
+          id: exam.id,
+          title: exam.title,
+          examType: exam.examType,
+          subjects: exam.subjects || [],
+          year: exam.year,
+          duration: exam.duration,
+          totalQuestions: exam.totalQuestions,
+          cachedAt: Date.now(),
+        }))).catch(() => {})
       } catch (loadError) {
+        try {
+          const cached = await loadCachedExams()
+          if (cached.length) {
+            setExamsFromDb(cached.map(exam => ({
+              id: exam.id,
+              title: exam.title,
+              examType: exam.examType,
+              subjects: exam.subjects,
+              year: exam.year,
+              duration: exam.duration,
+              totalQuestions: exam.totalQuestions,
+            })))
+            setError("You are offline. Showing exams saved on this device.")
+            return
+          }
+        } catch {}
         setError(loadError instanceof Error ? loadError.message : "Could not load exams.")
         setExamsFromDb([])
       } finally {

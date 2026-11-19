@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { BookOpen, Calculator, Atom, Beaker, Zap, Landmark, DollarSign, Library, ArrowLeft, Search, Check } from 'lucide-react'
 import './Subjects.css'
 import { apiRequest } from '../api'
+import { loadCachedSubjectAvailability } from '../offline/questions'
 
 type SubjectItem = { subject: string; questions: number; years: string; required?: boolean; questionsByYear?: Record<string, number> }
 type Props = {
@@ -69,6 +70,15 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
           setSubjects(grouped)
         }
       } catch (e) {
+        try {
+          if (selectedExamId) {
+            const cached = await loadCachedSubjectAvailability(String(selectedExamId))
+            if (cached.length) {
+              setSubjects(cached)
+              return
+            }
+          }
+        } catch {}
         setLoadError(e instanceof Error ? e.message : "Could not load subjects.")
         setSubjects([])
       } finally {

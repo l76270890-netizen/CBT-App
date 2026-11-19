@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { WifiOff } from 'lucide-react'
 
 import Home from './pages/Home'
 import Exams from './pages/Exams'
@@ -51,6 +52,7 @@ function AppShell() {
     return window.location.pathname.replace(/\/+$/, '') === '/payment-received' ? 'paymentReceived' : 'landing'
   })
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [homeSearchQuery, setHomeSearchQuery] = useState('')
   const [demoSection, setDemoSection] = useState('home')
@@ -90,6 +92,16 @@ function AppShell() {
     }
     setCheckingAuth(false)
   }, [isAdminApp])
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine)
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+    }
+  }, [])
 
   const { blocked, clearBlocked } = useSubscription()
 
@@ -175,7 +187,15 @@ function AppShell() {
           {page === 'account' && <Account setActivePage={navigateTo} />}
           {page === 'practiceHistory' && <PracticeHistory setActivePage={navigateTo} />}
           {page === 'generalKnowledge' && <GeneralKnowledge setActivePage={navigateTo} setTestConfig={setTestConfig} examId={testConfig.examId || testConfig.customExamId} />}
-            {page === 'admin' && <AdminAny setActivePage={navigateTo} />}
+            {page === 'admin' && (online ? <AdminAny setActivePage={navigateTo} /> : (
+              <div style={{ minHeight: '70vh', display: 'grid', placeItems: 'center', padding: 24, textAlign: 'center' }}>
+                <div style={{ maxWidth: 440, padding: 28, borderRadius: 16, border: '1px solid var(--border, #2a3242)', background: 'var(--bg-raised, #111827)' }}>
+                  <WifiOff size={34} style={{ margin: '0 auto 12px', color: 'var(--danger, #ef4444)' }} />
+                  <h2 style={{ margin: '0 0 8px' }}>Internet connection required</h2>
+                  <p style={{ margin: 0, color: 'var(--text-secondary, #9ca3af)' }}>Please reconnect to access the Admin Dashboard.</p>
+                </div>
+              </div>
+            ))}
           </>
         )}
       </main>

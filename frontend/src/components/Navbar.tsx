@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import './Navbar.css'
 import { API_URL } from '../config'
 import { apiRequest, asArray } from '../api'
+import OfflineStatus from './OfflineStatus'
 
 type Notif = { id: string; title: string; message: string; time: string; read: boolean; type: 'success'|'info'|'warning' }
 
@@ -163,6 +164,7 @@ export default function Navbar({ activePage, setActivePage, sidebarCollapsed, se
             </div>
           )}
           <div className="navbar-right">
+            <OfflineStatus />
             {demoMode ? (
               <span className="demo-mode-chip">DEMO MODE</span>
             ) : user && (

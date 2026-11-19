@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ArrowLeft, Clock, Timer, BookCheck, GraduationCap, Check } from 'lucide-react'
+import { ArrowLeft, Clock, Timer, BookCheck, GraduationCap, Check, Download, Loader2 } from 'lucide-react'
 import type { TestConfigType } from '../types'
+import { downloadQuestionsForTest } from '../offline/questions'
 import './TestConfig.css'
 
 type Props = {
@@ -22,6 +23,9 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
   const [topic, setTopic] = useState(testConfig.topic || 'All Topics')
   const [year, setYear] = useState<string>(testConfig.year || '')
   const [duration, setDuration] = useState<number>(testConfig.duration || 60)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadMessage, setDownloadMessage] = useState('')
+  const [downloadError, setDownloadError] = useState('')
   const yearAdjustedRef = useRef<string>('')
 
   const allSubjects = (testConfig.subjects || []) as SubjectLike[]
@@ -197,6 +201,33 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
     setActivePage('testInstructions')
   }
 
+  const handleDownload = async () => {
+    const offlineConfig: TestConfigType = {
+      ...testConfig,
+      examId: selectedExam?.id || testConfig.examId || testConfig.customExamId || '',
+      subjects: isJambFlow ? (testConfig.subjects || []) : subjectsForYear,
+      totalQuestions: isJambFlow ? (Number(testConfig.totalQuestions) || totalQuestions) : totalQuestions,
+      year: isJambFlow ? (testConfig.year || effectiveYear || year) : (effectiveYear || year),
+      duration,
+      mode,
+      difficulty,
+      topic,
+    }
+    setDownloading(true)
+    setDownloadMessage('')
+    setDownloadError('')
+    try {
+      const results = await downloadQuestionsForTest(offlineConfig)
+      const questionCount = results.reduce((sum, item) => sum + item.questions, 0)
+      const imageCount = results.reduce((sum, item) => sum + item.images, 0)
+      setDownloadMessage(`${questionCount} questions and ${imageCount} diagrams saved for offline use.`)
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Could not download questions for offline use.')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   const selectedSubjectNames = subjectsForYear.map(s => s.subject).filter(Boolean)
   const hasQuestionYearData = allSubjects.some(s => typeof s === 'object' && s?.questionsByYear && Object.keys(s.questionsByYear || {}).length > 0)
   const noAvailable = (hasQuestionYearData || availabilityKnown) && (!yearOptions.length || !subjectsForYear.length || totalQuestions <= 0)
@@ -255,6 +286,16 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
         <div className="config-row"><label>Difficulty</label><select className="config-select small" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}><option value="General">General</option><option value="Easy">Easy</option><option value="Normal">Normal</option><option value="Hard">Hard</option></select></div>
         <div className="config-row"><label>Topic</label><select className="config-select small" value={topic} onChange={(e) => setTopic(e.target.value)}><option value="All Topics">All Topics</option><option value="Random">Random Mix</option></select></div>
       </div>
+
+          <div className="config-card">
+            <h3><Download size={14}/> Offline access</h3>
+            <p style={{margin:'0 0 10px', fontSize:13}}>Save this test and its diagrams so you can practise without internet.</p>
+            <button type="button" className="dur-btn" onClick={handleDownload} disabled={downloading || noAvailable || !subjectsForYear.length || totalQuestions <= 0} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,width:'100%',padding:'12px'}}>
+              {downloading ? <Loader2 size={16} className="spin"/> : <Download size={16}/>} {downloading ? 'Downloading...' : 'Download for Offline'}
+            </button>
+            {downloadMessage && <p role="status" style={{margin:'10px 0 0',fontSize:12,color:'var(--success, #22c55e)'}}>{downloadMessage}</p>}
+            {downloadError && <p role="alert" style={{margin:'10px 0 0',fontSize:12,color:'var(--danger, #ef4444)'}}>{downloadError}</p>}
+          </div>
 
           {noAvailable && <div className="config-card" style={{borderColor:'var(--danger, #7f1d1d)', color:'var(--danger-text, #fca5a5)'}}>No questions are available for the selected subjects in any year. Go back and choose different subjects.</div>}
       <button className="continue-btn" onClick={handleContinue} disabled={noAvailable || !subjectsForYear.length || totalQuestions <= 0}><Check size={18}/> CONTINUE TO INSTRUCTIONS</button>

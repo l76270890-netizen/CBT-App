@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "dexie": "^4.4.7",
     "jszip": "^3.10.2",
     "lucide-react": "^1.42.0",
     "papaparse": "^5.7.0",

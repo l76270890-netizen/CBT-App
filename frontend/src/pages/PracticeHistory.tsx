@@ -3,8 +3,24 @@ import { useAuth } from '../context/AuthContext'
 import { BarChart3, Trophy, Clock, Target, Trash2, RotateCcw, Award, Calendar } from 'lucide-react'
 import './PracticeHistory.css'
 import { apiRequest, asArray } from '../api'
+import { offlineDb } from '../offline/db'
 
-type HistoryItem = { id: string; title: string; date: string; score: number; total: number; duration: string; status: string; mode?: string; subject?: string }
+type HistoryItem = { id: string; title: string; date: string; score: number; total: number; duration: string; status: string; mode?: string; subject?: string; local?: boolean }
+
+function localHistoryRows(): Promise<HistoryItem[]> {
+  return offlineDb.attempts.toArray().then(rows => rows.map(row => ({
+    id: `local-${row.id}`,
+    title: row.examTitle || row.subject || 'Offline exam',
+    date: row.completedAt,
+    score: row.score,
+    total: row.total,
+    duration: row.duration,
+    status: row.total > 0 && row.score / row.total >= 0.5 ? 'Passed' : 'Failed',
+    mode: row.mode,
+    subject: row.subject,
+    local: true,
+  })))
+}
 
 export default function PracticeHistory({ setActivePage }: any) {
   const { user } = useAuth()
@@ -15,10 +31,13 @@ export default function PracticeHistory({ setActivePage }: any) {
 
   useEffect(() => {
     if(!user?.user_id) { setLoading(false); return }
-    setLoading(true)
-    setHistoryError('')
-    apiRequest<unknown>(`/api/history/${encodeURIComponent(user.user_id)}`)
-     .then(payload => {
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setHistoryError('')
+      try {
+        const payload = await apiRequest<unknown>(`/api/history/${encodeURIComponent(user.user_id)}`)
+        if (cancelled) return
         const data = asArray<HistoryItem>(payload)
         const onlyExams = data.filter(h => h.mode !== 'study').map(item => ({
           ...item,
@@ -27,9 +46,22 @@ export default function PracticeHistory({ setActivePage }: any) {
             : (item.total > 0 && item.score / item.total >= 0.5 ? 'Passed' : 'Failed'),
         }))
         setHistory(onlyExams)
-      })
-     .catch(error => setHistoryError(error instanceof Error ? error.message : 'Could not load exam history.'))
-     .finally(() => setLoading(false))
+      } catch (error) {
+        if (cancelled) return
+        let local: HistoryItem[] = []
+        try { local = await localHistoryRows() } catch {}
+        if (local.length) {
+          setHistory(local)
+          setHistoryError('You are offline. Showing results saved on this device.')
+        } else {
+          setHistoryError(error instanceof Error ? error.message : 'Could not load exam history.')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => { cancelled = true }
   }, [user])
 
   const filtered = useMemo(() => filter==='all'? history : history.filter(h=>h.status===filter), [history, filter])
@@ -43,6 +75,12 @@ export default function PracticeHistory({ setActivePage }: any) {
   const handleDelete = async (id: string) => {
     if(!confirm("Delete?")) return
     try {
+      if (id.startsWith('local-')) {
+        const localId = Number(id.slice(6))
+        if (Number.isFinite(localId)) await offlineDb.attempts.delete(localId)
+        setHistory(prev=>prev.filter(h=>h.id!==id))
+        return
+      }
       await apiRequest(`/api/history/${encodeURIComponent(id)}`, { method: 'DELETE' })
       setHistory(prev=>prev.filter(h=>h.id!==id))
     } catch (error) { setHistoryError(error instanceof Error ? error.message : 'Could not delete history.') }
@@ -53,7 +91,14 @@ export default function PracticeHistory({ setActivePage }: any) {
     try {
       await apiRequest(`/api/history/clear/${encodeURIComponent(user.user_id)}`, { method: 'DELETE' })
       setHistory([])
-    } catch (error) { setHistoryError(error instanceof Error ? error.message : 'Could not clear history.') }
+    } catch (error) {
+      try {
+        await offlineDb.attempts.clear()
+        setHistory([])
+        return
+      } catch {}
+      setHistoryError(error instanceof Error ? error.message : 'Could not clear history.')
+    }
   }
 
   if(loading) return <section className="history-section"><div className="history-container"><div className="history-header"><h1>History</h1></div><p>Loading exam history…</p></div></section>

@@ -4,6 +4,7 @@ import { ArrowRight, BookOpen, CalendarDays, Search, X, Funnel, Flame, Trophy, T
 import { examTypes } from '../data/examTypes'
 import './Home.css'
 import { apiRequest, asArray } from '../api'
+import { loadCachedExams, saveCachedExams } from '../offline/questions'
 
 type ExamData = {
   id: string
@@ -70,8 +71,36 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
         }).catch(()=>{})
     }
     apiRequest<unknown>("/api/exams").then(payload => {
-        setExamsFromDb(mapExamRecords(payload))
-      }).catch(loadError => {
+        const exams = mapExamRecords(payload)
+        setExamsFromDb(exams)
+        void saveCachedExams(exams.map(exam => ({
+          id: exam.id,
+          title: exam.title,
+          examType: exam.examType,
+          subjects: exam.subjects || [],
+          year: exam.year,
+          duration: exam.duration,
+          totalQuestions: exam.totalQuestions,
+          scheduledAt: exam.examDate,
+          cachedAt: Date.now(),
+        }))).catch(() => {})
+      }).catch(async loadError => {
+        try {
+          const cached = await loadCachedExams()
+          if (cached.length) {
+            setExamsFromDb(cached.map(exam => ({
+              id: exam.id,
+              title: exam.title,
+              examType: exam.examType,
+              subjects: exam.subjects,
+              year: exam.year,
+              duration: exam.duration,
+              totalQuestions: exam.totalQuestions,
+              examDate: exam.scheduledAt,
+            })))
+            return
+          }
+        } catch {}
         console.error(loadError instanceof Error ? loadError.message : "Could not load exams.")
         setExamsFromDb([])
       }).finally(()=> setLoading(false))

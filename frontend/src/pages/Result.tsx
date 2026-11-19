@@ -10,6 +10,7 @@ export default function Result({ setActivePage }: Props) {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [offlineQueued, setOfflineQueued] = useState(false)
   const savingKey = useRef<string | null>(null)
   const { user } = useAuth()
 
@@ -29,6 +30,7 @@ export default function Result({ setActivePage }: Props) {
           status: (res.score / res.total) >= 0.5 ? 'Passed' : 'Failed',
           mode: res.mode || 'exam',
           examType: res.examType || 'GENERAL',
+          clientAttemptId: res.clientAttemptId || `cbt-${res.id}`,
         })
       })
       sessionStorage.setItem(key, 'true')
@@ -54,6 +56,7 @@ export default function Result({ setActivePage }: Props) {
       }
       const key = `historySaved:${user.user_id}:${parsed.id}`
       if (sessionStorage.getItem(key)) { setSaved(true); return }
+      if (!navigator.onLine) { setOfflineQueued(true); return }
       void saveToBackend(parsed, key)
     } catch {
       setSaveError('This exam result could not be read. Please retake the exam to save it.')
@@ -70,7 +73,7 @@ export default function Result({ setActivePage }: Props) {
       <div className="result-card">
         <div className={`result-badge ${passed? 'pass' : 'fail'}`}><span>{passed? '✓ PASSED' : '✗ FAILED'}</span></div>
         <h1>{passed? 'Congratulations!' : 'Keep Trying!'}</h1>
-        <p className="result-subtitle">Here is how you performed {saved ? '• Saved to History ✓' : saving ? '• Saving to History…' : ''}</p>
+        <p className="result-subtitle">Here is how you performed {saved ? '• Saved to History ✓' : offlineQueued ? '• Saved on this device, will sync when online' : saving ? '• Saving to History…' : ''}</p>
         {saveError && <p role="alert" className="result-subtitle">History save failed: {saveError} <button className="btn-ghost" onClick={() => user?.user_id && result && void saveToBackend(result, `historySaved:${user.user_id}:${result.id}`)}>Retry</button></p>}
         <div className="score-circle-wrap">
           <div className="score-circle">

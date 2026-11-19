@@ -54,9 +54,9 @@ export function summarizeQuestionImageMatches(rows: CsvQuestionRow[], files: Fil
 export function isSupportedQuestionImage(file: File): boolean {
   const extension = file.name.split(".").pop()?.toLowerCase();
   const supportedTypes: Record<string, string[]> = {
-    png: ["image/png"],
-    jpg: ["image/jpeg"],
-    jpeg: ["image/jpeg"],
+    png: ["image/png", "image/x-png"],
+    jpg: ["image/jpeg", "image/jpg", "image/pjpeg"],
+    jpeg: ["image/jpeg", "image/jpg", "image/pjpeg"],
     webp: ["image/webp"],
   };
   const expectedTypes = supportedTypes[extension || ""];

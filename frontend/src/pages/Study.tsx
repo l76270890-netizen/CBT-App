@@ -9,6 +9,7 @@ import { BookOpen, Calculator, Atom, Beaker, Zap, Landmark, Search, X, ChevronRi
 import { apiRequest, asArray } from '../api'
 import type { Novel, NovelProgress } from '../novelTypes'
 import { getDownloadedNovels, getDownloadedNovel, saveNovelDownload, removeDownloadedNovel, getNovelBlob, saveProgressLocal, getProgressLocal, getPendingAttempts, clearPendingAttempts, estimateStorage } from '../novelStore'
+import { cacheStudyMeta, loadStudyMeta, cacheStudyQuestions, loadStudyQuestions } from '../offline/study'
 import './Study.css'
 
 type SubjectMeta = { id: string; name: string; icon: any; color: string; dept: 'ALL' | 'SCIENCE' | 'ART' | 'COMMERCIAL' }
@@ -54,13 +55,24 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
       try {
         const data = await apiRequest<any>(`/api/study/meta?examType=${encodeURIComponent(examType)}`)
         if (cancelled) return
-        setCatalog({
+        const nextCatalog = {
           topicsBySubject: data?.topicsBySubject && typeof data.topicsBySubject === 'object' ? data.topicsBySubject : {},
           availability: data?.availability && typeof data.availability === 'object' ? data.availability : {},
-        })
+        }
+        setCatalog(nextCatalog)
+        await cacheStudyMeta(examType, data)
         setCatalogError('')
       } catch (e) {
-        if (!cancelled) setCatalogError(e instanceof Error ? e.message : 'Could not load study catalog.')
+        if (cancelled) return
+        try {
+          const cached = await loadStudyMeta(examType)
+          if (cached) {
+            setCatalog({ topicsBySubject: cached.topicsBySubject, availability: cached.availability })
+            setCatalogError('')
+            return
+          }
+        } catch {}
+        setCatalogError(e instanceof Error ? e.message : 'Could not load study catalog.')
       } finally {
         if (!cancelled) setCatalogLoading(false)
       }
@@ -171,8 +183,16 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
       const params = new URLSearchParams({ examType, subject: subjectName })
       if (opts.topic) params.set('topics', opts.topic)
       if (opts.year) params.set('year', opts.year)
-      const rows = await apiRequest<any[]>(`/api/study/questions?${params.toString()}`)
-      const questions = asArray<any>(rows).map((d: any, i: number) => ({
+      let rows: any[] = []
+      if (navigator.onLine) {
+        try {
+          rows = asArray<any>(await apiRequest<any[]>(`/api/study/questions?${params.toString()}`))
+          await cacheStudyQuestions(examType, subjectName, rows)
+        } catch (error) {
+          console.warn('Could not refresh study questions; using saved copies.', error)
+        }
+      }
+      let questions = rows.map((d: any, i: number) => ({
         id: d.id ?? `sq-${i}`,
         subject: d.subject || subjectName,
         topic: d.topic || opts.topic || '',
@@ -184,7 +204,21 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
         explanation: d.explanation || '',
       })).filter((q: any) => q.question && Array.isArray(q.options) && q.options.length === 4)
       if (!questions.length) {
-        alert(opts.topic ? `No study questions found for ${subjectName} • ${opts.topic} (${examType}).` : `No study questions found for ${subjectName} • ${opts.year} (${examType}).`)
+        const cached = await loadStudyQuestions(examType, subjectName, opts.topic, opts.year)
+        questions = cached.map(question => ({
+          id: question.id,
+          subject: question.subject,
+          topic: question.topic,
+          year: question.year,
+          question: question.question,
+          imageUrl: question.imageUrl,
+          options: question.options,
+          answer: question.answer,
+          explanation: question.explanation || '',
+        }))
+      }
+      if (!questions.length) {
+        alert(opts.topic ? `No study questions found for ${subjectName} • ${opts.topic} (${examType}). Download it while online first.` : `No study questions found for ${subjectName} • ${opts.year} (${examType}). Download it while online first.`)
         return
       }
       localStorage.setItem('current_questions', JSON.stringify(questions))

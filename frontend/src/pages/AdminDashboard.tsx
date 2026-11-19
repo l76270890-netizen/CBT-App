@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import { Activity, ArrowRight, BookOpen, Download, FileSpreadsheet, GraduationCap, ImagePlus, LayoutDashboard, Pencil, Search, Trash2, Upload, UsersRound } from "lucide-react";
 import "./AdminDashboard.css";
 import { apiRequest, asArray, uploadQuestionImage } from "../api";
+import { API_URL } from "../config";
 import QuestionImage from "../components/QuestionImage";
 import { csvTemplateHeaders, isSupportedQuestionImage, normalizeImageReference, parseQuestionCsv, summarizeQuestionImageMatches, type CsvQuestionRow } from "../adminQuestionCsv";
 import { loadQuestionZip } from "../questionZip";
@@ -83,6 +84,19 @@ function StudyManagementSection() {
   const [importSummary, setImportSummary] = useState<{imported:number;failed:number;message?:string} | null>(null);
   const [importStatus, setImportStatus] = useState("");
 
+  const [bulkExamType, setBulkExamType] = useState("JAMB");
+  const [bulkSubject, setBulkSubject] = useState("");
+  const [bulkYear, setBulkYear] = useState(String(new Date().getFullYear()));
+  const [bulkImages, setBulkImages] = useState<File[]>([]);
+  const [bulkImagePreviews, setBulkImagePreviews] = useState<string[]>([]);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
+  const [bulkError, setBulkError] = useState("");
+  const [bulkResults, setBulkResults] = useState<any[]>([]);
+  const [bulkUnmatched, setBulkUnmatched] = useState<any[]>([]);
+  const bulkImagesInput = useRef<HTMLInputElement>(null);
+
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void (async () => {
     try { const m = await apiRequest<StudyMeta>("/api/admin/study/meta"); setMeta(m); if (!formSubject && m.subjectsByExamType?.[formExamType]?.[0]) setFormSubject(m.subjectsByExamType[formExamType][0]); }
     catch (e) { /* fallback defaults */ }
@@ -159,6 +173,73 @@ function StudyManagementSection() {
     if (!confirm("Delete this study question?")) return;
     try { await apiRequest(`/api/admin/study/question/${id}`, { method: "DELETE" }); setQuestions(qs => qs.filter(q => q.id !== id)); setMsg("Study question deleted."); setTimeout(()=>setMsg(""),2500); }
     catch (e) { setError(e instanceof Error ? e.message : "Could not delete question."); }
+  };
+
+  const handleBulkImageChange = (files: FileList | null) => {
+    if (!files) return;
+    const selected = Array.from(files);
+    const valid: File[] = [];
+    const previews: string[] = [];
+    let error = "";
+    for (const file of selected) {
+      if (!["image/png","image/jpeg","image/webp"].includes(file.type.toLowerCase())) { error = "Use PNG, JPG, JPEG, or WEBP images."; continue; }
+      if (file.size > 5 * 1024 * 1024) { error = "Each image must be 5 MB or smaller."; continue; }
+      valid.push(file);
+      previews.push(URL.createObjectURL(file));
+    }
+    setBulkError(error);
+    setBulkImages(prev => [...prev, ...valid]);
+    setBulkImagePreviews(prev => [...prev, ...previews]);
+    setBulkResults([]);
+    setBulkUnmatched([]);
+  };
+
+  const removeBulkImage = (index: number) => {
+    setBulkImages(prev => prev.filter((_, i) => i !== index));
+    setBulkImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const runBulkImageUpload = async (overwrite = false) => {
+    if (!bulkExamType || !bulkSubject || !bulkYear || bulkImages.length === 0) { setBulkError("Select exam type, subject, year, and at least one image."); return; }
+    setBulkError("");
+    setBulkUploading(true);
+    setBulkProgress(0);
+    try {
+      const fd = new FormData();
+      fd.append("examType", bulkExamType);
+      fd.append("subject", bulkSubject);
+      fd.append("year", bulkYear);
+      fd.append("overwrite", String(overwrite));
+      bulkImages.forEach(file => fd.append("images", file));
+      const response = await new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${API_URL}/api/admin/bulk-upload-question-images`);
+        xhr.withCredentials = true;
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) setBulkProgress(Math.round((event.loaded / event.total) * 100));
+        };
+        xhr.onload = () => {
+          try { resolve(JSON.parse(xhr.responseText || "{}")); }
+          catch { reject(new Error("Invalid server response.")); }
+        };
+        xhr.onerror = () => reject(new Error("Network error during bulk upload."));
+        xhr.send(fd);
+      });
+      if (!response?.success) throw new Error(response?.error || "Bulk upload failed.");
+      setBulkResults(Array.isArray(response.results) ? response.results : []);
+      setBulkUnmatched(Array.isArray(response.unmatchedQuestions) ? response.unmatchedQuestions : []);
+      if (!overwrite && (response.conflicts || 0) > 0) {
+        if (confirm(`Replace existing images for ${response.conflicts} question(s)?`)) {
+          await runBulkImageUpload(true);
+          return;
+        }
+      }
+      setBulkProgress(100);
+    } catch (err) {
+      setBulkError(err instanceof Error ? err.message : "Bulk upload failed.");
+    } finally {
+      setBulkUploading(false);
+    }
   };
 
   const downloadTemplate = () => {
@@ -288,6 +369,76 @@ function StudyManagementSection() {
           </tbody></table></div>
         )}
       </section>
+
+      <section className="admin-overview-card" style={{ marginTop: 20 }}>
+        <div className="admin-section-heading"><div><h3>Bulk Image Upload</h3><p>Match image filenames to question numbers for a selected exam type, subject, and year.</p></div></div>
+        <div className="admin-student-filters" style={{ marginTop: 12 }}>
+          <select value={bulkExamType} onChange={e => { setBulkExamType(e.target.value); setBulkSubject(""); }} disabled={bulkUploading}>
+            {meta.examTypes.map(type => <option key={type} value={type}>{type}</option>)}
+          </select>
+          <select value={bulkSubject} onChange={e => setBulkSubject(e.target.value)} disabled={bulkUploading}>
+            <option value="">-- Subject --</option>
+            {(meta.subjectsByExamType?.[bulkExamType] || []).map((subject: string) => <option key={subject} value={subject}>{subject}</option>)}
+          </select>
+          <input value={bulkYear} onChange={e => setBulkYear(e.target.value)} placeholder="Year" disabled={bulkUploading} />
+        </div>
+        <div
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); handleBulkImageChange(e.dataTransfer.files); }}
+          style={{ marginTop: 12, border: "1px dashed #444", borderRadius: 10, padding: 16, textAlign: "center" }}
+        >
+          <label className="csv-upload-btn">
+            <ImagePlus size={16} /> Choose Images
+            <input ref={bulkImagesInput} type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" multiple onChange={e => handleBulkImageChange(e.target.files)} disabled={bulkUploading} />
+          </label>
+          <p style={{ margin: "8px 0 0", color: "#a1a1b5", fontSize: 12 }}>Drag and drop images here. Filenames must include the question number, such as 1.jpg or economics_2018_2.png.</p>
+        </div>
+        {bulkError && <p className="csv-error" role="alert">{bulkError}</p>}
+        {bulkImages.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+              <span>{bulkImages.length} image(s) selected</span>
+              <button type="button" className="admin-btn primary sm" onClick={() => void runBulkImageUpload(false)} disabled={bulkUploading}>
+                {bulkUploading ? "Uploading..." : "Upload All"}
+              </button>
+              <button type="button" className="admin-btn sm" onClick={() => { setBulkImages([]); setBulkImagePreviews([]); setBulkResults([]); setBulkUnmatched([]); if (bulkImagesInput.current) bulkImagesInput.current.value = ""; }} disabled={bulkUploading}>
+                Clear
+              </button>
+            </div>
+            {bulkUploading && <progress value={bulkProgress} max={100} style={{ width: "100%" }} />}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginTop: 8 }}>
+              {bulkImagePreviews.map((preview, index) => (
+                <div key={`${bulkImages[index]?.name}-${index}`} style={{ position: "relative" }}>
+                  <img src={preview} alt={bulkImages[index]?.name} style={{ width: "100%", height: 90, objectFit: "contain", borderRadius: 8, background: "#111" }} />
+                  <button type="button" onClick={() => removeBulkImage(index)} disabled={bulkUploading} style={{ position: "absolute", top: 4, right: 4 }} aria-label={`Remove ${bulkImages[index]?.name}`}>
+                    <Trash2 size={14} />
+                  </button>
+                  <small style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bulkImages[index]?.name}</small>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {bulkResults.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <strong>Results</strong>
+            <ul style={{ maxHeight: 220, overflow: "auto" }}>
+              {bulkResults.map((result, index) => (
+                <li key={`${result.filename}-${index}`}>
+                  {result.filename}: {result.status}
+                  {result.questionNumber ? ` (question ${result.questionNumber})` : ""}
+                  {result.imageUrl ? ` - ${result.imageUrl}` : ""}
+                  {result.error ? ` - ${result.error}` : ""}
+                </li>
+              ))}
+            </ul>
+            {bulkUnmatched.length > 0 && (
+              <p className="admin-empty-note">Unmatched questions: {bulkUnmatched.map(q => q.questionNumber).join(", ")}</p>
+            )}
+          </div>
+        )}
+      </section>
+
     </section>
   );
 }
@@ -430,7 +581,7 @@ function NovelManagementSection() {
   const startEditQuestion = (q: AdminNovelQuestion) => {
     const opts = Array.isArray(q.options) ? q.options : [q.options.A,q.options.B,q.options.C,q.options.D];
     const ans = q.correctAnswer || (typeof q.answer === 'number' ? "ABCD"[q.answer] : "A") || "A";
-    setEditingQuestionId(typeof q.id === 'string' ? Number(q.questionId || q.id) : q.id); setQQuestion(q.question || ""); setQOptions([opts[0]||"",opts[1]||"",opts[2]||"",opts[3]||""]); setQCorrect(ans); setQExplanation(q.explanation || ""); setQTopic((q.topic as string) || ""); setQImage(null);
+    setEditingQuestionId(typeof q.id === 'string' ? Number(q.id) : q.id); setQQuestion(q.question || ""); setQOptions([opts[0]||"",opts[1]||"",opts[2]||"",opts[3]||""]); setQCorrect(ans); setQExplanation(q.explanation || ""); setQTopic((q.topic as string) || ""); setQImage(null);
   };
   const saveNovelQuestion = async (novelId: number) => {
     if (!qQuestion.trim() || qOptions.some(o => !o.trim())) { setError("Question and all options A-D are required."); return; }
@@ -448,7 +599,7 @@ function NovelManagementSection() {
   };
   const deleteNovelQuestion = async (novelId: number, q: AdminNovelQuestion) => {
     if (!confirm("Delete this novel question?")) return;
-    const id = typeof q.id === 'string' ? Number(q.questionId || q.id) : q.id;
+    const id = typeof q.id === 'string' ? Number(q.id) : q.id;
     try { await apiRequest(`/api/admin/novels/${novelId}/questions/${id}`, { method: "DELETE" }); await openNovelManager(novelId); await loadNovels(); }
     catch (e) { setError(e instanceof Error ? e.message : "Could not delete question."); }
   };
@@ -735,6 +886,16 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     } catch (error) { setQuestionsError(error instanceof Error ? error.message : "Could not load questions."); setQuestions([]); }
     finally { setQuestionsLoading(false); }
   };
+  const deleteExamQuestion = async (id: number) => {
+    if (!confirm("Delete this question?")) return;
+    try {
+      await apiRequest(`/api/admin/question/${id}`, { method: "DELETE" });
+      setQuestions(qs => qs.filter(q => Number(q.id) !== id));
+      setSelectedQuestionIds(prev => prev.filter(questionId => questionId !== id));
+      setMsg("Question deleted."); setTimeout(()=>setMsg(""), 2500);
+      await fetchQuestions();
+    } catch (error) { setQuestionsError(error instanceof Error ? error.message : "Could not delete question."); }
+  };
   const deleteSelectedExamQuestions = async () => {
     if (!selectedQuestionIds.length) return;
     if (!confirm(`Delete ${selectedQuestionIds.length} selected question(s)?`)) return;
@@ -841,9 +1002,9 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     event.target.value = "";
     if (!file) return;
 
-    const allowedTypes = ["image/png", "image/jpeg"];
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp"];
     if (!allowedTypes.includes(file.type.toLowerCase())) {
-      setQuestionImageError("Choose a PNG, JPG, or JPEG image.");
+      setQuestionImageError("Choose a PNG, JPG, JPEG, or WEBP image.");
       return;
     }
 
@@ -875,7 +1036,6 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
     setCsvRows([]);
     setCsvImageFiles(new Map());
     setCsvUploadFile(null);
-    setCsvSelectedImages([]);
     setCsvImageError("");
     if (csvImagesInput.current) csvImagesInput.current.value = "";
     setCsvFileName("");
@@ -1436,7 +1596,7 @@ export default function AdminDashboard({ setActivePage }: { setActivePage: (p:st
               <button type="button" className="csv-template-btn" onClick={() => questionImageInput.current?.click()} disabled={loading}>
                 <ImagePlus size={16} /> {questionImagePreview ? "Replace image" : "Insert Image/Diagram"}
               </button>
-              <input ref={questionImageInput} className="question-image-input" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={handleQuestionImageChange} />
+              <input ref={questionImageInput} className="question-image-input" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" onChange={handleQuestionImageChange} />
               {questionImagePreview && <button type="button" className="question-image-remove" onClick={removeQuestionImage} disabled={loading}><Trash2 size={15} /> Remove</button>}
             </div>
             {questionImageError && <p className="csv-error" role="alert">{questionImageError}</p>}
