@@ -110,6 +110,24 @@ def ensure_user_columns():
         existing_cols = {col["name"] for col in inspector.get_columns("users")}
 
         missing = []
+        if "username" not in existing_cols:
+            missing.append('ALTER TABLE users ADD COLUMN username VARCHAR(80)')
+        if "profile_image" not in existing_cols:
+            missing.append('ALTER TABLE users ADD COLUMN profile_image VARCHAR(1000)')
+        if "school_id" not in existing_cols:
+            missing.append('ALTER TABLE users ADD COLUMN school_id INTEGER')
+        if "role" not in existing_cols:
+            missing.append('ALTER TABLE users ADD COLUMN role VARCHAR(32)')
+        if "class_id" not in existing_cols:
+            missing.append('ALTER TABLE users ADD COLUMN class_id INTEGER')
+        if "account_status" not in existing_cols:
+            missing.append('ALTER TABLE users ADD COLUMN account_status VARCHAR(20)')
+        if "last_seen_at" not in existing_cols:
+            missing.append('ALTER TABLE users ADD COLUMN last_seen_at TIMESTAMP')
+        if "subscription_plan" not in existing_cols:
+            missing.append('ALTER TABLE users ADD COLUMN subscription_plan VARCHAR(16)')
+        if "subscription_expires_at" not in existing_cols:
+            missing.append('ALTER TABLE users ADD COLUMN subscription_expires_at TIMESTAMP')
         if "reset_token" not in existing_cols:
             missing.append('ALTER TABLE users ADD COLUMN reset_token VARCHAR(200)')
         if "reset_token_expires" not in existing_cols:
@@ -129,6 +147,8 @@ def ensure_user_columns():
                             conn.execute(db.text('ALTER TABLE users ADD COLUMN is_owner BOOLEAN'))
                         else:
                             raise
+                if "username" in " ".join(missing):
+                    conn.execute(db.text("UPDATE users SET username = email WHERE username IS NULL OR username = ''"))
                 conn.commit()
             app.logger.info("Added missing user columns: %s", ", ".join(missing))
     except Exception:
