@@ -1,33 +1,21 @@
 import { useState } from 'react'
-import { ArrowLeft, Check, Clock3, CreditCard, Crown, ShieldCheck, Sun } from 'lucide-react'
+import { ArrowLeft, CalendarDays, Check, Clock3, CreditCard, ShieldCheck } from 'lucide-react'
 import { apiRequest } from '../api'
 import type { CheckoutDetails } from './Register'
 import './Auth.css'
 
 const planDetails = {
-  daily: {
-    title: 'Daily Plan',
-    duration: 'Full CBT platform access for one day',
-    price: '₦100',
-    Icon: Sun,
-  },
-  weekly: {
-    title: 'Weekly Plan',
-    duration: 'Full CBT platform access for one week',
-    price: '₦300',
+  quarterly: {
+    title: '3 Months Plan',
+    duration: 'Full CBT platform access for three months',
+    price: '₦1,800',
     Icon: Clock3,
   },
-  monthly: {
-    title: 'Monthly Plan',
-    duration: 'Full CBT platform access for one month',
-    price: '₦5,000',
-    Icon: Clock3,
-  },
-  yearly: {
-    title: 'Yearly Plan',
-    duration: 'Full CBT platform access for one year',
-    price: '₦25,000',
-    Icon: Crown,
+  semiannual: {
+    title: '6 Months Plan',
+    duration: 'Full CBT platform access for six months',
+    price: '₦3,400',
+    Icon: CalendarDays,
   },
 }
 

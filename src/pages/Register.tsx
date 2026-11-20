@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, Check, Clock3, Crown, Sun, Timer } from 'lucide-react'
+import { ArrowRight, CalendarDays, Check, Clock3 } from 'lucide-react'
 import './Auth.css'
 
-export type SubscriptionPlan = 'daily' | 'weekly' | 'monthly' | 'yearly'
+export type SubscriptionPlan = 'quarterly' | 'semiannual'
 export type CheckoutDetails = { name: string; email: string; plan: SubscriptionPlan }
 
 export default function Register({
@@ -77,50 +77,26 @@ export default function Register({
                 <button
                   type="button"
                   role="radio"
-                  aria-checked={selectedPlan === 'daily'}
-                  className={`auth-plan-card${selectedPlan === 'daily' ? ' selected' : ''}`}
-                  onClick={() => setSelectedPlan('daily')}
+                  aria-checked={selectedPlan === 'quarterly'}
+                  className={`auth-plan-card${selectedPlan === 'quarterly' ? ' selected' : ''}`}
+                  onClick={() => setSelectedPlan('quarterly')}
                 >
-                  <span className="auth-plan-top"><span className="auth-plan-icon"><Sun size={19} /></span>{selectedPlan === 'daily' && <span className="auth-plan-check"><Check size={14} /></span>}</span>
-                  <strong>Daily Plan</strong>
-                  <span className="auth-plan-price">₦100</span>
-                  <span className="auth-plan-description">Full CBT platform access for one day.</span>
+                  <span className="auth-plan-top"><span className="auth-plan-icon"><Clock3 size={19} /></span>{selectedPlan === 'quarterly' && <span className="auth-plan-check"><Check size={14} /></span>}</span>
+                  <strong>3 Months Plan</strong>
+                  <span className="auth-plan-price">₦1,800</span>
+                  <span className="auth-plan-description">Full CBT platform access for three months.</span>
                 </button>
                 <button
                   type="button"
                   role="radio"
-                  aria-checked={selectedPlan === 'weekly'}
-                  className={`auth-plan-card${selectedPlan === 'weekly' ? ' selected' : ''}`}
-                  onClick={() => setSelectedPlan('weekly')}
+                  aria-checked={selectedPlan === 'semiannual'}
+                  className={`auth-plan-card${selectedPlan === 'semiannual' ? ' selected' : ''}`}
+                  onClick={() => setSelectedPlan('semiannual')}
                 >
-                  <span className="auth-plan-top"><span className="auth-plan-icon"><Timer size={19} /></span>{selectedPlan === 'weekly' && <span className="auth-plan-check"><Check size={14} /></span>}</span>
-                  <strong>Weekly Plan</strong>
-                  <span className="auth-plan-price">₦300</span>
-                  <span className="auth-plan-description">Full CBT platform access for one week.</span>
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={selectedPlan === 'monthly'}
-                  className={`auth-plan-card${selectedPlan === 'monthly' ? ' selected' : ''}`}
-                  onClick={() => setSelectedPlan('monthly')}
-                >
-                  <span className="auth-plan-top"><span className="auth-plan-icon"><Clock3 size={19} /></span>{selectedPlan === 'monthly' && <span className="auth-plan-check"><Check size={14} /></span>}</span>
-                  <strong>Monthly Plan</strong>
-                  <span className="auth-plan-price">₦5,000</span>
-                  <span className="auth-plan-description">Full CBT platform access for one month.</span>
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={selectedPlan === 'yearly'}
-                  className={`auth-plan-card${selectedPlan === 'yearly' ? ' selected' : ''}`}
-                  onClick={() => setSelectedPlan('yearly')}
-                >
-                  <span className="auth-plan-top"><span className="auth-plan-icon"><Crown size={19} /></span>{selectedPlan === 'yearly' && <span className="auth-plan-check"><Check size={14} /></span>}</span>
-                  <strong>Yearly Plan</strong>
-                  <span className="auth-plan-price">₦25,000</span>
-                  <span className="auth-plan-description">Full CBT platform access for one year.</span>
+                  <span className="auth-plan-top"><span className="auth-plan-icon"><CalendarDays size={19} /></span>{selectedPlan === 'semiannual' && <span className="auth-plan-check"><Check size={14} /></span>}</span>
+                  <strong>6 Months Plan</strong>
+                  <span className="auth-plan-price">₦3,400</span>
+                  <span className="auth-plan-description">Full CBT platform access for six months.</span>
                 </button>
               </div>
             </div>

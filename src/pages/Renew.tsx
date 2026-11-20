@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Check, Clock3, Crown, RefreshCw, ShieldCheck, Sun, Timer } from 'lucide-react'
+import { ArrowLeft, CalendarDays, Check, Clock3, RefreshCw, ShieldCheck } from 'lucide-react'
 import { apiRequest } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useSubscription } from '../context/SubscriptionContext'
@@ -7,11 +7,9 @@ import { formatExpiryDate, formatRemaining } from '../subscription'
 import type { SubscriptionPlan } from './Register'
 import './Auth.css'
 
-const plans: Array<{ id: SubscriptionPlan; title: string; price: string; description: string; Icon: typeof Sun }> = [
-  { id: 'daily', title: 'Daily Plan', price: '₦100', description: 'Full CBT platform access for one day.', Icon: Sun },
-  { id: 'weekly', title: 'Weekly Plan', price: '₦300', description: 'Full CBT platform access for one week.', Icon: Timer },
-  { id: 'monthly', title: 'Monthly Plan', price: '₦5,000', description: 'Full CBT platform access for one month.', Icon: Clock3 },
-  { id: 'yearly', title: 'Yearly Plan', price: '₦25,000', description: 'Full CBT platform access for one year.', Icon: Crown },
+const plans: Array<{ id: SubscriptionPlan; title: string; price: string; description: string; Icon: typeof Clock3 }> = [
+  { id: 'quarterly', title: '3 Months Plan', price: '₦1,800', description: 'Full CBT platform access for three months.', Icon: Clock3 },
+  { id: 'semiannual', title: '6 Months Plan', price: '₦3,400', description: 'Full CBT platform access for six months.', Icon: CalendarDays },
 ]
 
 export default function Renew({ setActivePage }: { setActivePage: (page: string) => void }) {

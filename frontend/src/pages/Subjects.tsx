@@ -15,12 +15,17 @@ type Props = {
 }
 
 export default function Subjects({ setActivePage, setTestConfig, selectedExam, selectedExamId, configuredSubjects = [], testConfig }: Props) {
-  const isJamb = String(selectedExam || testConfig?.examType || '').toUpperCase() === 'JAMB' || !!testConfig?.jambFlow
+  const examTypeValue = String(selectedExam || testConfig?.examType || '').toUpperCase()
+  const isJamb = examTypeValue === 'JAMB' || !!testConfig?.jambFlow
+  const isCbt = examTypeValue === 'CBT' || examTypeValue === 'BECE'
+  const isEnglishSubject = (name: string) => /^(use of )?english( language)?$/i.test(String(name || '').trim())
   const [selectedSubjects, setSelectedSubjects] = useState<SubjectItem[]>([])
   const [search, setSearch] = useState("")
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
+  const [selectionError, setSelectionError] = useState("")
+  const [validatingSubjects, setValidatingSubjects] = useState(false)
 
   const iconMap: any = {
     'Use of English': BookOpen, 'English Language': BookOpen, 'English': BookOpen,
@@ -54,7 +59,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
               subject,
               questions: total,
               years: yearEntries.length ? yearEntries.map(([y]) => y).join(', ') : 'No questions yet',
-              required: subject.toLowerCase().includes('english'),
+              required: isEnglishSubject(subject),
               questionsByYear: yearEntries.reduce<Record<string, number>>((acc, [y, c]) => { acc[y] = Number(c); return acc }, {}),
             }
           })
@@ -64,7 +69,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
             subject,
             questions: 0,
             years: 'No questions yet',
-            required: subject.toLowerCase().includes('english'),
+            required: isEnglishSubject(subject),
             questionsByYear: {},
           }))
           setSubjects(grouped)
@@ -88,18 +93,19 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
     fetchSubjects()
   }, [selectedExam, selectedExamId, configuredSubjects])
 
-  const maxSubjects = isJamb ? 1 : subjects.length
+  const maxSubjects = isJamb ? 1 : isCbt ? 4 : subjects.length
   useEffect(() => {
     if (isJamb) {
       setSelectedSubjects([])
       return
     }
     const required = subjects.filter(s => s.required)
-    if (required.length && selectedSubjects.length === 0) { setSelectedSubjects(required) }
-  }, [subjects, isJamb])
+    if (required.length && selectedSubjects.length === 0) { setSelectedSubjects(isCbt ? required.slice(0, 1) : required) }
+  }, [subjects, isJamb, isCbt])
 
   const filtered = useMemo(() => { if (!search) return subjects; return subjects.filter(s => s.subject.toLowerCase().includes(search.toLowerCase())) }, [search, subjects])
   const toggleSubject = (subjectData: SubjectItem) => {
+    setSelectionError("")
     if (isJamb) {
       const allYears = Array.from(new Set(Object.keys(subjectData.questionsByYear || {}))).sort((a, b) => Number(b) - Number(a))
       setSelectedSubjects([subjectData])
@@ -128,10 +134,41 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
     }
     const isSelected = selectedSubjects.find(s => s.subject === subjectData.subject)
     if (isSelected) { if (subjectData.required) return; setSelectedSubjects(selectedSubjects.filter(s => s.subject !== subjectData.subject)) }
-    else { if (selectedSubjects.length >= maxSubjects) return; setSelectedSubjects([...selectedSubjects, subjectData]) }
+    else {
+      if (selectedSubjects.length >= maxSubjects) {
+        if (isCbt) setSelectionError("CBT requires exactly 4 subjects. Remove one before choosing another.")
+        return
+      }
+      setSelectedSubjects([...selectedSubjects, subjectData])
+    }
   }
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (selectedSubjects.length === 0) return
+    setSelectionError("")
+    if (isCbt) {
+      if (selectedSubjects.length !== 4) {
+        setSelectionError("Select exactly 4 CBT subjects, including English Language, before continuing.")
+        return
+      }
+      if (!selectedSubjects.some(s => isEnglishSubject(s.subject))) {
+        setSelectionError("English Language is required for CBT.")
+        return
+      }
+      if (selectedExamId && navigator.onLine) {
+        setValidatingSubjects(true)
+        try {
+          await apiRequest(`/api/exams/${encodeURIComponent(selectedExamId)}/validate-cbt-subjects`, {
+            method: "POST",
+            body: JSON.stringify({ subjects: selectedSubjects.map(s => s.subject) }),
+          })
+        } catch (error) {
+          setSelectionError(error instanceof Error ? error.message : "Could not validate your CBT subjects.")
+          return
+        } finally {
+          setValidatingSubjects(false)
+        }
+      }
+    }
     const totalQuestions = selectedSubjects.reduce((sum, s) => sum + s.questions, 0)
     const allYears = Array.from(new Set(selectedSubjects.flatMap(s => Object.keys(s.questionsByYear || {})))).sort((a, b) => Number(b) - Number(a))
     const defaultYear = allYears[0] || ''
@@ -146,11 +183,12 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
       <div className="exams-topbar">
         <div className="topbar-main">
           <button className="back-btn1" onClick={() => setActivePage('home')}><ArrowLeft size={18} /></button>
-          <div><h1>{selectedExam}</h1><p>{isJamb ? 'Select 1 subject' : `Select ${maxSubjects} subjects`}</p></div>
+          <div><h1>{selectedExam}</h1><p>{isJamb ? 'Select 1 subject' : isCbt ? 'Select exactly 4 subjects — English Language required' : `Select ${maxSubjects} subjects`}</p></div>
           {!isJamb && <div className="count-badge">{selectedSubjects.length}/{maxSubjects}</div>}
         </div>
         <div className="search-wrapper small"><Search size={16} className="search-icon" /><input placeholder="Search subject..." value={search} onChange={e => setSearch(e.target.value)} /></div>
-        <div className="alert-card"><div className="alert-icon">i</div><div className="alert-text">{isJamb ? 'Choose one JAMB subject to continue to Question Years.' : `Subjects for ${selectedExam}. Year-specific availability is applied on the next step.`}</div></div>
+        {selectionError && <div className="alert-card" role="alert" style={{borderColor:"#ef4444"}}><div className="alert-icon">!</div><div className="alert-text">{selectionError}</div></div>}
+        <div className="alert-card"><div className="alert-icon">i</div><div className="alert-text">{isJamb ? 'Choose one JAMB subject to continue to Question Years.' : isCbt ? 'CBT requires exactly 4 subjects. English Language is compulsory; Literature in English is optional.' : `Subjects for ${selectedExam}. Year-specific availability is applied on the next step.`}</div></div>
       </div>
       {loading ? <div className="no-result">Loading {selectedExam} subjects...</div> :
         loadError ? <div className="no-result" role="alert">{loadError}</div> : filtered.length === 0 ? <div className="no-result">No subjects for {selectedExam}. Add in Admin.</div> :
@@ -161,7 +199,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
               return (
                 <div key={item.subject} className={`subject-card ${selected ? 'selected' : ''} ${item.required ? 'required' : ''}`} onClick={() => toggleSubject(item)}>
                   <div className="subject-icon-wrap" style={{ background: selected ? 'var(--primary, #1d4be3)' : 'var(--bg-raised, #1e1e1e)', color: selected ? '#fff' : 'var(--text-secondary, #8f9091)' }}><Icon size={20} /></div>
-                  <div className="subject-details"><div className="subject-name">{item.subject}{item.required && <span className="required-badge">REQUIRED</span>}</div><div className="subject-meta">{item.questions} Questions • {item.years}</div></div>
+                  <div className="subject-details"><div className="subject-name">{item.subject}{item.required && <span className="required-badge">REQUIRED</span>}</div><div className="subject-meta">{item.questions} Questions{!isCbt && <> • {item.years}</>}</div></div>
                   <div className="checkbox">{selected && <Check size={14} />}</div>
                 </div>
               )
@@ -171,7 +209,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
       {!isJamb && selectedSubjects.length > 0 && (
         <div className="sticky-continue">
           <div className="selected-summary"><span>{selectedSubjects.map(s => s.subject.split(' ')[0]).join(' + ')}</span><b>{selectedSubjects.length}/{maxSubjects} • {totalQs} Qs</b></div>
-          <button className="btn-continue" onClick={handleContinue}>CONTINUE TO SETUP</button>
+          <button className="btn-continue" onClick={handleContinue} disabled={isCbt && (selectedSubjects.length !== 4 || validatingSubjects)}>{validatingSubjects ? 'CHECKING...' : isCbt && selectedSubjects.length !== 4 ? `SELECT ${4 - selectedSubjects.length} MORE` : 'CONTINUE TO SETUP'}</button>
         </div>
       )}
     </div>

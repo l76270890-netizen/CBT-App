@@ -78,7 +78,7 @@ export async function loadCachedSubjectAvailability(examId: string): Promise<{ s
       subject,
       questions: years.reduce((sum, [, count]) => sum + Number(count), 0),
       years: years.map(([year]) => year).join(", ") || "No questions yet",
-      required: subject.toLowerCase().includes("english"),
+      required: /^(use of )?english( language)?$/i.test(subject.trim()),
       questionsByYear,
     };
   });

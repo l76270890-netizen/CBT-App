@@ -364,11 +364,13 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_QUESTION_IMPORT_REQUEST_BYTES
 VALID_ROLES = {"school_admin", "teacher", "exam_officer", "student", "owner"}
 ADMIN_ROLES = {"school_admin", "teacher", "exam_officer"}
 OWNER_EMAIL = "l76270890@gmail.com"
+# The only subscription plans offered by the app. Amounts are in the smallest
+# currency unit (kobo) because Paystack expects kobo; prices are naira for
+# display. Each plan maps to a Paystack payment page named after the plan id:
+# PAYSTACK_QUARTERLY_PAYMENT_URL and PAYSTACK_SEMIANNUAL_PAYMENT_URL.
 SUBSCRIPTION_PLANS = {
-    "daily": {"amount": 10000, "price": 100, "duration_days": 1},
-    "weekly": {"amount": 30000, "price": 300, "duration_days": 7},
-    "monthly": {"amount": 500000, "price": 5000, "duration_months": 1},
-    "yearly": {"amount": 2500000, "price": 25000, "duration_months": 12},
+    "quarterly": {"amount": 180000, "price": 1800, "duration_months": 3, "label": "3 Months"},
+    "semiannual": {"amount": 340000, "price": 3400, "duration_months": 6, "label": "6 Months"},
 }
 
 
@@ -1603,6 +1605,7 @@ def get_payment_plans():
         "plans": [
             {
                 "id": plan,
+                "label": details.get("label", plan),
                 "price": details["price"],
                 "currency": "NGN",
                 "durationDays": details.get("duration_days"),
@@ -1635,7 +1638,7 @@ def send_activation_pin(email, pin, plan):
     message["From"] = sender
     message["To"] = email
     message.set_content(
-        f"Your {plan} plan payment was verified.\n\n"
+        f"Your {SUBSCRIPTION_PLANS[plan]['label']} plan payment was verified.\n\n"
         f"Your single-use activation PIN is: {pin}\n\n"
         "Enter this PIN on the CBT app to activate your account. "
         "It expires in 24 hours. If you did not make this payment, ignore this email."
@@ -2309,6 +2312,54 @@ def exam_question_availability(exam_id):
         "subjects": exam_subjects,
         "availability": availability,
     })
+
+
+@app.route("/api/exams/<int:exam_id>/validate-cbt-subjects", methods=["POST"])
+@require_auth
+def validate_cbt_subjects(exam_id):
+    exam = Exam.query.filter_by(
+        id=exam_id,
+        school_id=g.current_user.school_id
+    ).first()
+    if not exam:
+        return api_error("Exam not found.", 404, "exam_not_found")
+
+    data = json_body() or {}
+    raw_subjects = data.get("subjects")
+    if not isinstance(raw_subjects, list) or any(
+            not isinstance(subject, str) or not subject.strip()
+            for subject in raw_subjects):
+        return api_error("subjects must be a list of subject names.")
+    subjects = list(dict.fromkeys(subject.strip() for subject in raw_subjects))
+
+    if str(exam.examType or "").strip().upper() not in {"CBT", "BECE"}:
+        return jsonify(success=True, restricted=False, subjects=subjects)
+
+    if len(subjects) != 4:
+        return api_error(
+            "CBT requires exactly 4 subjects: English Language and 3 others.",
+            400,
+            "cbt_subject_count",
+        )
+
+    english_names = {"english", "english language", "use of english"}
+    if not any(subject.lower() in english_names for subject in subjects):
+        return api_error(
+            "English Language is required for CBT.",
+            400,
+            "cbt_english_required",
+        )
+
+    allowed = set(subjects_for_exam(exam))
+    invalid = [subject for subject in subjects if subject not in allowed]
+    if invalid:
+        return api_error(
+            f"Subjects are not configured for this CBT exam: {', '.join(invalid)}.",
+            400,
+            "cbt_subject_invalid",
+        )
+
+    return jsonify(success=True, restricted=True, subjects=subjects)
 
 
 def validate_exam_payload(data):
