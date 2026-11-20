@@ -25,6 +25,38 @@ export default function Activation({ setActivePage }: { setActivePage: (page: st
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isResending, setIsResending] = useState(false)
+  const [resendMessage, setResendMessage] = useState('')
+  const [resendError, setResendError] = useState('')
+
+  const handleResend = async () => {
+    setError('')
+    setResendMessage('')
+    setResendError('')
+    if (!email.trim()) {
+      setError('Enter the email address you used for payment.')
+      return
+    }
+
+    setIsResending(true)
+    try {
+      const result = await apiRequest<{ success?: boolean; message?: string }>(
+        '/api/payments/paystack/resend-pin',
+        {
+          method: 'POST',
+          body: JSON.stringify({ email: email.trim() }),
+        },
+      )
+      if (!result?.success) {
+        throw new Error(result?.message || 'Could not resend the PIN.')
+      }
+      setResendMessage(result.message || 'A new PIN has been sent to your email.')
+    } catch (resendFailure) {
+      setResendError(resendFailure instanceof Error ? resendFailure.message : 'Could not resend the PIN.')
+    } finally {
+      setIsResending(false)
+    }
+  }
 
   const handleActivate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -157,6 +189,11 @@ export default function Activation({ setActivePage }: { setActivePage: (page: st
               {isLoading ? 'Activating account...' : 'Activate Account'}
             </button>
           </form>
+          <button type="button" className="auth-activation-link" onClick={handleResend} disabled={isResending}>
+            {isResending ? 'Sending a new PIN...' : 'Resend PIN'}
+          </button>
+          {resendMessage && <p className="auth-activation-instructions" role="status">{resendMessage}</p>}
+          {resendError && <div className="auth-error" role="alert">{resendError}</div>}
           <button type="button" className="auth-back-link" onClick={() => setActivePage('login')}><ArrowLeft size={15} /> Back to sign in</button>
           <p className="auth-secure-note"><ShieldCheck size={14} /> Never share your activation PIN with anyone.</p>
         </section>

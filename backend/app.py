@@ -1637,8 +1637,9 @@ def send_activation_pin(email, pin, plan):
     message["Subject"] = "Your CBT account activation PIN"
     message["From"] = sender
     message["To"] = email
+    plan_label = SUBSCRIPTION_PLANS.get(plan, {}).get("label", plan)
     message.set_content(
-        f"Your {SUBSCRIPTION_PLANS[plan]['label']} plan payment was verified.\n\n"
+        f"Your {plan_label} plan payment was verified.\n\n"
         f"Your single-use activation PIN is: {pin}\n\n"
         "Enter this PIN on the CBT app to activate your account. "
         "It expires in 24 hours. If you did not make this payment, ignore this email."
@@ -1672,16 +1673,27 @@ def add_subscription_period(start, plan):
 
 @app.route("/api/payments/paystack/webhook", methods=["POST"])
 def paystack_webhook():
-    secret_key = os.environ.get("PAYSTACK_SECRET_KEY", "").strip()
-    if not secret_key:
+    # Accept both spellings of the secret env var: some deployments already
+    # have the legacy PAYSTACK_SECRETE_KEY name, and rejecting a correctly
+    # signed webhook because of the variable name would delay PIN delivery.
+    secret_keys = []
+    for key_name in ("PAYSTACK_SECRET_KEY", "PAYSTACK_SECRETE_KEY"):
+        value = os.environ.get(key_name, "").strip()
+        if value and value not in secret_keys:
+            secret_keys.append(value)
+    if not secret_keys:
         app.logger.error("Paystack webhook is missing PAYSTACK_SECRET_KEY.")
         return api_error("Payment verification is not configured.", 503, "payment_not_configured")
 
     raw_body = request.get_data(cache=True)
     signature = request.headers.get("x-paystack-signature", "")
-    expected_signature = hmac.new(
-        secret_key.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
-    if not signature or not hmac.compare_digest(signature, expected_signature):
+    expected_signatures = [
+        hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+        for secret in secret_keys
+    ]
+    if not signature or not any(
+            hmac.compare_digest(signature, expected)
+            for expected in expected_signatures):
         return api_error("Invalid Paystack webhook signature.", 401, "invalid_signature")
     try:
         event_body = json.loads(raw_body)
@@ -1887,7 +1899,7 @@ def resend_paystack_activation_pin():
 
     if not payment:
         return api_error(
-            "No active unverified payment found for this email.",
+            "No verified payment was found for this email yet. If you just paid, wait a moment and try again.",
             404, "payment_not_found",
         )
 
