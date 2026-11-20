@@ -1,4 +1,10 @@
 {
   "framework": "vite",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/payment-received",
+      "destination": "/index.html"
+    }
+  ]
 }
