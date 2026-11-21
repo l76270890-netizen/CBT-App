@@ -574,7 +574,7 @@ def upload_to_cloudinary(file, folder):
 def get_image_url(path):
     if not path:
         return None
-    if isinstance(path, str) and path.startswith(("http://", "https://")):
+    if isinstance(path, str) and path.startswith(("http://", "https://", "/")):
         return path
     return f"/uploads/{path}"
 
