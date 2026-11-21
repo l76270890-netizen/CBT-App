@@ -65,7 +65,7 @@ function StudyManagementSection() {
   const [formTopic, setFormTopic] = useState("");
   const [formYear, setFormYear] = useState(String(new Date().getFullYear()));
   const [formQuestion, setFormQuestion] = useState("");
-  const [formOptions, setFormOptions] = useState(["","","",""]);
+  const [formOptions, setFormOptions] = useState(["","","","",""]);
   const [formCorrect, setFormCorrect] = useState("A");
   const [formExplanation, setFormExplanation] = useState("");
   const [formImage, setFormImage] = useState<File | null>(null);
@@ -130,7 +130,7 @@ function StudyManagementSection() {
   useEffect(() => () => { if (formImagePreview) URL.revokeObjectURL(formImagePreview); }, [formImagePreview]);
 
   const resetForm = () => {
-    setEditingId(null); setFormQuestion(""); setFormOptions(["","","",""]); setFormCorrect("A"); setFormExplanation("");
+    setEditingId(null); setFormQuestion(""); setFormOptions(["","","","",""]); setFormCorrect("A"); setFormExplanation("");
     setFormImage(null); if (formImagePreview) URL.revokeObjectURL(formImagePreview); setFormImagePreview(""); setFormImageUrl(""); setFormImageError(""); setFormError("");
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
@@ -148,9 +148,11 @@ function StudyManagementSection() {
     try {
       let imageUrl = formImageUrl || undefined;
       if (formImage && !formImageUrl) { imageUrl = await uploadQuestionImage(formImage); setFormImageUrl(imageUrl); }
+      const optionsPayload: Record<string, string> = { A: formOptions[0], B: formOptions[1], C: formOptions[2], D: formOptions[3] };
+      if (formOptions[4]?.trim()) optionsPayload.E = formOptions[4];
       const payload = {
         examType: formExamType, subject: formSubject, topic: formTopic, year: Number(formYear),
-        question: formQuestion, options: { A: formOptions[0], B: formOptions[1], C: formOptions[2], D: formOptions[3] },
+        question: formQuestion, options: optionsPayload,
         correctAnswer: formCorrect, explanation: formExplanation, ...(imageUrl ? { imageUrl } : {}),
       };
       if (editingId) await apiRequest(`/api/admin/study/question/${editingId}`, { method: "PUT", body: JSON.stringify(payload) });
@@ -162,9 +164,9 @@ function StudyManagementSection() {
   };
 
   const startEdit = (q: StudyQuestion) => {
-    const opts = Array.isArray(q.options) ? q.options : [q.options.A,q.options.B,q.options.C,q.options.D];
+    const opts = Array.isArray(q.options) ? q.options : ["A","B","C","D","E"].map(l => (q.options as any)?.[l]).filter((v): v is string => typeof v === "string" && v.trim() !== "");
     setEditingId(q.id); setFormExamType(q.examType); setFormSubject(q.subject); setFormTopic(q.topic || ""); setFormYear(String(q.year || ""));
-    setFormQuestion(q.question || ""); setFormOptions([opts[0]||"",opts[1]||"",opts[2]||"",opts[3]||""]); setFormCorrect(q.correctAnswer || q.answer || "A");
+    setFormQuestion(q.question || ""); setFormOptions([opts[0]||"",opts[1]||"",opts[2]||"",opts[3]||"",opts[4]||""]); setFormCorrect(q.correctAnswer || q.answer || "A");
     setFormExplanation(q.explanation || ""); setFormImage(null); if (formImagePreview) URL.revokeObjectURL(formImagePreview); setFormImagePreview(q.imageUrl || ""); setFormImageUrl(q.imageUrl || ""); setFormImageError(""); setFormError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -243,8 +245,8 @@ function StudyManagementSection() {
   };
 
   const downloadTemplate = () => {
-    const header = "examType,subject,topic,year,question,optionA,optionB,optionC,optionD,correctAnswer,explanation,imageUrl\n";
-    const sample = 'JAMB,Mathematics,Algebra,2024,"Solve: 2x + 3 = 7",1,2,3,4,B,"2x=4 so x=2",""\n';
+    const header = "examType,subject,topic,year,question,optionA,optionB,optionC,optionD,optionE,correctAnswer,explanation,imageUrl\n";
+    const sample = 'JAMB,Mathematics,Algebra,2024,"Solve: 2x + 3 = 7",1,2,3,4,,B,"2x=4 so x=2",""\n';
     const blob = new Blob([header + sample], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "study-questions-template.csv"; a.click(); URL.revokeObjectURL(url);
   };
@@ -314,12 +316,12 @@ function StudyManagementSection() {
           {formImagePreview && <div className="question-image-preview"><img src={formImagePreview} alt="Question preview" /></div>}
         </div>
         <div className="admin-options-grid">
-          {["A","B","C","D"].map((o,i)=>(
-            <div key={o} className={`admin-field option-field ${formCorrect===o?'is-correct':''}`}><label>Option {o} *</label><input value={formOptions[i]} onChange={e=>{const n=[...formOptions]; n[i]=e.target.value; setFormOptions(n)}} required style={{background:'#1a1a1a', color:'#fff'}}/></div>
+          {["A","B","C","D","E"].map((o,i)=>(
+            <div key={o} className={`admin-field option-field ${formCorrect===o?'is-correct':''}`}><label>Option {o} {o==="E"?"(optional)":"*"}</label><input value={formOptions[i]} onChange={e=>{const n=[...formOptions]; n[i]=e.target.value; setFormOptions(n)}} required={o!=="E"} style={{background:'#1a1a1a', color:'#fff'}}/></div>
           ))}
         </div>
         <div className="admin-row">
-          <div className="admin-field"><label>Correct Answer *</label><select value={formCorrect} onChange={e=>setFormCorrect(e.target.value)}><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
+          <div className="admin-field"><label>Correct Answer *</label><select value={formCorrect} onChange={e=>setFormCorrect(e.target.value)}><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option></select></div>
           <div className="admin-field" style={{flex:2}}><label>Explanation (optional)</label><input value={formExplanation} onChange={e=>setFormExplanation(e.target.value)} placeholder="Optional explanation" style={{background:'#1a1a1a', color:'#fff'}}/></div>
         </div>
         {formError && <p className="admin-error" role="alert">{formError}</p>}
@@ -331,7 +333,7 @@ function StudyManagementSection() {
 
       <section className="csv-import-panel" aria-labelledby="study-import-title" style={{marginTop:20}}>
         <div className="csv-import-heading">
-          <div><h3 id="study-import-title"><FileSpreadsheet size={18}/> Import Study Questions</h3><p>Upload CSV or Excel (.xlsx). Required columns: examType, subject, topic, year, question, optionA, optionB, optionC, optionD, correctAnswer, explanation (optional), imageUrl (optional). Invalid rows are reported and nothing is imported until fixed.</p></div>
+          <div><h3 id="study-import-title"><FileSpreadsheet size={18}/> Import Study Questions</h3><p>Upload CSV or Excel (.xlsx). Required columns: examType, subject, topic, year, question, optionA, optionB, optionC, optionD, correctAnswer, explanation (optional), imageUrl (optional), optionE (optional). Invalid rows are reported and nothing is imported until fixed.</p></div>
           <button type="button" className="csv-template-btn" onClick={downloadTemplate}><Download size={16}/> Download template</button>
         </div>
         <label className="csv-upload-btn"><Upload size={16}/> Choose CSV or Excel file<input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={onImportFile} disabled={importing} /></label>

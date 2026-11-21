@@ -5,8 +5,10 @@ import { toAnswerIndex } from "../answerUtils";
 function normalizeStudyQuestion(raw: any, examType: string, subject: string): StudyQuestion | null {
   if (!raw || !raw.question) return null;
   const options = Array.isArray(raw.options)
-    ? raw.options
-    : [raw.options?.A, raw.options?.B, raw.options?.C, raw.options?.D];
+    ? raw.options.filter((option: unknown): option is string => typeof option === "string" && option.trim() !== "")
+    : ["A", "B", "C", "D", "E"]
+        .map((letter) => raw.options?.[letter])
+        .filter((option: unknown): option is string => typeof option === "string" && option.trim() !== "");
   if (options.length < 4 || options.some((option: unknown) => typeof option !== "string")) return null;
   const answer = toAnswerIndex(raw.answer ?? raw.correctAnswer);
   const year = Number(raw.year);

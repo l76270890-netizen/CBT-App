@@ -3347,7 +3347,18 @@ STUDY_TOPICS_BY_SUBJECT = {
     "Biology": ["Cell Biology", "Genetics", "Ecology", "Human Anatomy", "Reproduction", "Evolution"],
     "Government": ["Constitution", "Political Parties", "Elections", "International Relations", "Public Administration"],
     "Economics": ["Micro Economics", "Macro Economics", "Demand & Supply", "Market Structure", "Money & Banking"],
-    "Literature in English": ["African Prose", "Non-African Prose", "Poetry", "Drama"],
+    "Literature in English": [
+        "Literary Appreciation",
+        "Literary Terms and Devices",
+        "Figures of Speech",
+        "Poetry",
+        "Drama",
+        "Prose",
+        "Themes and Characterization",
+        "Plot and Setting",
+        "Genres and Types of Literature",
+        "Prescribed Literary Texts",
+    ],
     "Christian Religious Studies": ["Old Testament", "New Testament", "Themes", "Life of Jesus"],
     "Geography": ["Physical Geography", "Human Geography", "Map Reading", "Environmental Studies"],
     "Agricultural Science": ["Crop Production", "Animal Husbandry", "Soil Science", "Farm Management"],
@@ -3492,12 +3503,12 @@ def validate_study_question_payload(data, school_id=None, exclude_id=None):
         return None, f"Topic is not valid for {subject}."
     if not question:
         return None, "Question is required."
-    if not isinstance(options, dict) or set(options.keys()) != {"A", "B", "C", "D"} or any(
-        not isinstance(options.get(letter), str) or not options[letter].strip() for letter in "ABCD"
-    ):
-        return None, "options must contain non-empty A, B, C, and D values."
-    if answer not in {"A", "B", "C", "D"}:
-        return None, "correctAnswer must be A, B, C, or D."
+    if not isinstance(options, dict) or not {"A", "B", "C", "D"}.issubset(options.keys()) or not set(options.keys()).issubset({"A", "B", "C", "D", "E"}):
+        return None, "options must contain non-empty A, B, C, and D values (E is optional)."
+    if any(not isinstance(options.get(letter), str) or not options[letter].strip() for letter in options):
+        return None, "Every provided option must be a non-empty string."
+    if answer not in options:
+        return None, f"correctAnswer must be one of {', '.join(sorted(options))}."
     if year_raw in (None, ""):
         return None, "year is required for each question."
     try:
@@ -3533,7 +3544,7 @@ def validate_study_question_payload(data, school_id=None, exclude_id=None):
         "subject": subject,
         "topic": topic,
         "question": question,
-        "options": {k: options[k].strip() for k in "ABCD"},
+        "options": {k: options[k].strip() for k in sorted(options.keys())},
         "answer": answer,
         "explanation": explanation.strip(),
         "year": year,
@@ -3869,9 +3880,19 @@ def admin_study_import():
         opt_b = get_col(raw, "optionB", "option b", "option_b", "B")
         opt_c = get_col(raw, "optionC", "option c", "option_c", "C")
         opt_d = get_col(raw, "optionD", "option d", "option_d", "D")
+        opt_e = get_col(raw, "optionE", "option e", "option_e", "E")
         answer_raw = get_col(raw, "correctAnswer", "correct answer", "correct_answer", "answer")
         explanation_raw = get_col(raw, "explanation")
         image_raw = get_col(raw, "imageUrl", "image url", "image_url", "image")
+
+        options_payload = {
+            "A": cell_text(opt_a),
+            "B": cell_text(opt_b),
+            "C": cell_text(opt_c),
+            "D": cell_text(opt_d),
+        }
+        if cell_text(opt_e):
+            options_payload["E"] = cell_text(opt_e)
 
         payload = {
             "examType": cell_text(exam_type_raw),
@@ -3879,12 +3900,7 @@ def admin_study_import():
             "topic": cell_text(topic_raw),
             "year": cell_text(year_raw) if year_raw not in (None, "") else "",
             "question": cell_text(question_raw),
-            "options": {
-                "A": cell_text(opt_a),
-                "B": cell_text(opt_b),
-                "C": cell_text(opt_c),
-                "D": cell_text(opt_d),
-            },
+            "options": options_payload,
             "correctAnswer": cell_text(answer_raw).upper(),
             "explanation": cell_text(explanation_raw),
             "imageUrl": (cell_text(image_raw) or None),
@@ -3908,6 +3924,7 @@ def admin_study_import():
         "year": v["year"],
         "question": v["question"],
         "optionA": v["options"]["A"], "optionB": v["options"]["B"], "optionC": v["options"]["C"], "optionD": v["options"]["D"],
+        "optionE": v["options"].get("E", ""),
         "correctAnswer": v["answer"],
         "explanation": v.get("explanation", ""),
         "imageUrl": v.get("image_path"),
@@ -3990,13 +4007,13 @@ def study_questions():
     for q in rows:
         opts = q.options or {}
         if isinstance(opts, dict):
-            options_list = [opts.get("A", ""), opts.get("B", ""), opts.get("C", ""), opts.get("D", "")]
+            options_list = [opts.get(letter, "") for letter in "ABCDE" if (opts.get(letter) or "").strip()]
         elif isinstance(opts, list):
-            options_list = (opts + ["", "", "", ""])[:4]
+            options_list = [str(v) for v in opts if str(v or "").strip()][:5]
         else:
-            options_list = ["", "", "", ""]
+            options_list = []
         ans = str(q.answer or "").strip().upper()
-        ans_idx = {"A": 0, "B": 1, "C": 2, "D": 3}.get(ans, -1)
+        ans_idx = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4}.get(ans, -1)
         result.append({
             "id": q.id,
             "examType": q.examType,
@@ -4586,3 +4603,14 @@ def student_novel_attempts_sync():
         except Exception:
             pass
         return api_error("Could not sync novel attempts at this time.", 500)
+
+
+# One-time Literature-in-English question bank import. Gated by an env flag so
+# it only runs on the deployment where it is explicitly enabled, and the import
+# itself is idempotent.
+if os.environ.get("IMPORT_LITERATURE_ON_STARTUP", "").strip().lower() in {"1", "true", "yes"}:
+    try:
+        from literature_import import import_literature_questions
+        import_literature_questions()
+    except Exception:
+        app.logger.exception("Literature question bank import failed")
