@@ -14,11 +14,23 @@ export function setSubscriptionBlockedListener(listener: SubscriptionBlockedList
 }
 
 export function resolveQuestionImageUrl(imageUrl: string): string {
-  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
-  if (!API_URL) return imageUrl;
-  if (imageUrl.startsWith("/")) return `${API_URL}${imageUrl}`;
-  if (imageUrl.startsWith("questions/")) return `${API_URL}/uploads/${imageUrl}`;
-  return `${API_URL}/${imageUrl}`;
+  const value = imageUrl.trim();
+  if (/^https?:\/\//i.test(value)) return value;
+  if (!API_URL) return value;
+  // Older cached questions may have "/uploads//images/..." from the backend
+  // path helper. Those images are served by the frontend, not the backend.
+  if (/^\/?uploads\/+images\//i.test(value)) {
+    return "/" + value.replace(/^\/?uploads\/+/i, "");
+  }
+  if (value.startsWith("/uploads/") || value.startsWith("uploads/")) {
+    return `${API_URL}${value.startsWith("/") ? "" : "/"}${value}`;
+  }
+  if (value.startsWith("/images/") || value.startsWith("images/")) {
+    return value.startsWith("/") ? value : `/${value}`;
+  }
+  if (value.startsWith("/")) return `${API_URL}${value}`;
+  if (value.startsWith("questions/")) return `${API_URL}/uploads/${value}`;
+  return `${API_URL}/${value}`;
 }
 
 function sleep(ms: number) {
