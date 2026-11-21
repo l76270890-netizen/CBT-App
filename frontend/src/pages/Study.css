@@ -186,3 +186,17 @@
 [data-theme="light"] .novel-card, [data-theme="light"] .novel-details-card, [data-theme="light"] .novel-reader-content, [data-theme="light"] .novel-chapter-list, [data-theme="light"] .novel-pdf-wrap, [data-theme="light"] .novel-storage { background: #FFFFFF !important; border-color: #E6EEFA !important; }
 [data-theme="light"] .novel-chapter-item:hover { background: #F1F5FF !important; }
 [data-theme="light"] .novel-reader-controls button { background: #F1F5FF !important; border-color: #E6EEFA !important; color: #0F172A !important; }
+
+.study-offline-panel {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--bg-card, #1e1e1e); border: 1px solid var(--border, #2a2a2a);
+  border-radius: 16px; padding: 14px 16px; margin-bottom: 12px;
+}
+.study-offline-copy { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.study-offline-note {
+  color: #9db1ff; background: rgba(59, 130, 246, .1); border: 1px solid rgba(59, 130, 246, .3);
+  padding: 10px 12px; border-radius: 12px; font-size: 12px; margin: 8px 0 12px;
+}
+@media (max-width: 640px) {
+  .study-offline-panel { flex-direction: column; align-items: stretch; }
+}

@@ -3968,6 +3968,7 @@ def study_questions():
     year = request.args.get("year")
     if not exam_type or not subject:
         return api_error("examType and subject are required.")
+    all_requested = (request.args.get("all") or "").strip().lower() in ("1", "true", "yes")
     query = Question.query.filter(
         Question.school_id == school_id,
         Question.examId.is_(None),
@@ -3977,7 +3978,7 @@ def study_questions():
     if topics:
         lowered = [t.lower() for t in topics]
         query = query.filter(func.lower(func.coalesce(Question.topic, "")).in_(lowered))
-    elif year in (None, "", "All", "all"):
+    elif year in (None, "", "All", "all") and not all_requested:
         return api_error("examType, subject, and at least one topic or a year are required.")
     if year not in (None, "", "All", "all"):
         try:

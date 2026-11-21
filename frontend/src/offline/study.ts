@@ -57,6 +57,30 @@ export async function loadStudyQuestions(examType: string, subject: string, topi
   return filtered.sort((a, b) => (b.year || 0) - (a.year || 0));
 }
 
+export async function studyQuestionCountsBySubject(examType: string): Promise<Record<string, number>> {
+  const rows = await offlineDb.studyQuestions.where("examType").equals(examType).toArray();
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    if (!row.subject) continue;
+    counts[row.subject] = (counts[row.subject] || 0) + 1;
+  }
+  return counts;
+}
+
+export async function studyAvailability(examType: string): Promise<Record<string, Record<string, Record<string, number>>>> {
+  const rows = await offlineDb.studyQuestions.where("examType").equals(examType).toArray();
+  const availability: Record<string, Record<string, Record<string, number>>> = {};
+  for (const row of rows) {
+    if (!row.subject) continue;
+    const topic = row.topic || "General";
+    const year = row.year ? String(row.year) : "Unknown";
+    const subject = (availability[row.subject] ||= {});
+    const years = (subject[topic] ||= {});
+    years[year] = (years[year] || 0) + 1;
+  }
+  return availability;
+}
+
 export async function queueStudyActivity(activity: Omit<StudyActivity, "id" | "status" | "createdAt">): Promise<void> {
   const existing = await offlineDb.studyActivity.where("clientActivityId").equals(activity.clientActivityId).first();
   if (existing) return;

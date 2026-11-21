@@ -10,7 +10,7 @@ import { apiRequest, asArray } from '../api'
 import { toAnswerIndex } from '../answerUtils'
 import type { Novel, NovelProgress } from '../novelTypes'
 import { getDownloadedNovels, getDownloadedNovel, saveNovelDownload, removeDownloadedNovel, getNovelBlob, saveProgressLocal, getProgressLocal, getPendingAttempts, clearPendingAttempts, estimateStorage } from '../novelStore'
-import { cacheStudyMeta, loadStudyMeta, cacheStudyQuestions, loadStudyQuestions } from '../offline/study'
+import { cacheStudyMeta, loadStudyMeta, cacheStudyQuestions, loadStudyQuestions, studyQuestionCountsBySubject, studyAvailability } from '../offline/study'
 import './Study.css'
 
 type SubjectMeta = { id: string; name: string; icon: any; color: string; dept: 'ALL' | 'SCIENCE' | 'ART' | 'COMMERCIAL' }
@@ -30,6 +30,9 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [catalogError, setCatalogError] = useState('')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [offlineCounts, setOfflineCounts] = useState<Record<string, number>>({})
+  const [offlineAvailability, setOfflineAvailability] = useState<Record<string, Record<string, Record<string, number>>>>({})
+  const [downloadingSubject, setDownloadingSubject] = useState<string | null>(null)
   // Novels
   const [novelView, setNovelView] = useState<NovelView>('library')
   const [novels, setNovels] = useState<Novel[]>([])
@@ -47,6 +50,19 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
   const [storageInfo, setStorageInfo] = useState({ usage: 0, quota: 0 })
 
   const examType = (selectedExam || 'JAMB').toString()
+
+  const refreshOfflineData = async () => {
+    try {
+      const [counts, availability] = await Promise.all([
+        studyQuestionCountsBySubject(examType),
+        studyAvailability(examType),
+      ])
+      setOfflineCounts(counts)
+      setOfflineAvailability(availability)
+    } catch {}
+  }
+
+  useEffect(() => { void refreshOfflineData() }, [examType])
 
   useEffect(() => {
     let cancelled = false
@@ -127,7 +143,15 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
     if (Array.isArray(fromMeta) && fromMeta.length) return fromMeta
     return fallbackTopics[subjectName] || []
   }
-  const availBySubject = (subjectName: string) => (catalog.availability?.[examType] || {})[subjectName] || {}
+  const availBySubject = (subjectName: string) => {
+    const server = ((catalog.availability?.[examType] || {})[subjectName] || {}) as Record<string, Record<string, number>>
+    const cached = offlineAvailability[subjectName] || {}
+    const merged: Record<string, Record<string, number>> = { ...cached }
+    for (const [topic, years] of Object.entries(server)) {
+      merged[topic] = { ...(merged[topic] || {}), ...(years || {}) }
+    }
+    return merged
+  }
   const availableTopicsFor = (subjectName: string) => {
     const bySubj = availBySubject(subjectName)
     const configured = topicsFor(subjectName)
@@ -189,6 +213,7 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
         try {
           rows = asArray<any>(await apiRequest<any[]>(`/api/study/questions?${params.toString()}`))
           await cacheStudyQuestions(examType, subjectName, rows)
+          await refreshOfflineData()
         } catch (error) {
           console.warn('Could not refresh study questions; using saved copies.', error)
         }
@@ -232,6 +257,29 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Could not load study questions.')
     } finally { setActionLoading(null) }
+  }
+
+  const downloadStudySubject = async (subjectName: string) => {
+    if (!navigator.onLine) {
+      alert('Connect to the internet to download study questions.')
+      return
+    }
+    setDownloadingSubject(subjectName)
+    try {
+      const params = new URLSearchParams({ examType, subject: subjectName, all: '1' })
+      const rows = asArray<any>(await apiRequest<any[]>(`/api/study/questions?${params.toString()}`))
+      const cached = await cacheStudyQuestions(examType, subjectName, rows)
+      await refreshOfflineData()
+      if (cached.length) {
+        alert(`Saved ${cached.length} ${subjectName} question${cached.length === 1 ? '' : 's'} for offline study.`)
+      } else {
+        alert(`No ${subjectName} study questions were available to download.`)
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not download study questions.')
+    } finally {
+      setDownloadingSubject(null)
+    }
   }
 
   const openSubject = (subjectId: string) => { setSelectedSubject(subjectId); setStep('modes') }
@@ -634,6 +682,7 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
     const topicItems = availableTopicsFor(subject.name)
     const yearItems = availableYearsFor(subject.name)
     const total = countForSubject(subject.name)
+    const offlineCount = offlineCounts[subject.name] || 0
 
     if (step === 'modes') {
       return (
@@ -644,6 +693,18 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
               <div className="subject-icon large" style={{background: `${subject.color}20`, color: subject.color}}><Icon size={24} /></div>
               <div><h1>{subject.name}</h1><p>{examType} • {topicItems.length} Topics • {yearItems.length} Years • {total} Questions</p></div>
             </div>
+          </div>
+          <div className="study-offline-panel">
+            <div className="study-offline-copy">
+              <div className="study-mode-icon" style={{background: `${subject.color}20`, color: subject.color}}><Download size={20} /></div>
+              <div>
+                <div className="study-mode-title">{offlineCount ? `${offlineCount} question${offlineCount === 1 ? '' : 's'} saved offline` : 'Not saved for offline yet'}</div>
+                <div className="study-mode-desc">{navigator.onLine ? 'Download this subject once to study without internet.' : 'Offline mode: only saved questions are available.'}</div>
+              </div>
+            </div>
+            <button type="button" className="study-inline-retry" onClick={() => void downloadStudySubject(subject.name)} disabled={!navigator.onLine || downloadingSubject === subject.name}>
+              {downloadingSubject === subject.name ? 'Downloading...' : offlineCount ? 'Update offline copy' : 'Download for offline'}
+            </button>
           </div>
           {catalogError && <p className="admin-error" role="alert" style={{marginBottom:12}}>{catalogError} <button type="button" className="study-inline-retry" onClick={() => window.location.reload()}>Retry</button></p>}
           {catalogLoading ? <div className="study-loading">Loading study options...</div> : (
@@ -675,7 +736,8 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
               <div><h1>{subject.name} — Years</h1><p>{examType} • Select a year to practice questions from that year</p></div>
             </div>
           </div>
-          {catalogError && <p className="admin-error" role="alert" style={{marginBottom:12}}>{catalogError}</p>}
+      {!navigator.onLine && <p className="study-offline-note">Offline mode — showing saved study material.</p>}
+      {catalogError && <p className="admin-error" role="alert" style={{marginBottom:12}}>{catalogError}</p>}
           {catalogLoading ? <div className="study-loading">Loading years...</div> : yearItems.length === 0 ? (<div className="no-result">No years available for {subject.name} ({examType}) yet.</div>) : (
             <div className="topic-list">
               {yearItems.map(item => (
@@ -765,7 +827,7 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
                 <div className="subject-icon" style={{background: `${subject.color}18`, color: subject.color}}><Icon size={20} /></div>
                 <div className="subject-info">
                   <h4 className="subject-name">{subject.name}</h4>
-                  <div className="subject-meta">{subject.dept} • {tcount} Topics • {ycount} Years • {qcount}Q</div>
+                  <div className="subject-meta">{subject.dept} • {tcount} Topics • {ycount} Years • {qcount}Q{offlineCounts[subject.name] ? ` • ${offlineCounts[subject.name]} offline` : ''}</div>
                 </div>
               </div>
               <span className="subject-action"><ChevronRight size={20} /></span>
