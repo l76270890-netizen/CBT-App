@@ -89,6 +89,17 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
             return
           }
         } catch {}
+        if (!navigator.onLine) {
+          try {
+            const counts = await studyQuestionCountsBySubject(examType)
+            if (Object.keys(counts).length) {
+              setCatalogError('')
+              return
+            }
+          } catch {}
+          setCatalogError('Offline mode: connect once to download study questions.')
+          return
+        }
         setCatalogError(e instanceof Error ? e.message : 'Could not load study catalog.')
       } finally {
         if (!cancelled) setCatalogLoading(false)
