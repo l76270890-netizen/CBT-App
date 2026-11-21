@@ -3380,7 +3380,24 @@ STUDY_TOPICS_BY_SUBJECT = {
     "Christian Religious Studies": ["Old Testament", "New Testament", "Themes", "Life of Jesus"],
     "Geography": ["Physical Geography", "Human Geography", "Map Reading", "Environmental Studies"],
     "Agricultural Science": ["Crop Production", "Animal Husbandry", "Soil Science", "Farm Management"],
-    "Commerce": ["Trade", "Business Organization", "Finance", "Marketing"],
+    "Commerce": [
+        "Meaning and Scope of Commerce",
+        "Occupation",
+        "Production",
+        "Trade",
+        "Purchase and Sale of Goods",
+        "Aids to Trade",
+        "Business Units",
+        "Financing Business",
+        "Trade Associations",
+        "Money",
+        "Stock Exchange",
+        "Elements of Business Management",
+        "Elements of Marketing",
+        "Legal Aspects of Business",
+        "ICT",
+        "Business Environment and Social Responsibility",
+    ],
     "Principles of Accounting": ["Double Entry", "Trial Balance", "Final Accounts", "Partnership"],
     "History": ["Pre-Colonial", "Colonial Era", "Independence", "World History"],
     "Business Studies": ["Office Practice", "Business Law", "Management", "Entrepreneurship"],
@@ -4640,3 +4657,11 @@ if os.environ.get("IMPORT_ECONOMICS_ON_STARTUP", "").strip().lower() in {"1", "t
         import_economics_questions()
     except Exception:
         app.logger.exception("Economics question bank import failed")
+
+# One-time Commerce question bank import (idempotent).
+if os.environ.get("IMPORT_COMMERCE_ON_STARTUP", "").strip().lower() in {"1", "true", "yes"}:
+    try:
+        from commerce_import import import_commerce_questions
+        import_commerce_questions()
+    except Exception:
+        app.logger.exception("Commerce question bank import failed")
