@@ -1,5 +1,5 @@
-const CACHE = 'examcore-app-v3-offline';
-const IMAGE_CACHE = 'examcore-images-v1';
+const CACHE = 'examcore-app-v4-offline';
+const IMAGE_CACHE = 'examcore-images-v2';
 const CORE = ['/', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
