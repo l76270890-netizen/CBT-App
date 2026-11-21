@@ -3346,7 +3346,25 @@ STUDY_TOPICS_BY_SUBJECT = {
     "Chemistry": ["Atomic Structure", "Organic Chemistry", "Acids & Bases", "Mole Concept", "Chemical Bonding", "Electrochemistry"],
     "Biology": ["Cell Biology", "Genetics", "Ecology", "Human Anatomy", "Reproduction", "Evolution"],
     "Government": ["Constitution", "Political Parties", "Elections", "International Relations", "Public Administration"],
-    "Economics": ["Micro Economics", "Macro Economics", "Demand & Supply", "Market Structure", "Money & Banking"],
+    "Economics": [
+        "Basic Economic Concepts",
+        "Economic Systems",
+        "Demand and Supply",
+        "Consumer Behaviour",
+        "Production and Costs",
+        "Market Structures",
+        "National Income",
+        "Money and Banking",
+        "Inflation",
+        "Fiscal Policy and Public Finance",
+        "Agriculture",
+        "Industry and Petroleum",
+        "Population and Labour",
+        "International Trade",
+        "Economic Growth and Development",
+        "Statistics for Economics",
+        "Business Structures",
+    ],
     "Literature in English": [
         "Literary Appreciation",
         "Literary Terms and Devices",
@@ -4614,3 +4632,11 @@ if os.environ.get("IMPORT_LITERATURE_ON_STARTUP", "").strip().lower() in {"1", "
         import_literature_questions()
     except Exception:
         app.logger.exception("Literature question bank import failed")
+
+# One-time Economics question bank import (idempotent).
+if os.environ.get("IMPORT_ECONOMICS_ON_STARTUP", "").strip().lower() in {"1", "true", "yes"}:
+    try:
+        from economics_import import import_economics_questions
+        import_economics_questions()
+    except Exception:
+        app.logger.exception("Economics question bank import failed")
