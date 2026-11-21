@@ -4,6 +4,41 @@ import os
 DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "literature_in_english.csv")
 
 
+def deduplicate_literature_questions():
+    """Remove duplicate Literature questions created by concurrent imports."""
+    from app import app, db, Question
+
+    with app.app_context():
+        rows = Question.query.filter(
+            Question.examId.is_(None),
+            Question.examType.ilike("JAMB"),
+            Question.subject.ilike("Literature in English"),
+        ).order_by(Question.id.asc()).all()
+        seen = set()
+        duplicates = []
+        for q in rows:
+            key = (
+                (q.topic or "").strip().lower(),
+                q.year,
+                " ".join((q.question or "").casefold().split()),
+            )
+            if key in seen:
+                duplicates.append(q)
+            else:
+                seen.add(key)
+        for q in duplicates:
+            db.session.delete(q)
+        if duplicates:
+            db.session.commit()
+        app.logger.info(
+            "Literature deduplication: total=%s duplicates_removed=%s remaining=%s",
+            len(rows),
+            len(duplicates),
+            len(rows) - len(duplicates),
+        )
+        return len(rows), len(duplicates)
+
+
 def import_literature_questions():
     """Import the Literature-in-English JAMB past questions once.
 
@@ -12,6 +47,9 @@ def import_literature_questions():
     app.py at startup and is safe to run on every cold start.
     """
     from app import app, db, Question, School, validate_study_question_payload
+
+    # Clean up duplicates from concurrent cold starts before checking the count.
+    deduplicate_literature_questions()
 
     with app.app_context():
         existing_count = Question.query.filter(
