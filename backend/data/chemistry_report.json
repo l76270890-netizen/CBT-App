@@ -1,0 +1,41 @@
+{
+  "total": 279,
+  "importable": 278,
+  "review": 1,
+  "by_year": {
+    "1990": 20,
+    "1991": 20,
+    "1992": 20,
+    "1993": 20,
+    "1994": 20,
+    "1995": 20,
+    "1997": 19,
+    "1998": 20,
+    "1999": 20,
+    "2000": 20,
+    "2001": 20,
+    "2002": 20,
+    "2003": 20,
+    "2004": 20
+  },
+  "by_topic": {
+    "Acids, Bases and Salts": 9,
+    "Atomic Structure and Bonding": 21,
+    "Chemical Industries": 6,
+    "Chemical Reactions and Equations": 14,
+    "Electrolysis": 5,
+    "Energetics": 5,
+    "Gas Laws": 14,
+    "Matter and Materials": 113,
+    "Metals and Extraction": 1,
+    "Mole Concept and Stoichiometry": 24,
+    "Organic Chemistry": 8,
+    "Oxidation and Reduction": 5,
+    "Periodic Table": 12,
+    "Physical and Chemical Changes": 5,
+    "Pollution and Environment": 4,
+    "Reaction Rates and Equilibrium": 2,
+    "Separation Techniques": 6,
+    "Water and Solutions": 25
+  }
+}
