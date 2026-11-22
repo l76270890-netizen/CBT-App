@@ -3364,7 +3364,29 @@ STUDY_TOPICS_BY_SUBJECT = {
         "Chemical Industries",
     ],
     "Biology": ["Cell Biology", "Genetics", "Ecology", "Human Anatomy", "Reproduction", "Evolution"],
-    "Government": ["Constitution", "Political Parties", "Elections", "International Relations", "Public Administration"],
+    "Government": [
+        "Elements of Government",
+        "Principles of Government",
+        "Constitution",
+        "Institutions of Government",
+        "Political Parties and Pressure Groups",
+        "Elections",
+        "Citizenship and Public Opinion",
+        "Colonial Administration",
+        "Nationalism",
+        "Constitutional Development in Nigeria",
+        "Federalism",
+        "Local Government",
+        "Public Corporations",
+        "Nigeria's Foreign Policy",
+        "International Organizations",
+        "Political Ideologies",
+        "Civil Service",
+        "Legislature",
+        "Executive",
+        "Judiciary",
+        "Rule of Law and Human Rights",
+    ],
     "Economics": [
         "Basic Economic Concepts",
         "Economic Systems",
@@ -4676,6 +4698,14 @@ if os.environ.get("IMPORT_ECONOMICS_ON_STARTUP", "").strip().lower() in {"1", "t
         import_economics_questions()
     except Exception:
         app.logger.exception("Economics question bank import failed")
+
+# One-time Government question bank import (idempotent).
+if os.environ.get("IMPORT_GOVERNMENT_ON_STARTUP", "").strip().lower() in {"1", "true", "yes"}:
+    try:
+        from government_import import import_government_questions
+        import_government_questions()
+    except Exception:
+        app.logger.exception("Government question bank import failed")
 
 # One-time Commerce question bank import (idempotent).
 if os.environ.get("IMPORT_COMMERCE_ON_STARTUP", "").strip().lower() in {"1", "true", "yes"}:

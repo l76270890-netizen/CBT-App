@@ -1,0 +1,40 @@
+{
+  "total": 440,
+  "importable": 434,
+  "review": 6,
+  "by_year": {
+    "2000": 40,
+    "2001": 40,
+    "2002": 40,
+    "2003": 40,
+    "2004": 40,
+    "2005": 40,
+    "2006": 40,
+    "2007": 40,
+    "2008": 40,
+    "2009": 40,
+    "2010": 40
+  },
+  "by_topic": {
+    "Citizenship and Public Opinion": 16,
+    "Civil Service": 6,
+    "Constitution": 19,
+    "Constitutional Development in Nigeria": 11,
+    "Elections": 14,
+    "Elements of Government": 188,
+    "Executive": 8,
+    "Federalism": 24,
+    "Institutions of Government": 2,
+    "International Organizations": 33,
+    "Judiciary": 4,
+    "Legislature": 25,
+    "Local Government": 9,
+    "Nationalism": 16,
+    "Nigeria's Foreign Policy": 9,
+    "Political Ideologies": 6,
+    "Political Parties and Pressure Groups": 18,
+    "Principles of Government": 18,
+    "Public Corporations": 10,
+    "Rule of Law and Human Rights": 4
+  }
+}
