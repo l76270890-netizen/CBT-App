@@ -68,6 +68,7 @@ export default function QuestionYears({ setActivePage, testConfig, setTestConfig
       difficulty: testConfig.difficulty || 'General',
       topic: 'All Topics',
       showAnswers: testConfig.mode === 'practice',
+      fromStudy: (testConfig.mode || 'exam') === 'practice' ? !!testConfig.fromStudy : false,
     } as TestConfigType)
     setActivePage('testConfig')
   }

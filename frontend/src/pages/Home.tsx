@@ -222,6 +222,7 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
       year: '',
       mode: 'exam',
       showAnswers: false,
+      fromStudy: false,
       topic: 'All Topics',
       jambFlow: String(resolvedType).toUpperCase() === 'JAMB',
       jambLockedSelection: false,
@@ -237,11 +238,11 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
     setSelectedExam(exam.examType)
     const subjStr = (exam.subjects?.join(",") || "").toLowerCase()
     if (exam.examType.toLowerCase().includes('general') || subjStr.includes('general')) {
-      setTestConfig((prev: any) => ({...prev, examType: exam.examType, subjects: exam.subjects || [], totalQuestions: exam.totalQuestions || 20, year: String(exam.year), duration: exam.duration, customExamId: exam.id, examId: exam.id, examTitle: exam.title, mode, showAnswers: mode === 'practice' }))
+      setTestConfig((prev: any) => ({...prev, examType: exam.examType, subjects: exam.subjects || [], totalQuestions: exam.totalQuestions || 20, year: String(exam.year), duration: exam.duration, customExamId: exam.id, examId: exam.id, examTitle: exam.title, mode, showAnswers: mode === 'practice', fromStudy: false }))
       setActivePage('generalKnowledge')
       return
     }
-    setTestConfig((prev: any) => ({...prev, examType: exam.examType, year: String(exam.year), duration: exam.duration, customExamId: exam.id, examId: exam.id, examTitle: exam.title, subjects: exam.subjects || [], totalQuestions: exam.totalQuestions, mode, showAnswers: mode === 'practice' }))
+    setTestConfig((prev: any) => ({...prev, examType: exam.examType, year: String(exam.year), duration: exam.duration, customExamId: exam.id, examId: exam.id, examTitle: exam.title, subjects: exam.subjects || [], totalQuestions: exam.totalQuestions, mode, showAnswers: mode === 'practice', fromStudy: false }))
     setActivePage('subjects')
   }
 

@@ -134,6 +134,7 @@ export default function Exams({ setActivePage, setSelectedExam, setTestConfig }:
       year: '',
       mode: 'exam',
       showAnswers: false,
+      fromStudy: false,
       topic: 'All Topics',
       jambFlow: String(resolvedType).toUpperCase() === 'JAMB',
       jambLockedSelection: false,

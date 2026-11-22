@@ -172,7 +172,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
     const totalQuestions = selectedSubjects.reduce((sum, s) => sum + s.questions, 0)
     const allYears = Array.from(new Set(selectedSubjects.flatMap(s => Object.keys(s.questionsByYear || {})))).sort((a, b) => Number(b) - Number(a))
     const defaultYear = allYears[0] || ''
-    setTestConfig((prev: any) => ({ ...prev, examType: selectedExam, subjects: selectedSubjects, totalQuestions, year: defaultYear, duration: Math.ceil(totalQuestions * 1.2) || 60, mode: prev.mode || 'exam', difficulty: prev.difficulty || 'Normal', showAnswers: prev.mode === 'practice', topic: 'All Topics' }))
+    setTestConfig((prev: any) => ({ ...prev, examType: selectedExam, subjects: selectedSubjects, totalQuestions, year: defaultYear, duration: Math.ceil(totalQuestions * 1.2) || 60, mode: prev.mode || 'exam', difficulty: prev.difficulty || 'Normal', showAnswers: prev.mode === 'practice', fromStudy: (prev.mode || 'exam') === 'practice' ? !!prev.fromStudy : false, topic: 'All Topics' }))
     setActivePage('testConfig')
   }
   const isSelected = (subject: string) => selectedSubjects.some(s => s.subject === subject)

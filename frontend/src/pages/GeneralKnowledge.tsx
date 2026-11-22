@@ -29,7 +29,7 @@ export default function GeneralKnowledge({ setActivePage, setTestConfig, examId 
     if(questions.length === 0) return alert("No questions yet. Add them in Admin Dashboard.")
     // save questions to localStorage for TestPage to use
     localStorage.setItem('current_questions', JSON.stringify(questions))
-    setTestConfig((prev:any)=>({...prev, examType: 'GENERAL', subjects: ['General Knowledge'], totalQuestions: questions.length, duration: 30 }))
+    setTestConfig((prev:any)=>({...prev, examType: 'GENERAL', subjects: ['General Knowledge'], totalQuestions: questions.length, duration: 30, mode: 'exam', showAnswers: false, fromStudy: false }))
     setActivePage('testInstructions')
   }
 

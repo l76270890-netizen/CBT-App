@@ -231,7 +231,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
   const q = questions[current]
   const answeredCount = answers.filter(a=>a!==null).length
   // In Study/practice mode allow the student to reveal the answer and explanation on demand
-  const studyMode = testConfig.mode === 'practice' || !!testConfig.fromStudy
+  const studyMode = testConfig.mode === 'practice' || (!!testConfig.fromStudy && testConfig.mode !== 'exam')
   const revealed = studyMode && !!explanationVisible[current]
   const selectedAnswer = answers[current]
   const letters = ['A','B','C','D']
