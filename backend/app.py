@@ -3343,7 +3343,26 @@ STUDY_TOPICS_BY_SUBJECT = {
     "English Language": ["Lexis & Structure", "Oral English", "Comprehension", "Summary", "Essay Writing"],
     "Mathematics": ["Algebra", "Trigonometry", "Probability", "Calculus", "Geometry", "Statistics", "Number & Numeration"],
     "Physics": ["Mechanics", "Electricity", "Waves", "Modern Physics", "Heat", "Optics"],
-    "Chemistry": ["Atomic Structure", "Organic Chemistry", "Acids & Bases", "Mole Concept", "Chemical Bonding", "Electrochemistry"],
+    "Chemistry": [
+        "Physical and Chemical Changes",
+        "Matter and Materials",
+        "Atomic Structure and Bonding",
+        "Periodic Table",
+        "Gas Laws",
+        "Chemical Reactions and Equations",
+        "Acids, Bases and Salts",
+        "Oxidation and Reduction",
+        "Electrolysis",
+        "Energetics",
+        "Reaction Rates and Equilibrium",
+        "Organic Chemistry",
+        "Metals and Extraction",
+        "Water and Solutions",
+        "Pollution and Environment",
+        "Mole Concept and Stoichiometry",
+        "Separation Techniques",
+        "Chemical Industries",
+    ],
     "Biology": ["Cell Biology", "Genetics", "Ecology", "Human Anatomy", "Reproduction", "Evolution"],
     "Government": ["Constitution", "Political Parties", "Elections", "International Relations", "Public Administration"],
     "Economics": [
@@ -4665,3 +4684,11 @@ if os.environ.get("IMPORT_COMMERCE_ON_STARTUP", "").strip().lower() in {"1", "tr
         import_commerce_questions()
     except Exception:
         app.logger.exception("Commerce question bank import failed")
+
+# One-time Chemistry question bank import (idempotent).
+if os.environ.get("IMPORT_CHEMISTRY_ON_STARTUP", "").strip().lower() in {"1", "true", "yes"}:
+    try:
+        from chemistry_import import import_chemistry_questions
+        import_chemistry_questions()
+    except Exception:
+        app.logger.exception("Chemistry question bank import failed")
