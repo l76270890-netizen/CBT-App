@@ -11,7 +11,7 @@ def import_crk_questions():
         # Align the subject name with the Study card ("Christian Religious Studies").
         db.session.execute(db.text(
             "UPDATE questions SET subject = 'Christian Religious Studies' "
-            "WHERE \"examId\" IS NULL AND examType = 'JAMB' "
+            "WHERE \"examId\" IS NULL AND \"examType\" = 'JAMB' "
             "AND subject = 'Christian Religious Knowledge'"
         ))
         db.session.commit()
