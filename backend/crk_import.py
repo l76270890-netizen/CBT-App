@@ -8,10 +8,18 @@ def import_crk_questions():
     from app import app, db, Question, School
 
     with app.app_context():
+        # Align the subject name with the Study card ("Christian Religious Studies").
+        db.session.execute(db.text(
+            "UPDATE questions SET subject = 'Christian Religious Studies' "
+            "WHERE examId IS NULL AND examType = 'JAMB' "
+            "AND subject = 'Christian Religious Knowledge'"
+        ))
+        db.session.commit()
+
         existing_count = Question.query.filter(
             Question.examId.is_(None),
             Question.examType.ilike("JAMB"),
-            Question.subject.ilike("Christian Religious Knowledge"),
+            Question.subject.ilike("Christian Religious Studies"),
         ).count()
         if existing_count >= 700:
             app.logger.info(
@@ -29,7 +37,7 @@ def import_crk_questions():
         existing = Question.query.filter(
             Question.examId.is_(None),
             Question.examType.ilike("JAMB"),
-            Question.subject.ilike("Christian Religious Knowledge"),
+            Question.subject.ilike("Christian Religious Studies"),
         ).all()
         seen = {
             (
@@ -74,7 +82,7 @@ def import_crk_questions():
                     examId=None,
                     school_id=school_id,
                     examType=(row.get("examType") or "JAMB").strip() or "JAMB",
-                    subject=(row.get("subject") or "Christian Religious Knowledge").strip(),
+                    subject=(row.get("subject") or "Christian Religious Studies").strip(),
                     topic=topic,
                     question=question,
                     options=options,

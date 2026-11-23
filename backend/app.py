@@ -3364,7 +3364,7 @@ STUDY_TOPICS_BY_SUBJECT = {
         "Chemical Industries",
     ],
     "Biology": ["Cell Biology", "Genetics", "Ecology", "Human Anatomy", "Reproduction", "Evolution"],
-    "Christian Religious Knowledge": [
+    "Christian Religious Studies": [
         "Creation and the Fall",
         "Patriarchs",
         "Exodus and the Law",
@@ -3432,7 +3432,7 @@ STUDY_TOPICS_BY_SUBJECT = {
         "Genres and Types of Literature",
         "Prescribed Literary Texts",
     ],
-    "Christian Religious Studies": ["Old Testament", "New Testament", "Themes", "Life of Jesus"],
+
     "Geography": ["Physical Geography", "Human Geography", "Map Reading", "Environmental Studies"],
     "Agricultural Science": ["Crop Production", "Animal Husbandry", "Soil Science", "Farm Management"],
     "Commerce": [
