@@ -3364,6 +3364,20 @@ STUDY_TOPICS_BY_SUBJECT = {
         "Chemical Industries",
     ],
     "Biology": ["Cell Biology", "Genetics", "Ecology", "Human Anatomy", "Reproduction", "Evolution"],
+    "Christian Religious Knowledge": [
+        "Creation and the Fall",
+        "Patriarchs",
+        "Exodus and the Law",
+        "Joshua and the Judges",
+        "Kings and Prophets",
+        "The Gospels",
+        "Parables and Miracles",
+        "The Passion and Resurrection",
+        "The Early Church",
+        "Paul and the Epistles",
+        "Christian Life and Ethics",
+        "The Second Coming",
+    ],
     "Government": [
         "Elements of Government",
         "Principles of Government",
@@ -4698,6 +4712,14 @@ if os.environ.get("IMPORT_ECONOMICS_ON_STARTUP", "").strip().lower() in {"1", "t
         import_economics_questions()
     except Exception:
         app.logger.exception("Economics question bank import failed")
+
+# One-time CRK question bank import (idempotent).
+if os.environ.get("IMPORT_CRK_ON_STARTUP", "").strip().lower() in {"1", "true", "yes"}:
+    try:
+        from crk_import import import_crk_questions
+        import_crk_questions()
+    except Exception:
+        app.logger.exception("CRK question bank import failed")
 
 # One-time Government question bank import (idempotent).
 if os.environ.get("IMPORT_GOVERNMENT_ON_STARTUP", "").strip().lower() in {"1", "true", "yes"}:

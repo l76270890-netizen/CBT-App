@@ -1,0 +1,39 @@
+{
+  "total": 785,
+  "by_year": {
+    "1983": 32,
+    "1984": 40,
+    "1985": 40,
+    "1986": 40,
+    "1987": 40,
+    "1988": 40,
+    "1989": 40,
+    "1991": 40,
+    "1992": 40,
+    "1993": 40,
+    "1994": 40,
+    "1995": 40,
+    "1997": 40,
+    "1998": 40,
+    "1999": 40,
+    "2000": 40,
+    "2001": 40,
+    "2002": 40,
+    "2003": 40,
+    "2004": 33
+  },
+  "by_topic": {
+    "Christian Life and Ethics": 136,
+    "Creation and the Fall": 15,
+    "Exodus and the Law": 56,
+    "Joshua and the Judges": 43,
+    "Kings and Prophets": 142,
+    "Parables and Miracles": 44,
+    "Patriarchs": 34,
+    "Paul and the Epistles": 105,
+    "The Early Church": 56,
+    "The Gospels": 100,
+    "The Passion and Resurrection": 49,
+    "The Second Coming": 5
+  }
+}
