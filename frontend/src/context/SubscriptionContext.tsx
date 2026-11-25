@@ -46,11 +46,16 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     lastSyncRef.current = Date.now()
     setError(null)
     setStatus(next)
+    if (userId) {
+      try {
+        if (next) localStorage.setItem(`examcore:subscription:${userId}`, JSON.stringify({ status: next, savedAt: Date.now() }))
+      } catch {}
+    }
     const ownerAccess = !!(next && next.plan === 'owner' && !next.expired)
     // A fresh, active status means the renewal went through. Owners are never blocked.
     setBlocked(ownerAccess ? false : (next ? next.expired : false))
     return next
-  }, [])
+  }, [userId])
 
   const refresh = useCallback(async (): Promise<SubscriptionStatus | null> => {
     if (!userId) return null
