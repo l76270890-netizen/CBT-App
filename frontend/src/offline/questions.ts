@@ -26,8 +26,8 @@ export async function normalizeCachedQuestion(raw: any, examId: string, fallback
   const answerValue = raw.answer ?? raw.correctAnswer ?? raw.correct_answer;
   const yearValue = Number(raw.year);
   return {
-    cacheKey: `${examId}:${raw.id ?? `${fallbackSubject}-${String(raw.question).slice(0, 40)}}`,
-    id: raw.id ?? `${fallbackSubject}-${String(raw.question).slice(0, 40)}`,
+    cacheKey: `${examId}:${raw.id ?? `${fallbackSubject}-${String(raw.question).slice(0, 40)}}`, 
+    id: raw.id ?? `${fallbackSubject}-${String(raw.question).slice(0, 40)}, 
     examId,
     subject: raw.subject || fallbackSubject,
     question: String(raw.question),

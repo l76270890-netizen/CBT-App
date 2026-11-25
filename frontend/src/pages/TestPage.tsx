@@ -166,12 +166,18 @@ export default function Test({ setActivePage, testConfig }: Props) {
       setExplanationVisible(Array(finalQuestions.length).fill(false))
       setLoading(false)
     }
-    fetchQuestions()
-  }, [])
+    await fetchQuestions();
+  ], [])
 
   useEffect(() => {
-    if (loading || !questions.length || submitting.current) return
-    void saveDraft(draftKey, answers, questions, current, timeLeft).catch(() => {})
+    if (loading || !questions.length || submitting.current) return;
+    try {
+      void saveDraft(draftKey, answers, questions, current, timeLeft);
+    } catch (error) {
+      console.warn('Could not save draft', error);
+    } finally {
+      setLoading(false);
+    }
   }, [answers, current, timeLeft, questions, loading, draftKey])
 
   const calculateDuration = useCallback(() => { const d = Date.now() - startTime; return `${Math.floor(d/60000)}m ${Math.floor((d%60000)/1000)}s` }, [startTime])
