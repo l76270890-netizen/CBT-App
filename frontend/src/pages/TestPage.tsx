@@ -94,8 +94,13 @@ export default function Test({ setActivePage, testConfig }: Props) {
             } catch {}
           }
 
-          fetched = allFetched
-          console.log(`Backend collected: ${fetched.length} Qs from [${subjectsList.join(', ')}]`)
+      fetched = allFetched
+      console.log(`Backend collected: ${fetched.length} Qs from [${subjectsList.join(', ')}]`)
+      
+      // Sync locally when offline
+      if (!navigator.onLine) {
+        await syncAllQuestions();
+      }
         } catch (e) { console.log("API failed to load imported questions", e) }
       }
 
@@ -195,6 +200,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
         })
       } catch (error) { console.warn('Could not save study activity', error) }
     }
+    await saveExamResult(result)
     localStorage.setItem('lastTestResult', JSON.stringify(result))
     await saveExamResult(result)
     await clearDraft(draftKey).catch(() => {})
