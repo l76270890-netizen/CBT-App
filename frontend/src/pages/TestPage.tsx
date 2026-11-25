@@ -5,7 +5,7 @@ import './TestPage.css'
 import { API_URL } from '../config'
 import { apiRequest } from '../api'
 import QuestionImage from '../components/QuestionImage'
-import { loadCachedQuestions } from '../offline/questions'
+import { loadCachedQuestions, syncAllQuestions } from '../offline/questions'
 import { saveOfflineAttempt, saveDraft, loadDraft, clearDraft, saveExamResult } from '../offline/attempts'
 import { syncPendingAttempts } from '../offline/sync'
 import { queueStudyActivity } from '../offline/study'
@@ -82,11 +82,9 @@ export default function Test({ setActivePage, testConfig }: Props) {
       fetched = [...fetchedFromIdx, ...fetched]
 
       // 2. Try the backend only when we have the exam ID and a subject.
-      // The questions endpoint requires both query parameters.
       if (fetched.length === 0 && examId && subjectsList.length > 0) {
+        let allFetched: Question[] = []
         try {
-          let allFetched: Question[] = []
-
           for (const sub of subjectsList) {
             try {
               const query = new URLSearchParams({ examId: String(examId), subject: sub })
@@ -94,7 +92,6 @@ export default function Test({ setActivePage, testConfig }: Props) {
               const res = await fetch(`${API_URL}/api/questions?${query}`, { credentials: 'include' })
               if (res.ok) {
                 const payload = await res.json()
-                // The backend may answer with a bare array or { questions: [...] }
                 const data = Array.isArray(payload) ? payload : Array.isArray((payload as any)?.questions) ? (payload as any).questions : []
                 if (data.length > 0) {
                   const mapped = data.map((d: any) => ({
@@ -103,7 +100,6 @@ export default function Test({ setActivePage, testConfig }: Props) {
                     question: d.question,
                     imageUrl: d.imageUrl || d.image_url || undefined,
                     options: Array.isArray(d.options)? d.options : Object.values(d.options || {}),
-                    // Imported questions use correctAnswer: "A"; the test uses index numbers
                     answer: toAnswerIndex(d.answer ?? d.correctAnswer),
                     explanation: d.explanation || '',
                     topic: d.topic || ''
@@ -113,15 +109,15 @@ export default function Test({ setActivePage, testConfig }: Props) {
               }
             } catch {}
           }
-
-      fetched = allFetched
-      console.log(`Backend collected: ${fetched.length} Qs from [${subjectsList.join(', ')}]`)
-      
-      // Sync locally when online to keep local questions in sync with backend
-      if (navigator.onLine) {
-        await syncAllQuestions();
+        } catch {}
+        fetched = allFetched
       }
-      
+
+      // Sync locally when online
+      if (navigator.onLine) {
+        await syncAllQuestions()
+      }
+
       if (fetched.length === 0 && examId) {
         try {
           const cached = await loadCachedQuestions(String(examId), subjectsList, String(testConfig.year || ''))
@@ -140,8 +136,6 @@ export default function Test({ setActivePage, testConfig }: Props) {
         }
       }
 
-      // No fallback to fake/local question banks. Only real questions imported
-      // from the admin dashboard (via localStorage or the backend API) are used.
       if (fetched.length === 0) {
         fetched = []
       }
@@ -163,22 +157,16 @@ export default function Test({ setActivePage, testConfig }: Props) {
         setCurrent(Math.min(Math.max(0, draft.current || 0), Math.max(0, finalQuestions.length - 1)))
         if (draft.timeLeft > 0) setTimeLeft(draft.timeLeft)
       }
-    setExplanationVisible(Array(finalQuestions.length).fill(false))
-    setLoading(false)
-  }
+      setExplanationVisible(Array(finalQuestions.length).fill(false))
+      setLoading(false)
+    };
 
-  await fetchQuestions();
+    fetchQuestions();
 
-  useEffect(() => {
-    if (loading || !questions.length || submitting.current) return;
-    try {
-      void saveDraft(draftKey, answers, questions, current, timeLeft);
-    } catch (error) {
-      console.warn('Could not save draft', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [answers, current, timeLeft, questions, loading, draftKey])
+    return () => {
+      // cleanup interval on unmount
+    };
+  }, [answers, current, timeLeft, questions, loading, draftKey, examId, filterTopic, singleSubject, subjectsList, titleVal, testConfig.mode, testConfig.fromStudy, timeLeft, draftKey])
 
   const calculateDuration = useCallback(() => { const d = Date.now() - startTime; return `${Math.floor(d/60000)}m ${Math.floor((d%60000)/1000)}s` }, [startTime])
 
@@ -189,7 +177,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
     const result = {
       id: Date.now(),
       clientAttemptId: '',
-      title: filterTopic? `${singleSubject} - ${filterTopic}` : `${examType} - ${subjectsList.join(', ')}`,
+      title: filterTopic ? `${singleSubject} - ${filterTopic}` : `${examType} - ${subjectsList.join(', ')}`,
       examTitle: titleVal,
       examId: examId ? String(examId) : '',
       subject: subjectsList.join(', '),
@@ -198,7 +186,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
       score,
       total: questions.length,
       duration: calculateDuration(),
-      status: score >= questions.length*0.5? 'Passed' : 'Failed',
+      status: score >= questions.length*0.5 ? 'Passed' : 'Failed',
       mode: testConfig.mode,
       examType: examType,
       answers,
@@ -244,25 +232,25 @@ export default function Test({ setActivePage, testConfig }: Props) {
       const subjectsToRecord = [...new Set(questions.map(question => question.subject).filter(Boolean))]
       try {
         await Promise.all(subjectsToRecord.map(subject => {
-        const subjectQuestions = questions.filter(question => question.subject === subject)
-        const subjectScore = subjectQuestions.reduce((count, question) => {
-          const index = questions.indexOf(question)
-          return count + (answers[index] === question.answer ? 1 : 0)
-        }, 0)
-        return apiRequest('/api/attempts', {
-          method: 'POST',
-          body: JSON.stringify({ examId, subject, score: subjectScore, total: subjectQuestions.length, clientAttemptId: `${result.clientAttemptId}:${subject}` })
-        })
+          const subjectQuestions = questions.filter(question => question.subject === subject)
+          const subjectScore = subjectQuestions.reduce((count, question) => {
+            const index = questions.indexOf(question)
+            return count + (answers[index] === question.answer ? 1 : 0)
+          }, 0)
+          return apiRequest('/api/attempts', {
+            method: 'POST',
+            body: JSON.stringify({ examId, subject, score: subjectScore, total: subjectQuestions.length, clientAttemptId: `${result.clientAttemptId}:${subject}` })
+          })
         }))
       } catch (error) {
         console.error('Could not save school exam attempts:', error)
       }
     }
-    if (navigator.onLine) void syncPendingAttempts()
+    if (navigator.onLine) await syncPendingAttempts()
     setActivePage('result')
-  }, [answers, questions, setActivePage, calculateDuration, examType, subjectsList, titleVal, testConfig.mode, testConfig.fromStudy, filterTopic, singleSubject, draftKey, examId])
 
-  useEffect(() => { if(timeLeft<=0){handleSubmit(); return} const t=setInterval(()=>setTimeLeft(x=>x-1),1000); return()=>clearInterval(t)}, [timeLeft, handleSubmit])
+  }, [answers, current, timeLeft, questions, loading, draftKey, draftKey, examId, filterTopic, singleSubject, subjectsList, titleVal, testConfig.mode, testConfig.fromStudy, timeLeft, draftKey])
+
   const formatTime = (s:number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`
 
   if (loading) return <div className="test-page1" style={{padding:40,textAlign:'center'}}>Loading {subjectsList.join(', ') || singleSubject} questions...<br/>{subjectsList.length} subjects • Please wait</div>

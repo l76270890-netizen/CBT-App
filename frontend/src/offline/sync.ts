@@ -103,3 +103,5 @@ export function startOfflineSync(): void {
   window.setTimeout(run, 1500);
   window.setInterval(run, 60000);
 }
+
+export { syncAllQuestions } from "./questions";
