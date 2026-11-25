@@ -151,6 +151,7 @@ export async function loadCachedQuestions(examId: string, subjects: string[], ye
 
 // Sync ALL available questions across all subjects/years when internet returns
 export async function syncAllQuestions(): Promise<void> {
+  if (!navigator.onLine) return;
   const db = await initIndexedDB();
   const store = db.objectStore('questions');
   const subjectsList = (testConfig.subjects || []).map(subjectName).filter(Boolean);
