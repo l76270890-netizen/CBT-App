@@ -133,19 +133,26 @@ export default function Test({ setActivePage, testConfig }: Props) {
         await syncAllQuestions(testConfig)
       }
 
-      if (fetched.length === 0 && examId) {
+      if (examId) {
         try {
           const cached = await loadCachedQuestions(String(examId), subjectsList, String(testConfig.year || ''))
-          fetched = cached.map((d) => ({
-            id: String(d.id),
-            subject: d.subject,
-            question: d.question,
-            imageUrl: d.imageUrl,
-            options: d.options,
-            answer: toAnswerIndex(d.answer),
-            explanation: d.explanation || '',
-            topic: d.topic || ''
-          })).filter((d) => d.question && Array.isArray(d.options) && d.options.length > 0)
+          const byId = new Map(fetched.map(question => [String(question.id), question]))
+          for (const d of cached) {
+            const mapped = {
+              id: String(d.id),
+              subject: d.subject,
+              question: d.question,
+              imageUrl: d.imageUrl,
+              options: d.options,
+              answer: toAnswerIndex(d.answer),
+              explanation: d.explanation || '',
+              topic: d.topic || ''
+            }
+            if (mapped.question && Array.isArray(mapped.options) && mapped.options.length > 0) {
+              byId.set(mapped.id, mapped)
+            }
+          }
+          fetched = Array.from(byId.values())
         } catch (error) {
           console.warn('Could not load offline questions', error)
         }
