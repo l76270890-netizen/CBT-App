@@ -36,7 +36,8 @@ export default function Test({ setActivePage, testConfig }: Props) {
   const filterTopic = (testConfig as any).topic || null
   const singleSubject = (testConfig as any).subject || subjectsList[0] || 'General'
   const examId = (testConfig as any).examId || (testConfig as any).customExamId || (testConfig as any).id || null
-  const draftKey = `cbt-draft:${examId || 'custom'}:${subjectsList.join('|')}:${testConfig.year || ''}`
+  const subjectsKey = subjectsList.join('|')
+  const draftKey = `cbt-draft:${examId || 'custom'}:${subjectsKey}:${testConfig.year || ''}`
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -183,12 +184,15 @@ export default function Test({ setActivePage, testConfig }: Props) {
       setLoading(false)
     };
 
-    fetchQuestions();
+    void fetchQuestions().catch(error => {
+      console.warn('Could not load exam questions', error)
+      setLoading(false)
+    })
 
     return () => {
       // cleanup interval on unmount
     };
-  }, [answers, current, timeLeft, questions, loading, draftKey, examId, filterTopic, singleSubject, subjectsList, titleVal, testConfig.mode, testConfig.fromStudy, timeLeft, draftKey])
+  }, [draftKey, examId, singleSubject, subjectsKey, String(testConfig.year || '')])
 
   const calculateDuration = useCallback(() => { const d = Date.now() - startTime; return `${Math.floor(d/60000)}m ${Math.floor((d%60000)/1000)}s` }, [startTime])
 
