@@ -327,6 +327,12 @@ with app.app_context():
     ensure_question_columns()
     ensure_attempt_columns()
     ensure_novel_schema()
+    import_economics_questions()
+    import_chemistry_questions()
+    import_commerce_questions()
+    import_crk_questions()
+    import_literature_questions()
+    import_government_questions()
 
 BASEDIR = os.path.abspath(os.path.dirname(__file__))
 is_serverless = is_vercel or bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))

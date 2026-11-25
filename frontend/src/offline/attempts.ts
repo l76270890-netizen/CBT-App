@@ -106,13 +106,14 @@ export async function saveExamResult(result: LocalResult): Promise<void> {
     id: result.id,
     title: result.examTitle || result.title || result.subject || "Exam",
     examType: result.examType,
+    subject: result.subjects?.[0] ?? result.subject ?? "",
     subjects: result.subjects || [],
     year: result.year || 0,
     duration: result.duration || "0m",
     totalQuestions: result.totalQuestions || 0,
     scheduledAt: result.date,
     cachedAt: Date.now(),
-    percentage,
+    examId: result.examId || "",
   };
   await offlineDb.exams.bulkPut(record);
 }

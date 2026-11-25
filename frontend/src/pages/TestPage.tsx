@@ -61,6 +61,26 @@ export default function Test({ setActivePage, testConfig }: Props) {
         }
       } catch {}
 
+      // 1. Load questions from localIndexedDB
+      let fetchedFromIdx: Question[] = []
+      const idx = await initIndexedDB()
+      const store = idx.objectStore('questions')
+      for (const row of await store.getAll()) {
+        const q = JSON.parse(row)
+        if (!q || !q.id && q.subject === singleSubject) continue
+        fetchedFromIdx.push({
+          id: q.id,
+          subject: q.subject,
+          question: q.question,
+          imageUrl: q.imageUrl || q.image_url || undefined,
+          options: Array.isArray(q.options) ? q.options : [q.options.A, q.options.B, q.options.C, q.options.D, q.options.E],
+          answer: toAnswerIndex(q.answer ?? q.correctAnswer),
+          explanation: q.explanation || '',
+          topic: q.topic || ''
+        })
+      }
+      fetched = [...fetchedFromIdx, ...fetched]
+
       // 2. Try the backend only when we have the exam ID and a subject.
       // The questions endpoint requires both query parameters.
       if (fetched.length === 0 && examId && subjectsList.length > 0) {
