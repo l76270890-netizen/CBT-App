@@ -35,6 +35,7 @@ export async function normalizeCachedQuestion(raw: any, examId: string, fallback
      answer: toAnswerIndex(answerValue),
      explanation: raw.explanation || "",
      topic: raw.topic || "",
+     year: Number.isFinite(yearValue) ? yearValue : undefined,
      examType: raw.examType || undefined,
    }
 }
