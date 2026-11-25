@@ -327,12 +327,6 @@ with app.app_context():
     ensure_question_columns()
     ensure_attempt_columns()
     ensure_novel_schema()
-    import_economics_questions()
-    import_chemistry_questions()
-    import_commerce_questions()
-    import_crk_questions()
-    import_literature_questions()
-    import_government_questions()
 
 BASEDIR = os.path.abspath(os.path.dirname(__file__))
 is_serverless = is_vercel or bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
@@ -4750,3 +4744,29 @@ if os.environ.get("IMPORT_CHEMISTRY_ON_STARTUP", "").strip().lower() in {"1", "t
         import_chemistry_questions()
     except Exception:
         app.logger.exception("Chemistry question bank import failed")
+
+
+# Startup question-bank imports. These run after every model and helper used by
+# the import modules is defined, so `from app import ... Question` resolves and
+# a missing/broken bank cannot abort the whole serverless invocation. Each
+# importer is idempotent (it deduplicates and skips when the bank already has
+# enough rows), so repeated cold starts do not duplicate questions.
+def _startup_question_imports():
+    import importlib
+
+    for module_name, function_name in (
+        ("economics_import", "import_economics_questions"),
+        ("chemistry_import", "import_chemistry_questions"),
+        ("commerce_import", "import_commerce_questions"),
+        ("crk_import", "import_crk_questions"),
+        ("literature_import", "import_literature_questions"),
+        ("government_import", "import_government_questions"),
+    ):
+        try:
+            module = importlib.import_module(module_name)
+            getattr(module, function_name)()
+        except Exception:
+            app.logger.exception("%s failed during startup import", function_name)
+
+
+_startup_question_imports()
