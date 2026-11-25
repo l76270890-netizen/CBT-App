@@ -221,9 +221,8 @@ export default function Test({ setActivePage, testConfig }: Props) {
       fromStudy: !!testConfig.fromStudy
     }
     result.clientAttemptId = `cbt-${result.id}`
-    if (!testConfig.fromStudy) {
-      try { await saveOfflineAttempt(result) } catch (error) { console.warn('Could not save offline attempt', error) }
-    } else {
+    try { await saveOfflineAttempt(result) } catch (error) { console.warn('Could not save offline attempt', error) }
+    if (testConfig.fromStudy) {
       try {
         await queueStudyActivity({
           clientActivityId: `study-${result.id}`,
