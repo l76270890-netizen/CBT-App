@@ -149,37 +149,35 @@ export async function loadCachedQuestions(examId: string, subjects: string[], ye
   );
 }
 
-// Sync ALL available questions across all subjects/years when internet returns
-export async function syncAllQuestions(): Promise<void> {
-  if (!navigator.onLine) return;
-  const db = await initIndexedDB();
-  const store = db.objectStore('questions');
-  const subjectsList = (testConfig.subjects || []).map(subjectName).filter(Boolean);
+// Sync ALL available questions across all subjects/years when internet returns.
+// The optional config keeps the function backward-compatible with callers that
+// only want to warm the cache after login; without a config there is nothing to
+// query because the backend requires examId + subject.
+export async function syncAllQuestions(config?: TestConfigType): Promise<void> {
+  if (!navigator.onLine || !config) return;
+  const subjectsList = (config.subjects || []).map(subjectName).filter(Boolean);
+  const examId = String(config.examId || config.customExamId || '').trim();
+  if (!examId || !subjectsList.length) return;
   for (const sub of subjectsList) {
-    for (const year of (String(testConfig.year || "")).split(',').map(value => Number(value.trim()))) {
-      const query = new URLSearchParams({ examId: String(testConfig.examId || ''), subject: sub, year: year });
-      if (query.set('year', year)) {
-        const res = await apiRequest<unknown>(`/api/questions?${query.toString()}`);
-        const payload = await res.json();
-        const data = Array.isArray(payload) ? payload : Array.isArray((payload as any)?.questions) ? (payload as any).questions : [];
-        const mapped = data.map((d: any) => ({
-          id: d.id,
-          subject: d.subject || sub,
-          question: d.question,
-          imageUrl: d.imageUrl || d.image_url || undefined,
-          options: Array.isArray(d.options)? d.options : Object.values(d.options || {}),
-          answer: toAnswerIndex(d.answer ?? d.correctAnswer),
-          explanation: d.explanation || '',
-          topic: d.topic || '',
-          examType: d.examType || undefined
-        })).filter((r: any) => r.question && Array.isArray(r.options) && r.options.length > 0);
-        for (const row of mapped) {
-          const id = row.id || `${sub}-${row.question}`;
-          await putQuestion(id, row);
-          if (row.imageUrl) {
-            await cacheQuestionImage(row.imageUrl);
-          }
-        }
+    for (const year of String(config.year || '').split(',').map(value => Number(value.trim())).filter(Number.isFinite)) {
+      const query = new URLSearchParams({ examId, subject: sub, year: String(year) });
+      const payload = await apiRequest<unknown>(`/api/questions?${query.toString()}`);
+      const data = Array.isArray(payload) ? payload : Array.isArray((payload as any)?.questions) ? (payload as any).questions : [];
+      const mapped = data.map((d: any) => ({
+        id: d.id,
+        subject: d.subject || sub,
+        question: d.question,
+        imageUrl: d.imageUrl || d.image_url || undefined,
+        options: Array.isArray(d.options) ? d.options : Object.values(d.options || {}),
+        answer: toAnswerIndex(d.answer ?? d.correctAnswer),
+        explanation: d.explanation || '',
+        topic: d.topic || '',
+        examType: d.examType || undefined,
+      })).filter((row: any) => row.question && Array.isArray(row.options) && row.options.length > 0);
+      for (const row of mapped) {
+        const id = row.id || `${sub}-${row.question}`;
+        await putQuestion(id, row);
+        if (row.imageUrl) await cacheQuestionImage(row.imageUrl);
       }
     }
   }
