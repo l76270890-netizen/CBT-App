@@ -5,8 +5,8 @@ import './TestPage.css'
 import { API_URL } from '../config'
 import { apiRequest } from '../api'
 import QuestionImage from '../components/QuestionImage'
-import { loadCachedQuestions, syncAllQuestions } from '../offline/questions'
-import { getAllQuestions } from '../offline/indexedDB'
+import { loadCachedQuestions, syncAllQuestions, cacheQuestionImage } from '../offline/questions'
+import { getAllQuestions, putQuestion } from '../offline/indexedDB'
 import { saveOfflineAttempt, saveDraft, loadDraft, clearDraft, saveExamResult } from '../offline/attempts'
 import { syncPendingAttempts } from '../offline/sync'
 import { queueStudyActivity } from '../offline/study'
@@ -110,6 +110,22 @@ export default function Test({ setActivePage, testConfig }: Props) {
           }
         } catch {}
         fetched = allFetched
+
+        // Persist backend questions (and images) so the exam can run offline.
+        for (const question of fetched) {
+          const id = question.id || `${singleSubject}-${question.question.slice(0, 40)}`
+          await putQuestion(id, {
+            id,
+            subject: question.subject,
+            question: question.question,
+            options: question.options,
+            answer: question.answer,
+            explanation: question.explanation,
+            imageUrl: question.imageUrl,
+            topic: question.topic,
+          })
+          if (question.imageUrl) await cacheQuestionImage(question.imageUrl)
+        }
       }
 
       // Sync locally when online

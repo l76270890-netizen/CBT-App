@@ -32,7 +32,7 @@ export type LocalResult = {
 
 function toCachedQuestion(question: AttemptQuestion, examId: string): CachedQuestion {
   return {
-    cacheKey: `${examId}:${question.id}`,
+    cacheKey: `${examId}:${question.id ?? question.question.slice(0, 40)}`,
     id: question.id,
     examId,
     subject: question.subject,
