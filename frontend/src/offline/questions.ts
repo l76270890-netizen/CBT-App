@@ -2,6 +2,14 @@ import { apiRequest, resolveQuestionImageUrl } from "../api";
 import type { TestConfigType } from "../types";
 import { offlineDb, type CachedQuestion, type OfflineExam } from "./db";
 import { toAnswerIndex } from "../answerUtils";
+import {
+  initIndexedDB,
+  getQuestion,
+  putQuestion,
+  getAllQuestions,
+  findQuestionBySubject,
+  saveQuestion,
+} from "./indexedDB";
 
 const IMAGE_CACHE = "examcore-images-v1";
 
@@ -11,14 +19,14 @@ function subjectName(subject: unknown): string {
   return value?.subject || value?.name || "";
 }
 
-export function normalizeCachedQuestion(raw: any, examId: string, fallbackSubject: string): CachedQuestion | null {
+export async function normalizeCachedQuestion(raw: any, examId: string, fallbackSubject: string): CachedQuestion | null {
   if (!raw || !raw.question) return null;
-  const options = Array.isArray(raw.options) ? raw.options : Object.values(raw.options || {});
+  const options = Array.isArray(raw.options) ? raw.options : [raw.options.A, raw.options.B, raw.options.C, raw.options.D];
   if (!options.length) return null;
   const answerValue = raw.answer ?? raw.correctAnswer ?? raw.correct_answer;
   const yearValue = Number(raw.year);
   return {
-    cacheKey: `${examId}:${raw.id ?? `${fallbackSubject}-${String(raw.question).slice(0, 40)}`}`,
+    cacheKey: `${examId}:${raw.id ?? `${fallbackSubject}-${String(raw.question).slice(0, 40)}}`,
     id: raw.id ?? `${fallbackSubject}-${String(raw.question).slice(0, 40)}`,
     examId,
     subject: raw.subject || fallbackSubject,
@@ -26,12 +34,9 @@ export function normalizeCachedQuestion(raw: any, examId: string, fallbackSubjec
     options: options.map((value: unknown) => String(value)),
     answer: toAnswerIndex(answerValue),
     explanation: raw.explanation || "",
-    imageUrl: raw.imageUrl || raw.image_url || undefined,
-    year: Number.isFinite(yearValue) ? yearValue : undefined,
     topic: raw.topic || "",
     examType: raw.examType || undefined,
-    cachedAt: Date.now(),
-  };
+  }
 }
 
 export async function cacheQuestionImage(imageUrl?: string): Promise<void> {
@@ -114,7 +119,6 @@ export async function downloadQuestionsForTest(testConfig: TestConfigType): Prom
     const questions = rows
       .map((row: any) => normalizeCachedQuestion(row, examId, subject))
       .filter((row: CachedQuestion | null): row is CachedQuestion => Boolean(row));
-
     if (questions.length) {
       await offlineDb.questions.bulkPut(questions);
     }
@@ -143,4 +147,47 @@ export async function loadCachedQuestions(examId: string, subjects: string[], ye
     subjectSet.has(question.subject.toLowerCase()) &&
     (!years.length || (question.year !== undefined && years.includes(question.year)))
   );
+}
+
+// Sync ALL available questions across all subjects/years when internet returns
+export async function syncAllQuestions(): Promise<void> {
+  const db = await initIndexedDB();
+  const store = db.objectStore('questions');
+  const subjectsList = (testConfig.subjects || []).map(subjectName).filter(Boolean);
+  for (const sub of subjectsList) {
+    for (const year of (String(testConfig.year || "")).split(',').map(value => Number(value.trim()))) {
+      const query = new URLSearchParams({ examId: String(testConfig.examId || ''), subject: sub, year: year });
+      if (query.set('year', year)) {
+        const res = await apiRequest<unknown>(`/api/questions?${query.toString()}`);
+        const payload = await res.json();
+        const data = Array.isArray(payload) ? payload : Array.isArray((payload as any)?.questions) ? (payload as any).questions : [];
+        const mapped = data.map((d: any) => ({
+          id: d.id,
+          subject: d.subject || sub,
+          question: d.question,
+          imageUrl: d.imageUrl || d.image_url || undefined,
+          options: Array.isArray(d.options)? d.options : Object.values(d.options || {}),
+          answer: toAnswerIndex(d.answer ?? d.correctAnswer),
+          explanation: d.explanation || '',
+          topic: d.topic || '',
+          examType: d.examType || undefined
+        })).filter((r: any) => r.question && Array.isArray(r.options) && r.options.length > 0);
+        for (const row of mapped) {
+          const id = row.id || `${sub}-${row.question}`;
+          await putQuestion(id, row);
+          if (row.imageUrl) {
+            await cacheQuestionImage(row.imageUrl);
+          }
+        }
+      }
+    }
+  }
+}
+
+export async function startOfflineSync(): void {
+  if (typeof window === "undefined") return;
+  const run = () => { void syncPendingAttempts(); };
+  window.addEventListener("online", run);
+  window.setTimeout(run, 1500);
+  window.setInterval(run, 60000);
 }
