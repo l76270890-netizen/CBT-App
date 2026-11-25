@@ -96,6 +96,22 @@ export async function markAttemptFailed(clientAttemptId: string, message: string
   if (row?.id) await offlineDb.attempts.update(row.id, { status: "failed", syncError: message });
 }
 
+export async function saveExamResult(result: LocalResult): Promise<void> {
+  const clientAttemptId = result.clientAttemptId || `cbt-${result.id}`;
+  const examId = String(result.examId || "");
+  await offlineDb.exams.bulkPut({
+    id: result.id,
+    title: result.examTitle || result.title || result.subject || "Exam",
+    examType: result.examType,
+    subjects: result.subjects || [],
+    year: result.year || 0,
+    duration: result.duration || "0m",
+    totalQuestions: result.total,
+    scheduledAt: result.date,
+    cachedAt: Date.now()
+  });
+}
+
 export async function saveDraft(key: string, answers: (number | null)[], questions: AttemptQuestion[], current: number, timeLeft: number): Promise<void> {
   const answerMap: Record<string, number | null> = {};
   questions.forEach((question, index) => { answerMap[String(question.id)] = answers[index] ?? null; });

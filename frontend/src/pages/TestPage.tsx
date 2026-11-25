@@ -6,7 +6,7 @@ import { API_URL } from '../config'
 import { apiRequest } from '../api'
 import QuestionImage from '../components/QuestionImage'
 import { loadCachedQuestions } from '../offline/questions'
-import { saveOfflineAttempt, saveDraft, loadDraft, clearDraft } from '../offline/attempts'
+import { saveOfflineAttempt, saveDraft, loadDraft, clearDraft, saveExamResult } from '../offline/attempts'
 import { syncPendingAttempts } from '../offline/sync'
 import { queueStudyActivity } from '../offline/study'
 import { toAnswerIndex } from '../answerUtils'
@@ -196,6 +196,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
       } catch (error) { console.warn('Could not save study activity', error) }
     }
     localStorage.setItem('lastTestResult', JSON.stringify(result))
+    await saveExamResult(result)
     await clearDraft(draftKey).catch(() => {})
     // Novel CBT practice: save offline and sync later (dedupe via clientAttemptId)
     try {
