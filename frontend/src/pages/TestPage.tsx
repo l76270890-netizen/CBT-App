@@ -163,11 +163,11 @@ export default function Test({ setActivePage, testConfig }: Props) {
         setCurrent(Math.min(Math.max(0, draft.current || 0), Math.max(0, finalQuestions.length - 1)))
         if (draft.timeLeft > 0) setTimeLeft(draft.timeLeft)
       }
-      setExplanationVisible(Array(finalQuestions.length).fill(false))
-      setLoading(false)
-    }
-    await fetchQuestions();
-  ], [])
+    setExplanationVisible(Array(finalQuestions.length).fill(false))
+    setLoading(false)
+  }
+
+  await fetchQuestions();
 
   useEffect(() => {
     if (loading || !questions.length || submitting.current) return;

@@ -25,18 +25,18 @@ export async function normalizeCachedQuestion(raw: any, examId: string, fallback
   if (!options.length) return null;
   const answerValue = raw.answer ?? raw.correctAnswer ?? raw.correct_answer;
   const yearValue = Number(raw.year);
-  return {
-    cacheKey: `${examId}:${raw.id ?? `${fallbackSubject}-${String(raw.question).slice(0, 40)}}`, 
-    id: raw.id ?? `${fallbackSubject}-${String(raw.question).slice(0, 40)}, 
-    examId,
-    subject: raw.subject || fallbackSubject,
-    question: String(raw.question),
-    options: options.map((value: unknown) => String(value)),
-    answer: toAnswerIndex(answerValue),
-    explanation: raw.explanation || "",
-    topic: raw.topic || "",
-    examType: raw.examType || undefined,
-  }
+   return {
+     cacheKey: `${examId}:${raw.id ?? `${fallbackSubject}-${String(raw.question).slice(0, 40)}}`,
+     id: raw.id ?? `${fallbackSubject}-${String(raw.question).slice(0, 40)}`,
+     examId: examId,
+     subject: raw.subject || fallbackSubject,
+     question: String(raw.question),
+     options: options.map((value: unknown) => String(value)),
+     answer: toAnswerIndex(answerValue),
+     explanation: raw.explanation || "",
+     topic: raw.topic || "",
+     examType: raw.examType || undefined,
+   }
 }
 
 export async function cacheQuestionImage(imageUrl?: string): Promise<void> {
