@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { API_URL as API, SCHOOL_ID } from '../config'
-import { apiRequest } from '../api'
+import { apiRequest } from '../api';
+import { syncAllQuestions } from '../offline/sync';
 
 const AuthContext = createContext<any>(null)
 
@@ -29,6 +30,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await apiRequest<any>("/api/login", { method: "POST", body: JSON.stringify({ email, password }) })
       localStorage.setItem('cbt_user', JSON.stringify(data))
       setUser(data)
+      // Trigger immediate initial synchronization when the student is online or just logged in
+      if (user && !navigator.onLine) {
+        await syncAllQuestions();
+      }
       return { success: true, data }
     } catch (err: any) {
       return { success: false, message: err.message }
