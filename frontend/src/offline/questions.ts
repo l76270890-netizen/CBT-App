@@ -116,9 +116,9 @@ export async function downloadQuestionsForTest(testConfig: TestConfigType): Prom
 
     const payload = await apiRequest<unknown>(`/api/questions?${query.toString()}`);
     const rows = Array.isArray(payload) ? payload : Array.isArray((payload as any)?.questions) ? (payload as any).questions : [];
-    const questions = rows
-      .map((row: any) => normalizeCachedQuestion(row, examId, subject))
-      .filter((row: CachedQuestion | null): row is CachedQuestion => Boolean(row));
+    const questions = (await Promise.all(
+      rows.map((row: any) => normalizeCachedQuestion(row, examId, subject)),
+    )).filter((row: CachedQuestion | null): row is CachedQuestion => Boolean(row));
     if (questions.length) {
       await offlineDb.questions.bulkPut(toCloneable(questions));
     }

@@ -76,9 +76,13 @@ export async function getQuestion(id: string | number): Promise<QuestionRecord |
 }
 
 export async function putQuestion(id: string | number, record: Partial<QuestionRecord> = {}): Promise<void> {
+  const resolvedId = id ?? record.id;
+  if (resolvedId === undefined || resolvedId === null || String(resolvedId).trim() === '') {
+    throw new Error('putQuestion requires a non-empty id');
+  }
   const db = await initIndexedDB();
   const transaction = db.transaction('questions', 'readwrite');
-  transaction.objectStore('questions').put(toCloneable({ id, ...record }));
+  transaction.objectStore('questions').put(toCloneable({ ...record, id: resolvedId }));
   await transactionDone(transaction);
 }
 
