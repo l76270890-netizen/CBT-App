@@ -1,4 +1,4 @@
-import { offlineDb, type CachedQuestion, type OfflineAttempt } from "./db";
+import { offlineDb, toCloneable, type CachedQuestion, type OfflineAttempt } from "./db";
 
 export type AttemptQuestion = {
   id: string | number;
@@ -82,7 +82,7 @@ export async function saveOfflineAttempt(result: LocalResult): Promise<string> {
 
   const existing = await offlineDb.attempts.where("clientAttemptId").equals(clientAttemptId).first();
   if (existing?.id) record.id = existing.id;
-  await offlineDb.attempts.put(record);
+  await offlineDb.attempts.put(toCloneable(record));
   return clientAttemptId;
 }
 
@@ -115,13 +115,13 @@ export async function saveExamResult(result: LocalResult): Promise<void> {
     cachedAt: Date.now(),
     examId: result.examId || "",
   };
-  await offlineDb.exams.bulkPut(record);
+  await offlineDb.exams.bulkPut([toCloneable(record)]);
 }
 
 export async function saveDraft(key: string, answers: (number | null)[], questions: AttemptQuestion[], current: number, timeLeft: number): Promise<void> {
   const answerMap: Record<string, number | null> = {};
   questions.forEach((question, index) => { answerMap[String(question.id)] = answers[index] ?? null; });
-  await offlineDb.drafts.put({ key, answers: answerMap, current, timeLeft, updatedAt: Date.now() });
+  await offlineDb.drafts.put(toCloneable({ key, answers: answerMap, current, timeLeft, updatedAt: Date.now() }));
 }
 
 export async function loadDraft(key: string) {

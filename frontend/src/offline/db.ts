@@ -125,3 +125,22 @@ class ExamCoreOfflineDb extends Dexie {
 }
 
 export const offlineDb = new ExamCoreOfflineDb();
+
+// IndexedDB uses the structured clone algorithm, which cannot clone Promises.
+// Some async callers can accidentally leave a Promise inside a record; strip
+// those values (and functions) before writing so one bad field cannot break the
+// whole offline cache.
+export function toCloneable<T>(value: T): T {
+  if (value instanceof Promise) return undefined as unknown as T;
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) return value.map(item => toCloneable(item)) as unknown as T;
+  if (value && typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      if (nested instanceof Promise || typeof nested === "function") continue;
+      output[key] = toCloneable(nested);
+    }
+    return output as T;
+  }
+  return value;
+}

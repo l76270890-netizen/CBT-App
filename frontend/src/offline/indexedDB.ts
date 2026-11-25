@@ -1,3 +1,5 @@
+import { toCloneable } from './db';
+
 const INDEXEDDB_NAME = 'examcore-indexed';
 const INDEXEDDB_VERSION = 1;
 
@@ -76,7 +78,7 @@ export async function getQuestion(id: string | number): Promise<QuestionRecord |
 export async function putQuestion(id: string | number, record: Partial<QuestionRecord> = {}): Promise<void> {
   const db = await initIndexedDB();
   const transaction = db.transaction('questions', 'readwrite');
-  transaction.objectStore('questions').put({ id, ...record });
+  transaction.objectStore('questions').put(toCloneable({ id, ...record }));
   await transactionDone(transaction);
 }
 

@@ -26,6 +26,18 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
   const [loadError, setLoadError] = useState("")
   const [selectionError, setSelectionError] = useState("")
   const [validatingSubjects, setValidatingSubjects] = useState(false)
+  const subjectCacheKey = `examcore:subjects:${examTypeValue}`
+  const readCachedSubjects = (): string[] => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(subjectCacheKey) || '[]')
+      return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string' && value.trim() !== '') : []
+    } catch {
+      return []
+    }
+  }
+  const cacheSubjects = (names: string[]) => {
+    if (names.length) localStorage.setItem(subjectCacheKey, JSON.stringify(names))
+  }
 
   const iconMap: any = {
     'Use of English': BookOpen, 'English Language': BookOpen, 'English': BookOpen,
@@ -43,14 +55,17 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
       setSelectedSubjects([])
       setSearch("")
       try {
-        const examSubjects = configuredSubjects
+        const configured = configuredSubjects
           .map(subject => typeof subject === 'string' ? subject : subject?.subject || subject?.name || '')
           .filter(Boolean)
+        const cachedSubjects = readCachedSubjects()
+        const examSubjects = configured.length ? configured : cachedSubjects
 
         if (selectedExamId) {
           const availPayload = await apiRequest<any>(`/api/exams/${selectedExamId}/availability`)
           const availability = (availPayload?.availability && typeof availPayload.availability === 'object') ? availPayload.availability : {}
           const names = Array.isArray(availPayload?.subjects) && availPayload.subjects.length ? availPayload.subjects : examSubjects
+          cacheSubjects(names)
           const grouped: SubjectItem[] = names.map((subject: string) => {
             const byYear = (availability[subject] && typeof availability[subject] === 'object') ? availability[subject] as Record<string, number> : {}
             const yearEntries = Object.entries(byYear).filter(([, c]) => Number(c) > 0).sort((a, b) => Number(b[0]) - Number(a[0]))
@@ -65,6 +80,7 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
           })
           setSubjects(grouped.length > 0 ? grouped : [])
         } else {
+          cacheSubjects(examSubjects)
           const grouped: SubjectItem[] = examSubjects.map(subject => ({
             subject,
             questions: 0,
@@ -82,6 +98,11 @@ export default function Subjects({ setActivePage, setTestConfig, selectedExam, s
               setSubjects(cached)
               return
             }
+          }
+          const cachedNames = readCachedSubjects()
+          if (cachedNames.length) {
+            setSubjects(cachedNames.map(subject => ({ subject, questions: 0, years: 'No questions yet', required: isEnglishSubject(subject), questionsByYear: {} })))
+            return
           }
         } catch {}
         setLoadError(e instanceof Error ? e.message : "Could not load subjects.")

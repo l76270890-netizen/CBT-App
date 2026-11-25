@@ -1,4 +1,4 @@
-import { offlineDb, type StudyActivity, type StudyQuestion } from "./db";
+import { offlineDb, toCloneable, type StudyActivity, type StudyQuestion } from "./db";
 import { cacheQuestionImage } from "./questions";
 import { toAnswerIndex } from "../answerUtils";
 
@@ -31,7 +31,7 @@ function normalizeStudyQuestion(raw: any, examType: string, subject: string): St
 export async function cacheStudyMeta(examType: string, data: any): Promise<void> {
   const topicsBySubject = data?.topicsBySubject && typeof data.topicsBySubject === "object" ? data.topicsBySubject : {};
   const availability = data?.availability && typeof data.availability === "object" ? data.availability : {};
-  await offlineDb.studyMeta.put({ examType, topicsBySubject, availability, cachedAt: Date.now() });
+  await offlineDb.studyMeta.put(toCloneable({ examType, topicsBySubject, availability, cachedAt: Date.now() }));
 }
 
 export async function loadStudyMeta(examType: string) {
@@ -42,7 +42,7 @@ export async function cacheStudyQuestions(examType: string, subject: string, row
   const questions = rows
     .map((row) => normalizeStudyQuestion(row, examType, subject))
     .filter((row): row is StudyQuestion => Boolean(row));
-  if (questions.length) await offlineDb.studyQuestions.bulkPut(questions);
+  if (questions.length) await offlineDb.studyQuestions.bulkPut(toCloneable(questions));
   for (const question of questions) {
     if (question.imageUrl) await cacheQuestionImage(question.imageUrl);
   }
@@ -86,7 +86,7 @@ export async function studyAvailability(examType: string): Promise<Record<string
 export async function queueStudyActivity(activity: Omit<StudyActivity, "id" | "status" | "createdAt">): Promise<void> {
   const existing = await offlineDb.studyActivity.where("clientActivityId").equals(activity.clientActivityId).first();
   if (existing) return;
-  await offlineDb.studyActivity.put({ ...activity, status: "pending", createdAt: Date.now() });
+  await offlineDb.studyActivity.put(toCloneable({ ...activity, status: "pending", createdAt: Date.now() }));
 }
 
 export async function pendingStudyActivityCount(): Promise<number> {

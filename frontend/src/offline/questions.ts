@@ -1,6 +1,6 @@
 import { apiRequest, resolveQuestionImageUrl } from "../api";
 import type { TestConfigType } from "../types";
-import { offlineDb, type CachedQuestion, type OfflineExam } from "./db";
+import { offlineDb, toCloneable, type CachedQuestion, type OfflineExam } from "./db";
 import { toAnswerIndex } from "../answerUtils";
 import {
   initIndexedDB,
@@ -61,7 +61,7 @@ export type DownloadResult = {
 };
 
 export async function saveCachedExams(exams: OfflineExam[]): Promise<void> {
-  if (exams.length) await offlineDb.exams.bulkPut(exams);
+  if (exams.length) await offlineDb.exams.bulkPut(toCloneable(exams));
 }
 
 export async function loadCachedExams(): Promise<OfflineExam[]> {
@@ -97,7 +97,7 @@ export async function downloadQuestionsForTest(testConfig: TestConfigType): Prom
 
   const existingExam = await offlineDb.exams.get(examId).catch(() => undefined);
   const allSubjects = Array.from(new Set([...(existingExam?.subjects || []), ...subjects]));
-  await offlineDb.exams.put({
+  await offlineDb.exams.put(toCloneable({
     id: examId,
     title: testConfig.examTitle || testConfig.customTitle || testConfig.title || existingExam?.title || `${testConfig.examType} exam`,
     examType: testConfig.examType || existingExam?.examType || "",
@@ -106,7 +106,7 @@ export async function downloadQuestionsForTest(testConfig: TestConfigType): Prom
     duration: Number(testConfig.duration) || existingExam?.duration || 0,
     totalQuestions: Number(testConfig.totalQuestions) || existingExam?.totalQuestions,
     cachedAt: Date.now(),
-  });
+  }));
 
   const results: DownloadResult[] = [];
   for (const subject of subjects) {
@@ -120,7 +120,7 @@ export async function downloadQuestionsForTest(testConfig: TestConfigType): Prom
       .map((row: any) => normalizeCachedQuestion(row, examId, subject))
       .filter((row: CachedQuestion | null): row is CachedQuestion => Boolean(row));
     if (questions.length) {
-      await offlineDb.questions.bulkPut(questions);
+      await offlineDb.questions.bulkPut(toCloneable(questions));
     }
 
     let images = 0;
