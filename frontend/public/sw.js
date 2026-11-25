@@ -1,4 +1,4 @@
-const CACHE = 'examcore-app-v4-offline';
+const CACHE = 'examcore-app-v5-offline';
 const IMAGE_CACHE = 'examcore-images-v2';
 const CORE = ['/', '/index.html', '/manifest.webmanifest'];
 
@@ -83,4 +83,3 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(req))
   );
 });
-EOF
