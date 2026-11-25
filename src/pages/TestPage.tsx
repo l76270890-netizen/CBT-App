@@ -19,6 +19,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
   const [calcInput, setCalcInput] = useState('0')
   const [loading, setLoading] = useState(true)
   const [explanationVisible, setExplanationVisible] = useState<boolean[]>([])
+  const [countWarning, setCountWarning] = useState<string | null>(null)
   const submitting = useRef(false)
 
   const getSubjectName = (s: any) => typeof s === 'string'? s : s?.subject || s?.name || 'General'
@@ -102,9 +103,18 @@ export default function Test({ setActivePage, testConfig }: Props) {
       }
 
       const shuffled = fetched.sort(() => 0.5 - Math.random()).slice(0, testConfig.totalQuestions || fetched.length)
-      setQuestions(shuffled)
-      setAnswers(Array(shuffled.length).fill(null))
-      setExplanationVisible(Array(shuffled.length).fill(false))
+      const requestedCount = testConfig.questionCount || testConfig.totalQuestions || fetched.length
+      const finalQuestions = requestedCount > 0 && requestedCount < shuffled.length
+        ? shuffled.slice(0, requestedCount)
+        : shuffled
+      if (requestedCount > 0 && fetched.length < requestedCount) {
+        setCountWarning(`Only ${fetched.length} of the requested ${requestedCount} questions were found. The test was built from the available question bank.`)
+      } else {
+        setCountWarning(null)
+      }
+      setQuestions(finalQuestions)
+      setAnswers(Array(finalQuestions.length).fill(null))
+      setExplanationVisible(Array(finalQuestions.length).fill(false))
       setLoading(false)
     }
     fetchQuestions()
@@ -161,7 +171,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
 
   if (loading) return <div className="test-page1" style={{padding:40,textAlign:'center'}}>Loading {subjectsList.join(', ') || singleSubject} questions...<br/>{subjectsList.length} subjects • Please wait</div>
 
-  if (!questions.length) return <div className="test-page1" style={{padding:40,textAlign:'center'}}>No questions found for {subjectsList.join(', ')}<br/><button onClick={()=>setActivePage('home')} style={{marginTop:12, padding:'8px 16px'}}>Go Home</button></div>
+  if (!questions.length) return <div className="test-page1" style={{padding:40,textAlign:'center'}}>{countWarning || `No questions found for ${subjectsList.join(',')}`}<br/><button onClick={()=>setActivePage('home')} style={{marginTop:12, padding:'8px 16px'}}>Go Home</button></div>
 
   const q = questions[current]
   const answeredCount = answers.filter(a=>a!==null).length
@@ -188,6 +198,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
         <button className="exit-btn" onClick={()=>{if(confirm('Exit?')) setActivePage(testConfig.fromStudy? 'study' : 'test-config')}}>✕</button>
         <div className="header-right"><button className="icon-btn" onClick={()=>setShowCalc(!showCalc)}>🧮</button><div className={`test-timer ${timeLeft<300?'warning':''}`}>⏱ {formatTime(timeLeft)}</div></div>
       </div>
+      {countWarning && <div className="count-warning-banner"><AlertTriangle size={14}/>{countWarning}</div>}
       <div className="account"><div className="test-subject">{q.subject} {q.topic? `• ${q.topic}` : ''}</div><div className="test-q-count">Q {current+1}/{questions.length} • {answeredCount} Answered</div></div>
       <div className="test-body">
         <div className="question-card">

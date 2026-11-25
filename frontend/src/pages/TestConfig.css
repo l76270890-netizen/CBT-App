@@ -60,11 +60,25 @@
 .radio-inner { width: 8px; height: 8px; background: #1d4be3; border-radius: 50%; }
 
 .duration-grid{ display: grid; grid-template-columns: repeat(6,1fr); gap: 8px; margin-bottom: 12px; }
-.dur-btn{
-  background: #121212; border: 1px solid #2a2a2a; padding: 10px 4px; border-radius: 10px;
-  color: #8f9091; font-size: 12px; font-weight: 700; cursor: pointer;
-}
-.dur-btn.active{ background: #fff; color: #121212; border-color: #fff; }
+  .dur-btn{
+    background: #121212; border: 1px solid #2a2a2a; padding: 10px 4px; border-radius: 10px;
+    color: #8f9091; font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  .dur-btn.active{ background: #fff; color: #121212; border-color: #fff; }
+
+  .count-options{ display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+  .count-option{
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 16px 8px; border: 1.5px solid #2a2a2a; border-radius: 12px; background: #121212;
+    color: #8f9091; font-weight: 700; cursor: pointer; transition: 0.15s; text-align: center;
+  }
+  .count-option:not(.disabled):hover{ border-color: #1d4be3; }
+  .count-option.active{ border-color: #1d4be3; background: #121212; color: #fff; }
+  .count-option.disabled{ opacity: 0.4; cursor: not-allowed; }
+  .count-num{ font-size: 20px; line-height: 1; }
+  .count-label{ font-size: 11px; }
+  .count-check{ position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; background: #1d4be3; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; }
+  .count-tag{ position: absolute; top: 6px; left: 6px; font-size: 9px; background: #3a1f1f; color: #fca5a5; padding: 2px 5px; border-radius: 6px; }
 
 .config-select {
   width: 100%; color: #fff; padding: 13px; border: 1px solid #2a2a2a;

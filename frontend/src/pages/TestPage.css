@@ -23,6 +23,16 @@
   z-index: 30;
   backdrop-filter: blur(10px);
 }
+.count-warning-banner {
+  background: #3a1f1f;
+  color: #fca5a5;
+  font-size: 12px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid #5b2a2a;
+}
 .exit-btn {
   background: #1E1E20;
   border: 1px solid #2A2A2E;

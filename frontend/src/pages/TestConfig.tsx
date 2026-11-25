@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ArrowLeft, Clock, Timer, BookCheck, GraduationCap, Check, Download, Loader2 } from 'lucide-react'
+import { ArrowLeft, Clock, Timer, BookCheck, GraduationCap, Check, Download, Loader2, Grid3X3 } from 'lucide-react'
 import type { TestConfigType } from '../types'
 import { downloadQuestionsForTest } from '../offline/questions'
 import './TestConfig.css'
@@ -23,6 +23,7 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
   const [topic, setTopic] = useState(testConfig.topic || 'All Topics')
   const [year, setYear] = useState<string>(testConfig.year || '')
   const [duration, setDuration] = useState<number>(testConfig.duration || 60)
+  const [questionCount, setQuestionCount] = useState<number>(testConfig.questionCount || 0)
   const [downloading, setDownloading] = useState(false)
   const [downloadMessage, setDownloadMessage] = useState('')
   const [downloadError, setDownloadError] = useState('')
@@ -114,6 +115,12 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
 
   const totalQuestions = subjectsForYear.reduce((sum, s) => sum + (s.questions || 0), 0)
   const recommendedDuration = Math.max(1, Math.ceil((totalQuestions || 0) * 1.2) || 60)
+  const jambTotal = isJambFlow ? (Number(testConfig.totalQuestions) || totalQuestions) : totalQuestions
+
+  const QUESTION_COUNT_OPTIONS = [15, 40, 50] as const
+  const effectiveQuestionCount = questionCount || jambTotal || 0
+  const countExceedsBank = effectiveQuestionCount > 0 && jambTotal > 0 && effectiveQuestionCount > jambTotal
+  const effectiveDuration = countExceedsBank ? recommendedDuration : duration
 
   useEffect(() => {
     if (isJambFlow) return
@@ -141,7 +148,8 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
       (!isJambFlow && subjectsChanged) ||
       testConfig.year !== nextYear ||
       (!isJambFlow && testConfig.totalQuestions !== nextTotal) ||
-      testConfig.duration !== duration ||
+      testConfig.questionCount !== questionCount ||
+      testConfig.duration !== effectiveDuration ||
       testConfig.mode !== mode ||
       testConfig.difficulty !== difficulty ||
       testConfig.topic !== topic ||
@@ -152,7 +160,8 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
       subjects: nextSubjects,
       year: nextYear,
       totalQuestions: nextTotal,
-      duration,
+      questionCount,
+      duration: effectiveDuration,
       mode,
       difficulty,
       topic,
@@ -163,12 +172,13 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
       subject: isJambFlow ? (lockedSubject || (testConfig as any).subject) : (testConfig as any).subject,
       selectedSubject: isJambFlow ? (lockedSubject || (testConfig as any).selectedSubject) : (testConfig as any).selectedSubject,
     })
-  }, [subjectsForYear, effectiveYear, totalQuestions, duration, mode, difficulty, topic, selectedExam, year, isJambFlow, lockedSubject, testConfig.year, testConfig.totalQuestions, testConfig.subjects])
+  }, [subjectsForYear, effectiveYear, totalQuestions, questionCount, effectiveDuration, duration, mode, difficulty, topic, selectedExam, year, isJambFlow, lockedSubject, testConfig.year, testConfig.totalQuestions, testConfig.subjects])
 
   const timePerQuestion = useMemo(() => {
-    if (!totalQuestions) return 0
-    return (duration * 60 / totalQuestions).toFixed(0)
-  }, [duration, totalQuestions])
+    const total = effectiveQuestionCount || jambTotal
+    if (!total) return 0
+    return (effectiveDuration * 60 / total).toFixed(0)
+  }, [effectiveDuration, effectiveQuestionCount, jambTotal])
 
   const handleYearChange = (nextYear: string) => {
     yearAdjustedRef.current = ''
@@ -182,16 +192,17 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
     const finalConfig: TestConfigType = {
       ...testConfig,
       mode,
-      duration,
+      duration: effectiveDuration,
       year: isJambFlow ? (testConfig.year || effectiveYear || year) : (effectiveYear || year),
       difficulty,
       topic,
       showAnswers: mode === 'practice',
       fromStudy: mode === 'practice' ? !!testConfig.fromStudy : false,
       examId: selectedExam?.id || testConfig.examId || testConfig.customExamId || '',
-      examTitle: selectedExam?.title || testConfig.examTitle || testConfig.customTitle || '',
+      examTitle: selectedExam?.title || testConfig.examTitle || testConfig.customExamId || '',
       subjects: nextSubjects,
       totalQuestions: nextTotal,
+      questionCount,
       subject: isJambFlow ? (lockedSubject || (testConfig as any).subject) : (testConfig as any).subject,
       selectedSubject: isJambFlow ? (lockedSubject || (testConfig as any).selectedSubject) : (testConfig as any).selectedSubject,
       yearRangeLabel: isJambFlow ? ((testConfig as any).yearRangeLabel || lockedYearLabel) : (testConfig as any).yearRangeLabel,
@@ -209,8 +220,9 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
       examId: selectedExam?.id || testConfig.examId || testConfig.customExamId || '',
       subjects: isJambFlow ? (testConfig.subjects || []) : subjectsForYear,
       totalQuestions: isJambFlow ? (Number(testConfig.totalQuestions) || totalQuestions) : totalQuestions,
+      questionCount,
       year: isJambFlow ? (testConfig.year || effectiveYear || year) : (effectiveYear || year),
-      duration,
+      duration: effectiveDuration,
       mode,
       difficulty,
       topic,
@@ -238,7 +250,7 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
     <div className="config-page">
       <div className="config-header">
         <button className="back-circle1" onClick={() => setActivePage(isJambFlow ? 'questionYears' : 'subjects')}><ArrowLeft size={18}/></button>
-        <div><h1>{isJambFlow ? 'JAMB Test Configuration' : 'Configure Test'}</h1><p>{testConfig.examType}{(isJambFlow ? lockedSubject : selectedSubjectNames.join(', ')) ? ` • ${isJambFlow ? lockedSubject : selectedSubjectNames.join(', ')}` : ''}{isJambFlow && lockedYearLabel ? ` • ${lockedYearLabel}` : ''} • {(isJambFlow ? (Number(testConfig.totalQuestions) || totalQuestions) : totalQuestions) || 0} Questions</p></div>
+        <div><h1>{isJambFlow ? 'JAMB Test Configuration' : 'Configure Test'}</h1><p>{testConfig.examType}{(isJambFlow ? lockedSubject : selectedSubjectNames.join(', ')) ? ` • ${isJambFlow ? lockedSubject : selectedSubjectNames.join(', ')}` : ''}{isJambFlow && lockedYearLabel ? ` • ${lockedYearLabel}` : ''} • {effectiveQuestionCount || 0} Questions</p></div>
       </div>
 
       <div className="config-card highlight">
@@ -256,8 +268,28 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
          })}
          {subjectsForYear.length === 0 && <div className="selected-subject-item"><span className="s-name">No subjects available for this year.</span></div>}
         </div>
-        <div className="total-q"><span>Total</span><b>{(isJambFlow ? (Number(testConfig.totalQuestions) || totalQuestions) : totalQuestions)} Qs • {duration} mins • ~{(isJambFlow ? (Number(testConfig.totalQuestions) || totalQuestions) : totalQuestions) ? (duration * 60 / (isJambFlow ? (Number(testConfig.totalQuestions) || totalQuestions) : totalQuestions)).toFixed(0) : 0}s per Q</b></div>
+        <div className="total-q"><span>Total</span><b>{jambTotal} Qs • {effectiveDuration} mins • ~{timePerQuestion}s per Q</b></div>
         {availabilityKnown && <p style={{margin:'8px 0 0', fontSize:12, color:'#8f9091'}}>Subjects and question counts update automatically when you change the year.</p>}
+        {countExceedsBank && <p style={{margin:'8px 0 0', fontSize:12, color:'var(--danger-text, #fca5a5)'}}>Only {jambTotal} questions are available for the selected subjects. The timer has been adjusted to fit the available bank.</p>}
+      </div>
+
+      <div className="config-card">
+        <h3><Grid3X3 size={14}/> Number of Questions</h3>
+        <div className="count-options">
+          {QUESTION_COUNT_OPTIONS.map(n => {
+            const disabled = jambTotal > 0 && n > jambTotal
+            return (
+              <button key={n} className={`count-option ${questionCount === n ? 'active' : ''} ${disabled ? 'disabled' : ''}`} onClick={() => setQuestionCount(questionCount === n ? 0 : n)} disabled={disabled}>
+                <div className="count-num">{n}</div>
+                <div className="count-label">{n} Questions</div>
+                {questionCount === n && <div className="count-check"><Check size={14}/></div>}
+                {disabled && <div className="count-tag">Not enough</div>}
+              </button>
+            )
+          })}
+        </div>
+        {countExceedsBank && <p style={{margin:'10px 0 0', fontSize:12, color:'var(--danger-text, #fca5a5)'}}>The selected subjects only have {jambTotal} questions. Choose fewer questions or go back and select more subjects.</p>}
+        <p style={{margin:'10px 0 0', fontSize:12, color:'#8f9091'}}>{questionCount ? `You will answer ${effectiveQuestionCount} questions.` : `All ${jambTotal || 0} available questions will be used.`}</p>
       </div>
 
       <div className="config-card">

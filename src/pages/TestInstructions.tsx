@@ -13,6 +13,7 @@ export default function TestInstructions({ setActivePage, testConfig }: Props) {
   const totalMinutes = testConfig.duration
   const totalHours = Math.floor(totalMinutes / 60)
   const mins = totalMinutes % 60
+  const effectiveCount = testConfig.questionCount || testConfig.totalQuestions
 
   return (
     <div className="instruction-page">
@@ -29,7 +30,7 @@ export default function TestInstructions({ setActivePage, testConfig }: Props) {
           <div className="info-item"><span>Mode</span><strong>{testConfig.mode} ({testConfig.difficulty})</strong></div>
           <div className="info-item"><span>Topic</span><strong>{testConfig.topic}</strong></div>
           <div className="info-item full"><span>Subjects</span><strong>{testConfig.subjects.map(s => s.subject).join(' + ')}</strong></div>
-          <div className="info-item"><span>Questions</span><strong>{testConfig.totalQuestions}</strong></div>
+          <div className="info-item"><span>Questions</span><strong>{effectiveCount}</strong></div>
           <div className="info-item"><span>Duration</span><strong className="highlight">{totalHours>0? `${totalHours}h ${mins}m` : `${mins}m`}</strong></div>
         </div>
       </div>
@@ -37,7 +38,7 @@ export default function TestInstructions({ setActivePage, testConfig }: Props) {
       <div className="instruction-card">
         <h3><FileQuestion size={16}/> How it works</h3>
         <ul>
-          <li><span className="icon-b"><Clock size={14}/></span> You have <b>{totalHours>0? `${totalHours}h ${mins}m` : `${mins} minutes`}</b> for <b>{testConfig.totalQuestions} questions</b>.</li>
+          <li><span className="icon-b"><Clock size={14}/></span> You have <b>{totalHours>0? `${totalHours}h ${mins}m` : `${mins} minutes`}</b> for <b>{effectiveCount} questions</b>.</li>
           <li><span className="icon-b"><Grid3X3 size={14}/></span> Use <b>Previous / Next</b> to navigate. Tap grid icon to jump.</li>
           <li><span className="icon-b"><CheckCircle2 size={14}/></span> Answered turn <span className="dot green"></span> green on grid.</li>
           <li><span className="icon-b"><TimerOff size={14}/></span> Don't refresh - timer keeps running. Mode: <b>{testConfig.mode}</b></li>

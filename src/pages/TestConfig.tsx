@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ArrowLeft, Clock, Timer, BookCheck, GraduationCap, Check } from 'lucide-react'
+import { ArrowLeft, Clock, Timer, BookCheck, GraduationCap, Check, Grid3X3 } from 'lucide-react'
 import type { TestConfigType } from '../types'
 import './TestConfig.css'
 
@@ -22,6 +22,7 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
   const [topic, setTopic] = useState(testConfig.topic || 'All Topics')
   const [year, setYear] = useState<string>(testConfig.year || '')
   const [duration, setDuration] = useState<number>(testConfig.duration || 60)
+  const [questionCount, setQuestionCount] = useState<number>(testConfig.questionCount || 0)
   const yearAdjustedRef = useRef<string>('')
 
   const allSubjects = (testConfig.subjects || []) as SubjectLike[]
@@ -73,6 +74,11 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
   const totalQuestions = subjectsForYear.reduce((sum, s) => sum + (s.questions || 0), 0)
   const recommendedDuration = Math.max(1, Math.ceil((totalQuestions || 0) * 1.2) || 60)
 
+  const QUESTION_COUNT_OPTIONS = [15, 40, 50] as const
+  const effectiveQuestionCount = questionCount || totalQuestions || 0
+  const countExceedsBank = effectiveQuestionCount > 0 && totalQuestions > 0 && effectiveQuestionCount > totalQuestions
+  const effectiveDuration = countExceedsBank ? recommendedDuration : duration
+
   useEffect(() => {
     if (effectiveYear !== year) setYear(effectiveYear)
   }, [effectiveYear, year])
@@ -95,7 +101,8 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
       subjectsChanged ||
       testConfig.year !== nextYear ||
       testConfig.totalQuestions !== totalQuestions ||
-      testConfig.duration !== duration ||
+      testConfig.questionCount !== questionCount ||
+      testConfig.duration !== effectiveDuration ||
       testConfig.mode !== mode ||
       testConfig.difficulty !== difficulty ||
       testConfig.topic !== topic ||
@@ -106,7 +113,8 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
       subjects: subjectsForYear,
       year: nextYear,
       totalQuestions,
-      duration,
+      questionCount,
+      duration: effectiveDuration,
       mode,
       difficulty,
       topic,
@@ -114,12 +122,13 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
       examId: selectedExam?.id || testConfig.examId || testConfig.customExamId || '',
       examTitle: selectedExam?.title || testConfig.examTitle || testConfig.customTitle || '',
     })
-  }, [subjectsForYear, effectiveYear, totalQuestions, duration, mode, difficulty, topic, selectedExam, year])
+  }, [subjectsForYear, effectiveYear, totalQuestions, questionCount, effectiveDuration, duration, mode, difficulty, topic, selectedExam, year])
 
   const timePerQuestion = useMemo(() => {
-    if (!totalQuestions) return 0
-    return (duration * 60 / totalQuestions).toFixed(0)
-  }, [duration, totalQuestions])
+    const total = effectiveQuestionCount || totalQuestions
+    if (!total) return 0
+    return (effectiveDuration * 60 / total).toFixed(0)
+  }, [effectiveDuration, effectiveQuestionCount, totalQuestions])
 
   const handleYearChange = (nextYear: string) => {
     yearAdjustedRef.current = ''
@@ -131,7 +140,7 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
     const finalConfig: TestConfigType = {
       ...testConfig,
       mode,
-      duration,
+      duration: effectiveDuration,
       year: effectiveYear || year,
       difficulty,
       topic,
@@ -140,6 +149,7 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
       examTitle: selectedExam?.title || testConfig.examTitle || testConfig.customTitle || '',
       subjects: subjectsForYear,
       totalQuestions,
+      questionCount,
     }
     setTestConfig(finalConfig)
     setActivePage('testInstructions')
@@ -152,7 +162,7 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
     <div className="config-page">
       <div className="config-header">
         <button className="back-circle1" onClick={() => setActivePage('subjects')}><ArrowLeft size={18}/></button>
-        <div><h1>Configure Test</h1><p>{testConfig.examType}{selectedSubjectNames.length ? ` • ${selectedSubjectNames.join(', ')}` : ''} • {totalQuestions || 0} Questions{selectedExam?.title ? ` • ${selectedExam.title}` : ''}</p></div>
+        <div><h1>Configure Test</h1><p>{testConfig.examType}{selectedSubjectNames.length ? ` • ${selectedSubjectNames.join(', ')}` : ''} • {effectiveQuestionCount || totalQuestions || 0} Questions{selectedExam?.title ? ` • ${selectedExam.title}` : ''}</p></div>
       </div>
 
       <div className="config-card highlight">
@@ -170,8 +180,28 @@ export default function TestConfig({ setActivePage, testConfig, setTestConfig, s
          })}
          {subjectsForYear.length === 0 && <div className="selected-subject-item"><span className="s-name">No subjects available for this year.</span></div>}
         </div>
-        <div className="total-q"><span>Total</span><b>{totalQuestions} Qs • {duration} mins • ~{timePerQuestion}s per Q</b></div>
+        <div className="total-q"><span>Total</span><b>{totalQuestions} Qs • {effectiveDuration} mins • ~{timePerQuestion}s per Q</b></div>
         {availabilityKnown && <p style={{margin:'8px 0 0', fontSize:12, color:'#8f9091'}}>Subjects and question counts update automatically when you change the year.</p>}
+        {countExceedsBank && <p style={{margin:'8px 0 0', fontSize:12, color:'var(--danger-text, #fca5a5)'}}>Only {totalQuestions} questions are available for the selected subjects. The timer has been adjusted to fit the available bank.</p>}
+      </div>
+
+      <div className="config-card">
+        <h3><Grid3X3 size={14}/> Number of Questions</h3>
+        <div className="count-options">
+          {QUESTION_COUNT_OPTIONS.map(n => {
+            const disabled = totalQuestions > 0 && n > totalQuestions
+            return (
+              <button key={n} className={`count-option ${questionCount === n ? 'active' : ''} ${disabled ? 'disabled' : ''}`} onClick={() => setQuestionCount(questionCount === n ? 0 : n)} disabled={disabled}>
+                <div className="count-num">{n}</div>
+                <div className="count-label">{n} Questions</div>
+                {questionCount === n && <div className="count-check"><Check size={14}/></div>}
+                {disabled && <div className="count-tag">Not enough</div>}
+              </button>
+            )
+          })}
+        </div>
+        {countExceedsBank && <p style={{margin:'10px 0 0', fontSize:12, color:'var(--danger-text, #fca5a5)'}}>The selected subjects only have {totalQuestions} questions. Choose fewer questions or go back and select more subjects.</p>}
+        <p style={{margin:'10px 0 0', fontSize:12, color:'#8f9091'}}>{questionCount ? `You will answer ${effectiveQuestionCount} questions.` : `All ${totalQuestions || 0} available questions will be used.`}</p>
       </div>
 
       <div className="config-card">

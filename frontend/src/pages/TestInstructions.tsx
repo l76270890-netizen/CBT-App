@@ -18,6 +18,7 @@ export default function TestInstructions({ setActivePage, testConfig }: Props) {
   const subjectLabel = isJambFlow
     ? ((testConfig as any).selectedSubject || (testConfig as any).subject || testConfig.subjects?.[0]?.subject || '')
     : testConfig.subjects.map(s => s.subject).join(' + ')
+  const effectiveCount = testConfig.questionCount || testConfig.totalQuestions
 
   return (
     <div className="instruction-page">
@@ -32,7 +33,7 @@ export default function TestInstructions({ setActivePage, testConfig }: Props) {
           <div className="info-item"><span>Exam Type</span><strong>{testConfig.examType}</strong></div>
           <div className="info-item full"><span>Subject</span><strong>{subjectLabel || '—'}</strong></div>
           <div className="info-item full"><span>Question Years</span><strong>{yearLabel || '—'}</strong></div>
-          <div className="info-item"><span>Questions</span><strong>{testConfig.totalQuestions}</strong></div>
+          <div className="info-item"><span>Questions</span><strong>{effectiveCount}</strong></div>
           <div className="info-item"><span>Duration</span><strong className="highlight">{totalHours>0? `${totalHours}h ${mins}m` : `${mins} Minutes`}</strong></div>
           <div className="info-item"><span>Mode</span><strong>{testConfig.mode} ({testConfig.difficulty})</strong></div>
           {!isJambFlow && <div className="info-item"><span>Topic</span><strong>{testConfig.topic}</strong></div>}
@@ -47,7 +48,7 @@ export default function TestInstructions({ setActivePage, testConfig }: Props) {
           <li><span className="icon-b"><CheckCircle2 size={14}/></span> Select the best answer for each question.</li>
           <li><span className="icon-b"><Grid3X3 size={14}/></span> You can navigate between questions before submitting.</li>
           <li><span className="icon-b"><TimerOff size={14}/></span> Keep track of your remaining time; your test may automatically submit when time expires.</li>
-          <li><span className="icon-b"><Info size={14}/></span> Review your answers before submitting. You have <b>{totalHours>0? `${totalHours}h ${mins}m` : `${mins} minutes`}</b> for <b>{testConfig.totalQuestions} questions</b>.</li>
+          <li><span className="icon-b"><Info size={14}/></span> Review your answers before submitting. You have <b>{totalHours>0? `${totalHours}h ${mins}m` : `${mins} minutes`}</b> for <b>{effectiveCount} questions</b>.</li>
         </ul>
       </div>
 

@@ -13,6 +13,7 @@ export type TestConfigType = {
   examType: string
   subjects: SubjectData[]
   totalQuestions: number
+  questionCount?: number
   year: string
   duration: number
   mode: TestMode
