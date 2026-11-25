@@ -97,13 +97,11 @@ export default function Test({ setActivePage, testConfig }: Props) {
       fetched = allFetched
       console.log(`Backend collected: ${fetched.length} Qs from [${subjectsList.join(', ')}]`)
       
-      // Sync locally when offline
-      if (!navigator.onLine) {
+      // Sync locally when online to keep local questions in sync with backend
+      if (navigator.onLine) {
         await syncAllQuestions();
       }
-        } catch (e) { console.log("API failed to load imported questions", e) }
-      }
-
+      
       if (fetched.length === 0 && examId) {
         try {
           const cached = await loadCachedQuestions(String(examId), subjectsList, String(testConfig.year || ''))
@@ -202,7 +200,6 @@ export default function Test({ setActivePage, testConfig }: Props) {
     }
     await saveExamResult(result)
     localStorage.setItem('lastTestResult', JSON.stringify(result))
-    await saveExamResult(result)
     await clearDraft(draftKey).catch(() => {})
     // Novel CBT practice: save offline and sync later (dedupe via clientAttemptId)
     try {

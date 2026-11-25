@@ -21,7 +21,7 @@ function subjectName(subject: unknown): string {
 
 export async function normalizeCachedQuestion(raw: any, examId: string, fallbackSubject: string): CachedQuestion | null {
   if (!raw || !raw.question) return null;
-  const options = Array.isArray(raw.options) ? raw.options : [raw.options.A, raw.options.B, raw.options.C, raw.options.D];
+  const options = Array.isArray(raw.options) ? raw.options : [raw.options.A, raw.options.B, raw.options.C, raw.options.D, raw.options.E];
   if (!options.length) return null;
   const answerValue = raw.answer ?? raw.correctAnswer ?? raw.correct_answer;
   const yearValue = Number(raw.year);

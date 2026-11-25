@@ -99,17 +99,22 @@ export async function markAttemptFailed(clientAttemptId: string, message: string
 export async function saveExamResult(result: LocalResult): Promise<void> {
   const clientAttemptId = result.clientAttemptId || `cbt-${result.id}`;
   const examId = String(result.examId || "");
-  await offlineDb.exams.bulkPut({
+  const total = result.total;
+  const score = result.score;
+  const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
+  const record: OfflineExam = {
     id: result.id,
     title: result.examTitle || result.title || result.subject || "Exam",
     examType: result.examType,
     subjects: result.subjects || [],
     year: result.year || 0,
     duration: result.duration || "0m",
-    totalQuestions: result.total,
+    totalQuestions: result.totalQuestions || 0,
     scheduledAt: result.date,
-    cachedAt: Date.now()
-  });
+    cachedAt: Date.now(),
+    percentage,
+  };
+  await offlineDb.exams.bulkPut(record);
 }
 
 export async function saveDraft(key: string, answers: (number | null)[], questions: AttemptQuestion[], current: number, timeLeft: number): Promise<void> {
