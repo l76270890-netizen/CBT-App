@@ -4,6 +4,7 @@ import { ArrowRight, BookOpen, CalendarDays, Search, X, Funnel, Flame, Trophy, T
 import { examTypes } from '../data/examTypes'
 import './Home.css'
 import { apiRequest, asArray } from '../api'
+import { offlineDb } from '../offline/db'
 import { loadCachedExams, saveCachedExams } from '../offline/questions'
 
 type ExamData = {
@@ -54,11 +55,37 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
   const [upcomingError, setUpcomingError] = useState('')
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ practiced: 0, avgScore: 0, bestScore: 0, streak: 3 })
+  const [localHistoryCount, setLocalHistoryCount] = useState(0)
+  const [serverHistoryCount, setServerHistoryCount] = useState(0)
+
+  // Count attempts saved on this device that have not yet synced to the server.
+  // This makes the history count work offline (and avoids double counting once
+  // they are synced, since synced attempts appear in the server history).
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const count = await offlineDb.attempts.where("status").anyOf("pending", "failed").count()
+        if (!cancelled) setLocalHistoryCount(count)
+      } catch {
+        // IndexedDB unavailable; keep the server-backed count only.
+      }
+    }
+    void load()
+    window.addEventListener("online", load)
+    window.addEventListener("focus", load)
+    return () => {
+      cancelled = true
+      window.removeEventListener("online", load)
+      window.removeEventListener("focus", load)
+    }
+  }, [])
 
   useEffect(() => {
     if (user?.user_id) {
       apiRequest<unknown>(`/api/history/${encodeURIComponent(user.user_id)}`).then((payload) => {
           const history = asArray<any>(payload);
+          setServerHistoryCount(history.length)
           if (history.length > 0) {
             const percents = history.map(h => Math.round((h.score / h.total) * 100))
             setStats({
@@ -273,7 +300,10 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
           <div className="header-content-exam">
            <h1 className="home-title">Hello, <span>{user?.username || 'User'}</span></h1>
             <p className="home-subtitle">Pick an exam and practice</p>
-             <button onClick={() => setActivePage('practiceHistory')} className='hero-btn'>View history</button>
+             <button onClick={() => setActivePage('practiceHistory')} className='hero-btn'>
+                View history
+                <span style={{ marginLeft: 8, padding: '1px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.25)', fontSize: 12, fontWeight: 700 }}>{serverHistoryCount + localHistoryCount}</span>
+              </button>
           </div>
           <div className="hero-slide-controls">
             <button type="button" aria-label="Previous image" onClick={() => setActiveHeroSlide(current => (current - 1 + heroSlides.length) % heroSlides.length)}><ChevronLeft size={18} /></button>
