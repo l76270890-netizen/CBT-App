@@ -10,7 +10,7 @@ import {
   findQuestionBySubject,
   saveQuestion,
 } from "./indexedDB";
-import { chunk, removedCacheKeys, isQuotaError, type SyncState } from "./syncUtils";
+import { chunk, isQuotaError, type SyncState } from "./syncUtils";
 
 // Must match the image cache name used by public/sw.js so the service worker can
 // serve question diagrams offline. The old value ("examcore-images-v1") was never
@@ -273,15 +273,6 @@ async function fetchSyncQuestions(since?: string): Promise<any[]> {
   return Array.isArray(payload?.questions) ? payload.questions : [];
 }
 
-async function deleteRemovedQuestions(serverIds: Set<number>): Promise<number> {
-  const local = await offlineDb.questions.toArray();
-  const removed = removedCacheKeys(local, serverIds);
-  if (removed.length) {
-    await offlineDb.questions.bulkDelete(removed);
-  }
-  return removed.length;
-}
-
 async function storeInBatches(rows: CachedQuestion[]): Promise<void> {
   for (const batch of chunk(rows, BATCH_SIZE)) {
     await offlineDb.questions.bulkPut(toCloneable(batch));
@@ -318,9 +309,13 @@ async function checkStorageAvailable(): Promise<void> {
  *
  * - First run (no watermark): downloads every exam question.
  * - Later runs: downloads only questions changed since the last success.
- * - Deletions are detected by diffing the server manifest against local ids.
- * - Writes are batched and idempotent; existing data is never cleared, so an
- *   interrupted sync resumes from the last watermark without data loss.
+ * - The downloaded bank is treated as permanent: sync only ever ADDS or UPDATES
+ *   questions (bulkPut by cacheKey). It NEVER deletes local questions, so a
+ *   submit, a reconnect, or an empty/partial manifest can never wipe the bank.
+ *   Server-side deletions/corrections are reflected by updates; stale local rows
+ *   are harmless and remain usable offline until the student clears them.
+ * - Writes are batched and idempotent; an interrupted sync resumes from the last
+ *   watermark without data loss.
  * - The local count is verified against the manifest before reporting "ready".
  */
 export async function syncAllQuestions(_config?: TestConfigType): Promise<void> {
@@ -332,7 +327,6 @@ export async function syncAllQuestions(_config?: TestConfigType): Promise<void> 
     await checkStorageAvailable();
 
     const manifest = await fetchSyncManifest();
-    const serverIds = new Set<number>(manifest.ids);
     emit({ phase: "syncing", total: manifest.total, message: "Checking for new and updated questions…" });
 
     const state = loadSyncState();
@@ -342,7 +336,6 @@ export async function syncAllQuestions(_config?: TestConfigType): Promise<void> 
       .filter((row): row is CachedQuestion => Boolean(row));
 
     emit({ phase: "syncing", total: manifest.total, message: `Saving ${mapped.length} question(s)…` });
-    await deleteRemovedQuestions(serverIds);
     await storeInBatches(mapped);
 
     emit({ phase: "syncing", total: manifest.total, stored: mapped.length, message: "Saving question diagrams…" });
