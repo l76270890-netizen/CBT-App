@@ -1896,11 +1896,14 @@ def resend_paystack_activation_pin():
         return api_error("A valid email address is required.")
 
     now = utcnow()
+    # Find the latest unused payment for this email. Include payments whose
+    # first email never went out (email_sent_at is null and pin_expires_at is
+    # null after a failed webhook send) so the user can still receive a PIN.
     payment = PaystackPayment.query.filter(
         PaystackPayment.email == email,
-        PaystackPayment.email_sent_at.isnot(None),
         PaystackPayment.pin_used_at.is_(None),
-        PaystackPayment.pin_expires_at > now,
+        db.or_(PaystackPayment.pin_expires_at.is_(None),
+               PaystackPayment.pin_expires_at > now),
     ).order_by(PaystackPayment.created_at.desc()).first()
 
     if not payment:
