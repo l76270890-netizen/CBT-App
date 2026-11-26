@@ -4,6 +4,10 @@ import App from './App.tsx'
 import './index.css'
 import { startOfflineSync } from './offline/sync.ts'
 
+// Build marker: confirm in the browser console which bundle is running.
+// Must read "offline-sync-3" (no question deletion) on the fixed build.
+console.info('[ExamCore] build offline-sync-3 (permanent offline question bank)')
+
 startOfflineSync()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
