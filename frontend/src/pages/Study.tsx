@@ -5,7 +5,7 @@ type Props = {
 }
 
 import { useState, useMemo, useEffect } from 'react'
-import { BookOpen, Calculator, Atom, Beaker, Zap, Landmark, Search, X, ChevronRight, ArrowLeft, Feather, Scale, ShoppingBag, Leaf, BarChart3, Layers, CalendarDays, Library, Download, FileText, PlayCircle, Trash2, RefreshCw, HardDrive, Bookmark, Minus, Plus, List, BookMarked } from 'lucide-react'
+import { BookOpen, Calculator, Atom, Beaker, Zap, Landmark, Search, X, ChevronRight, ArrowLeft, Feather, ShoppingBag, BarChart3, Layers, CalendarDays, Library, Download, FileText, PlayCircle, Trash2, RefreshCw, HardDrive, Bookmark, Minus, Plus, List, BookMarked } from 'lucide-react'
 import { apiRequest, asArray } from '../api'
 import { toAnswerIndex } from '../answerUtils'
 import type { Novel, NovelProgress } from '../novelTypes'
@@ -114,18 +114,13 @@ export default function Study({ setActivePage, selectedExam, setTestConfig }: Pr
     { id: 'biology', name: 'Biology', icon: Atom, color: '#8B5CF6', dept: 'SCIENCE' },
     { id: 'chemistry', name: 'Chemistry', icon: Beaker, color: '#F59E0B', dept: 'SCIENCE' },
     { id: 'physics', name: 'Physics', icon: Zap, color: '#EF4444', dept: 'SCIENCE' },
-    { id: 'agric', name: 'Agricultural Science', icon: Leaf, color: '#16A34A', dept: 'SCIENCE' },
     { id: 'govt', name: 'Government', icon: Landmark, color: '#6366F1', dept: 'ART' },
     { id: 'literature', name: 'Literature in English', icon: Feather, color: '#EC4899', dept: 'ART' },
     { id: 'crk', name: 'Christian Religious Studies', icon: BookOpen, color: '#7C3AED', dept: 'ART' },
-    { id: 'history', name: 'History', icon: Landmark, color: '#92400E', dept: 'ART' },
     { id: 'economics', name: 'Economics', icon: BarChart3, color: '#059669', dept: 'COMMERCIAL' },
     { id: 'commerce', name: 'Commerce', icon: ShoppingBag, color: '#0891B2', dept: 'COMMERCIAL' },
     { id: 'accounting', name: 'Principles of Accounting', icon: Calculator, color: '#0F766E', dept: 'COMMERCIAL' },
-    { id: 'business', name: 'Business Studies', icon: Scale, color: '#4338CA', dept: 'COMMERCIAL' },
     { id: 'geography', name: 'Geography', icon: Landmark, color: '#2563EB', dept: 'ART' },
-    { id: 'gk', name: 'General Knowledge', icon: BookOpen, color: '#0EA5E9', dept: 'ALL' },
-    { id: 'current', name: 'Current Affairs', icon: BookOpen, color: '#F97316', dept: 'ALL' },
     { id: 'computer', name: 'Computer Science', icon: BookOpen, color: '#14B8A6', dept: 'SCIENCE' },
   ]
   const fallbackTopics: Record<string,string[]> = {
