@@ -5,6 +5,7 @@ import {
   removedCacheKeys,
   isQuotaError,
   toNumericId,
+  isDownloadableExamId,
 } from "../src/offline/syncUtils.ts";
 
 test("chunk splits arrays into fixed-size batches", () => {
@@ -44,4 +45,13 @@ test("toNumericId normalises ids", () => {
   assert.equal(toNumericId("12"), 12);
   assert.equal(toNumericId(12), 12);
   assert.ok(Number.isNaN(toNumericId("abc")));
+});
+
+test("isDownloadableExamId accepts real exam ids and rejects timestamp pollution", () => {
+  assert.equal(isDownloadableExamId(1), true);
+  assert.equal(isDownloadableExamId("42"), true);
+  assert.equal(isDownloadableExamId(Date.now()), false);
+  assert.equal(isDownloadableExamId("1700000000000"), false);
+  assert.equal(isDownloadableExamId(0), false);
+  assert.equal(isDownloadableExamId("abc"), false);
 });

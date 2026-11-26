@@ -1,4 +1,4 @@
-import { offlineDb, toCloneable, type CachedQuestion, type OfflineAttempt, type OfflineExam } from "./db";
+import { offlineDb, toCloneable, type CachedQuestion, type OfflineAttempt } from "./db";
 
 export type AttemptQuestion = {
   id: string | number;
@@ -98,23 +98,20 @@ export async function markAttemptFailed(clientAttemptId: string, message: string
   if (row?.id) await offlineDb.attempts.update(row.id, { status: "failed", syncError: message });
 }
 
-export async function saveExamResult(result: LocalResult): Promise<void> {
-  const clientAttemptId = result.clientAttemptId || `cbt-${result.id}`;
-  const total = result.total;
-  const score = result.score;
-  const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
-  const record: OfflineExam = {
-    id: String(result.id),
-    title: result.examTitle || result.title || result.subject || "Exam",
-    examType: result.examType,
-    subjects: result.subjects || [],
-    year: result.year || 0,
-    duration: Number(result.duration) || 0,
-    totalQuestions: result.totalQuestions || 0,
-    scheduledAt: result.date,
-    cachedAt: Date.now(),
-  };
-  await offlineDb.exams.bulkPut([toCloneable(record)]);
+export async function saveExamResult(_result: LocalResult): Promise<void> {
+  // Intentionally does NOT write to the `exams` store.
+  //
+  // The `exams` store holds downloaded-exam metadata (the permanent offline
+  // question bank). Writing a result here with a timestamp id polluted the exam
+  // list: offline, the JAMB/CBT cards resolve an exam with
+  // examsFromDb.find(examTypeMatches(...)) and picked the newest (fake) entry,
+  // whose id has no cached questions — so the downloaded questions appeared to
+  // vanish after submitting.
+  //
+  // Results are persisted separately: saveOfflineAttempt() writes the attempt
+  // (answers + score + question snapshot) to the `attempts` store, and
+  // TestPage stores `lastTestResult` in localStorage. Nothing here touches the
+  // downloaded question bank.
 }
 
 export async function saveDraft(key: string, answers: (number | null)[], questions: AttemptQuestion[], current: number, timeLeft: number): Promise<void> {

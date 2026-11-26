@@ -10,7 +10,7 @@ import {
   findQuestionBySubject,
   saveQuestion,
 } from "./indexedDB";
-import { chunk, isQuotaError, type SyncState } from "./syncUtils";
+import { chunk, isQuotaError, isDownloadableExamId, type SyncState } from "./syncUtils";
 
 // Must match the image cache name used by public/sw.js so the service worker can
 // serve question diagrams offline. The old value ("examcore-images-v1") was never
@@ -171,7 +171,11 @@ export async function saveCachedExams(exams: OfflineExam[]): Promise<void> {
 }
 
 export async function loadCachedExams(): Promise<OfflineExam[]> {
-  return offlineDb.exams.orderBy("cachedAt").reverse().toArray();
+  const exams = await offlineDb.exams.orderBy("cachedAt").reverse().toArray();
+  // Ignore legacy result entries (timestamp ids) that were mistakenly written
+  // into the exams store; they are not downloadable exams and would otherwise
+  // hijack card -> exam resolution offline.
+  return exams.filter((exam) => isDownloadableExamId(exam.id));
 }
 
 export async function loadCachedSubjectAvailability(examId: string): Promise<{ subject: string; questions: number; years: string; required: boolean; questionsByYear: Record<string, number> }[]> {

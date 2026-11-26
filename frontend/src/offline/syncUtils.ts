@@ -55,3 +55,13 @@ export function toNumericId(value: unknown): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : NaN;
 }
+
+/**
+ * True for ids that belong to a real downloadable exam (small positive DB
+ * integers). Result entries previously written into the exams store used a
+ * timestamp id (~1.7e12); this filters those out without deleting any data.
+ */
+export function isDownloadableExamId(id: unknown): boolean {
+  const n = Number(id);
+  return Number.isFinite(n) && n > 0 && n < 1_000_000_000_000;
+}
