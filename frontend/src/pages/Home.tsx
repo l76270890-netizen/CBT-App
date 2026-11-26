@@ -78,6 +78,36 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
   const [localHistoryCount, setLocalHistoryCount] = useState(0)
   const [serverHistoryCount, setServerHistoryCount] = useState(0)
   const [localStats, setLocalStats] = useState({ practiced: 0, avgScore: 0, bestScore: 0, streak: 0 })
+  const [questionCounts, setQuestionCounts] = useState<Record<string, number>>({})
+
+  // Count cached questions per exam so card numbers (e.g. Quick practice
+  // "N questions") work offline, where the server totalQuestions is unavailable.
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const rows = await offlineDb.questions.toArray()
+        if (cancelled) return
+        const counts: Record<string, number> = {}
+        for (const row of rows) {
+          if (!row?.examId) continue
+          const key = String(row.examId)
+          counts[key] = (counts[key] || 0) + 1
+        }
+        setQuestionCounts(counts)
+      } catch {
+        // IndexedDB unavailable; keep server-provided totals.
+      }
+    }
+    void load()
+    window.addEventListener("online", load)
+    window.addEventListener("focus", load)
+    return () => {
+      cancelled = true
+      window.removeEventListener("online", load)
+      window.removeEventListener("focus", load)
+    }
+  }, [])
 
   // Derive stats + unsynced count from attempts stored on this device so the
   // hero cards work offline. Reloads on focus/online and after returning to Home.
@@ -402,7 +432,7 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
                   <span className="quick-practice-card-icon"><Play size={16} fill="currentColor" /></span>
                   <span className="quick-practice-card-copy">
                     <strong>{exam.title}</strong>
-                    <span>{exam.examType} · {exam.totalQuestions ?? '—'} questions</span>
+                    <span>{exam.examType} · {exam.totalQuestions ?? questionCounts[exam.id] ?? '—'} questions</span>
                   </span>
                   <ArrowRight className="quick-practice-arrow" size={17} />
                 </button>
