@@ -69,7 +69,7 @@ export default function Test({ setActivePage, testConfig }: Props) {
       for (const q of idxQuestions) {
         if (!q || (!q.id && q.subject === singleSubject)) continue
         fetchedFromIdx.push({
-          id: q.id,
+          id: String(q.id),
           subject: q.subject,
           question: q.question,
           imageUrl: q.imageUrl || (q as any).image_url || undefined,

@@ -24,6 +24,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearInterval(interval)
   }, [user?.user_id])
 
+  // Automatically synchronise the full examination question bank whenever the
+  // signed-in user is online: on app load, after login, and when connectivity
+  // returns. syncAllQuestions is idempotent and incremental, so this is safe to
+  // call repeatedly.
+  useEffect(() => {
+    if (!user?.user_id) return
+    const run = () => { void syncAllQuestions() }
+    run()
+    window.addEventListener('online', run)
+    return () => window.removeEventListener('online', run)
+  }, [user?.user_id])
+
   const login = async (email: string, password: string) => {
     setLoading(true)
     try {

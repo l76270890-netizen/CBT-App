@@ -174,6 +174,11 @@ def ensure_question_columns():
                 conn.execute(db.text('ALTER TABLE questions ADD COLUMN topic VARCHAR(200)'))
                 conn.commit()
             app.logger.info("Added missing question column: topic")
+        if "updated_at" not in existing_cols:
+            with db.engine.connect() as conn:
+                conn.execute(db.text('ALTER TABLE questions ADD COLUMN updated_at TIMESTAMP'))
+                conn.commit()
+            app.logger.info("Added missing question column: updated_at")
     except Exception:
         app.logger.exception(
             "Could not verify the questions table schema at startup; continuing.")
@@ -1062,6 +1067,7 @@ class Question(db.Model):
     image_path = db.Column(db.String(1000), nullable=True)
     school_id = db.Column(db.Integer, db.ForeignKey(
         "schools.id"), nullable=True, index=True)
+    updated_at = db.Column(db.DateTime, nullable=True, default=utcnow, onupdate=utcnow)
 
 
 class CBTResult(db.Model):
@@ -2289,6 +2295,91 @@ def get_questions():
         result.append(item)
 
     return jsonify(result)
+
+
+@app.route("/api/sync/manifest", methods=["GET"])
+@require_auth
+def sync_manifest():
+    """Lightweight list of every exam question id in the caller's school.
+
+    The offline client diffs this against its local cache to detect deletions
+    without downloading the whole bank. Only ids + a server timestamp are sent.
+    """
+    school_id = g.current_user.school_id
+    rows = db.session.query(Question.id).filter(
+        Question.school_id == school_id,
+        Question.examId.isnot(None),
+    ).all()
+    ids = [row[0] for row in rows]
+    return jsonify({
+        "success": True,
+        "serverTime": iso_utc(utcnow()),
+        "total": len(ids),
+        "ids": ids,
+    })
+
+
+@app.route("/api/sync/questions", methods=["GET"])
+@require_auth
+def sync_questions():
+    """Return exam questions for offline sync, incrementally.
+
+    Without ``since`` every exam question is returned (first sync). With an ISO
+    ``since`` timestamp only rows whose ``updated_at`` is newer are returned, so
+    reconnecting clients download only what changed. Deletions are handled by the
+    client via /api/sync/manifest. Requires authentication and is school-scoped.
+    """
+    school_id = g.current_user.school_id
+    since_raw = request.args.get("since")
+    since = None
+    if since_raw:
+        try:
+            since = datetime.fromisoformat(
+                since_raw.strip().replace("Z", "+00:00")).replace(tzinfo=None)
+        except (TypeError, ValueError):
+            return api_error("since must be an ISO 8601 timestamp.")
+
+    query = Question.query.filter(
+        Question.school_id == school_id,
+        Question.examId.isnot(None),
+    )
+    if since is not None:
+        query = query.filter(Question.updated_at > since)
+
+    exam_type = (request.args.get("examType") or "").strip()
+    if exam_type:
+        query = query.filter(func.lower(Question.examType) == exam_type.lower())
+    subject = (request.args.get("subject") or "").strip()
+    if subject:
+        query = query.filter(func.lower(Question.subject) == subject.lower())
+
+    rows = query.order_by(Question.id.asc()).all()
+    questions = []
+    for q in rows:
+        item = {
+            "id": q.id,
+            "examId": q.examId,
+            "examType": q.examType,
+            "subject": q.subject,
+            "topic": q.topic,
+            "question": q.question,
+            "options": q.options,
+            "year": q.year,
+            "image_url": get_image_url(q.image_path),
+            "updated_at": iso_utc(q.updated_at) if q.updated_at else None,
+        }
+        answer = str(q.answer or "").strip().upper()
+        if answer in {"A", "B", "C", "D"}:
+            item["answer"] = answer
+            item["correctAnswer"] = answer
+        item["explanation"] = q.explanation or ""
+        questions.append(item)
+    return jsonify({
+        "success": True,
+        "serverTime": iso_utc(utcnow()),
+        "total": len(questions),
+        "questions": questions,
+    })
 
 
 @app.route("/api/exams/<int:exam_id>/availability", methods=["GET"])

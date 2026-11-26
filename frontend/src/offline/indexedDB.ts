@@ -102,6 +102,6 @@ export async function findQuestionBySubject(subject: string, year?: number): Pro
   return results.find(row => row.id === subject || row.question === subject || row.subject === subject) || results[0] || null;
 }
 
-export async function saveQuestion(id: string | number, record: Omit<QuestionRecord, 'options'> = {}): Promise<void> {
+export async function saveQuestion(id: string | number, record: Omit<QuestionRecord, 'options'> = {} as Omit<QuestionRecord, 'options'>): Promise<void> {
   await putQuestion(id, record);
 }

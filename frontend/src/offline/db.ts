@@ -106,17 +106,41 @@ class ExamCoreOfflineDb extends Dexie {
 
   constructor() {
     super("examcore-offline");
+    // Dexie requires every version to declare the COMPLETE schema for that
+    // version. Stores omitted from a version are DELETED on upgrade (verified in
+    // dexie's deleteRemovedTables). The previous non-cumulative declarations
+    // wiped questions/attempts/drafts/exams, which is why saved questions
+    // disappeared. Each version below is cumulative; v5 re-declares everything
+    // so existing installs recover the missing stores without data loss.
     this.version(1).stores({
       questions: "&cacheKey, examId, subject, year, cachedAt",
       attempts: "++id, &clientAttemptId, examId, status, createdAt",
     });
     this.version(2).stores({
+      questions: "&cacheKey, examId, subject, year, cachedAt",
+      attempts: "++id, &clientAttemptId, examId, status, createdAt",
       drafts: "&key, updatedAt",
     });
     this.version(3).stores({
+      questions: "&cacheKey, examId, subject, year, cachedAt",
+      attempts: "++id, &clientAttemptId, examId, status, createdAt",
+      drafts: "&key, updatedAt",
       exams: "&id, examType, cachedAt",
     });
     this.version(4).stores({
+      questions: "&cacheKey, examId, subject, year, cachedAt",
+      attempts: "++id, &clientAttemptId, examId, status, createdAt",
+      drafts: "&key, updatedAt",
+      exams: "&id, examType, cachedAt",
+      studyMeta: "&examType, cachedAt",
+      studyQuestions: "&cacheKey, examType, subject, topic, year, cachedAt",
+      studyActivity: "++id, &clientActivityId, examType, subject, status, createdAt",
+    });
+    this.version(5).stores({
+      questions: "&cacheKey, examId, subject, year, cachedAt",
+      attempts: "++id, &clientAttemptId, examId, status, createdAt",
+      drafts: "&key, updatedAt",
+      exams: "&id, examType, cachedAt",
       studyMeta: "&examType, cachedAt",
       studyQuestions: "&cacheKey, examType, subject, topic, year, cachedAt",
       studyActivity: "++id, &clientActivityId, examType, subject, status, createdAt",

@@ -27,6 +27,7 @@ import DemoExperience from './pages/DemoExperience'
 import Renew from './pages/Renew'
 import SubscriptionExpired from './pages/SubscriptionExpired'
 import SubscriptionBanner from './components/SubscriptionBanner'
+import SyncStatus from './components/SyncStatus'
 import type { TestConfigType } from './types'
 import { AuthProvider } from './context/AuthContext'
 import { SubscriptionProvider, useSubscription } from './context/SubscriptionContext'
@@ -156,6 +157,7 @@ function AppShell() {
 
       <main className={`app-main${showNavbar ? ' app-main-sidebar' : ''}${['questionYears', 'testConfig', 'testInstructions'].includes(page) ? ' app-main-setup' : ''}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {showNavbar && <SubscriptionBanner onRenew={() => navigateTo('renew')} />}
+        {!isAdminApp && <SyncStatus />}
         {effectivePage === 'subscriptionExpired' && <SubscriptionExpired setActivePage={navigateTo} />}
         {effectivePage === 'renew' && <Renew setActivePage={navigateTo} />}
         {!showBlocked && (

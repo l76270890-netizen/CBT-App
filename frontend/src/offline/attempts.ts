@@ -1,4 +1,4 @@
-import { offlineDb, toCloneable, type CachedQuestion, type OfflineAttempt } from "./db";
+import { offlineDb, toCloneable, type CachedQuestion, type OfflineAttempt, type OfflineExam } from "./db";
 
 export type AttemptQuestion = {
   id: string | number;
@@ -28,6 +28,8 @@ export type LocalResult = {
   questions: AttemptQuestion[];
   status: string;
   date: string;
+  year?: number;
+  totalQuestions?: number;
 };
 
 function toCachedQuestion(question: AttemptQuestion, examId: string): CachedQuestion {
@@ -98,22 +100,19 @@ export async function markAttemptFailed(clientAttemptId: string, message: string
 
 export async function saveExamResult(result: LocalResult): Promise<void> {
   const clientAttemptId = result.clientAttemptId || `cbt-${result.id}`;
-  const examId = String(result.examId || "");
   const total = result.total;
   const score = result.score;
   const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
   const record: OfflineExam = {
-    id: result.id,
+    id: String(result.id),
     title: result.examTitle || result.title || result.subject || "Exam",
     examType: result.examType,
-    subject: result.subjects?.[0] ?? result.subject ?? "",
     subjects: result.subjects || [],
     year: result.year || 0,
-    duration: result.duration || "0m",
+    duration: Number(result.duration) || 0,
     totalQuestions: result.totalQuestions || 0,
     scheduledAt: result.date,
     cachedAt: Date.now(),
-    examId: result.examId || "",
   };
   await offlineDb.exams.bulkPut([toCloneable(record)]);
 }

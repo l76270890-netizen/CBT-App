@@ -58,3 +58,11 @@ body {
   background-color: var(--bg-main);
   color: var(--text-main);
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}

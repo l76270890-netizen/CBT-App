@@ -7,6 +7,7 @@ import {
   tickSubscriptionStatus,
   type SubscriptionStatus,
 } from '../subscription'
+import { storeOfflineEntitlement } from '../offline/entitlement'
 
 const STATUS_PATH = '/api/students/me/subscription'
 const POLL_INTERVAL_MS = 60 * 1000
@@ -46,6 +47,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     lastSyncRef.current = Date.now()
     setError(null)
     setStatus(next)
+    if (next) {
+      // Persist a secured offline entitlement so offline access can be bounded
+      // by the server's subscription expiry when the network is unavailable.
+      storeOfflineEntitlement({ expiresAt: next.expiresAt, owner: next.plan === 'owner' })
+    }
     if (userId) {
       try {
         if (next) localStorage.setItem(`examcore:subscription:${userId}`, JSON.stringify({ status: next, savedAt: Date.now() }))
