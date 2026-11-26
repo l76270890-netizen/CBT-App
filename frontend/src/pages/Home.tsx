@@ -46,6 +46,26 @@ const heroSlides = [
   { src: 'https://images.unsplash.com/photo-1513258496099-48168024aec0?w=1200', alt: 'Students learning in a classroom' },
 ]
 
+// Consecutive-day streak ending today (or yesterday) from ISO completedAt values.
+function computeStreak(dates: string[]): number {
+  const days = new Set(
+    dates
+      .map((value) => (value ? new Date(value) : null))
+      .filter((value): value is Date => !!value && !Number.isNaN(value.getTime()))
+      .map((value) => value.toISOString().slice(0, 10)),
+  )
+  if (!days.size) return 0
+  const cursor = new Date()
+  let streak = 0
+  // Allow the streak to start today or yesterday.
+  if (!days.has(cursor.toISOString().slice(0, 10))) cursor.setDate(cursor.getDate() - 1)
+  while (days.has(cursor.toISOString().slice(0, 10))) {
+    streak += 1
+    cursor.setDate(cursor.getDate() - 1)
+  }
+  return streak
+}
+
 export default function Home({ setActivePage, setSelectedExam, setTestConfig, searchQuery, setSearchQuery }: any) {
   const { user } = useAuth()
   const [activeHeroSlide, setActiveHeroSlide] = useState(0)
@@ -57,18 +77,29 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
   const [stats, setStats] = useState({ practiced: 0, avgScore: 0, bestScore: 0, streak: 3 })
   const [localHistoryCount, setLocalHistoryCount] = useState(0)
   const [serverHistoryCount, setServerHistoryCount] = useState(0)
+  const [localStats, setLocalStats] = useState({ practiced: 0, avgScore: 0, bestScore: 0, streak: 0 })
 
-  // Count attempts saved on this device that have not yet synced to the server.
-  // This makes the history count work offline (and avoids double counting once
-  // they are synced, since synced attempts appear in the server history).
+  // Derive stats + unsynced count from attempts stored on this device so the
+  // hero cards work offline. Reloads on focus/online and after returning to Home.
   useEffect(() => {
     let cancelled = false
     const load = async () => {
       try {
-        const count = await offlineDb.attempts.where("status").anyOf("pending", "failed").count()
-        if (!cancelled) setLocalHistoryCount(count)
+        const rows = await offlineDb.attempts.toArray()
+        if (cancelled) return
+        const unsynced = rows.filter((row) => row.status === "pending" || row.status === "failed").length
+        setLocalHistoryCount(unsynced)
+        const percents = rows
+          .map((row) => (row.total > 0 ? Math.round((row.score / row.total) * 100) : 0))
+          .filter((value) => Number.isFinite(value))
+        setLocalStats({
+          practiced: rows.length,
+          avgScore: percents.length ? Math.round(percents.reduce((a, b) => a + b, 0) / percents.length) : 0,
+          bestScore: percents.length ? Math.max(...percents) : 0,
+          streak: computeStreak(rows.map((row) => row.completedAt).filter(Boolean) as string[]),
+        })
       } catch {
-        // IndexedDB unavailable; keep the server-backed count only.
+        // IndexedDB unavailable; keep the server-backed stats only.
       }
     }
     void load()
@@ -273,6 +304,8 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
     setActivePage('subjects')
   }
 
+  const displayStats = serverHistoryCount > 0 ? stats : localStats
+
   return (
     <div className="home-container">
       <div className="hero-search-bar">
@@ -323,10 +356,10 @@ export default function Home({ setActivePage, setSelectedExam, setTestConfig, se
           </div>
         </section>
       <div className="stats-grid1">
-        <div className="stats-card"><div className="stat-icon blue"><Target size={18} /></div><h2>{stats.practiced}</h2><span>Exams Practiced</span></div>
-        <div className="stats-card"><div className="stat-icon green"><BarChart3 size={18} /></div><h2>{stats.avgScore}%</h2><span>Avg Score</span></div>
-        <div className="stats-card"><div className="stat-icon gold"><Trophy size={18} /></div><h2>{stats.bestScore}%</h2><span>Best Score</span></div>
-        <div className="stats-card"><div className="stat-icon red"><Flame size={18} /></div><h2>{stats.streak} days</h2><span>Study Streak</span></div>
+        <div className="stats-card"><div className="stat-icon blue"><Target size={18} /></div><h2>{displayStats.practiced}</h2><span>Exams Practiced</span></div>
+        <div className="stats-card"><div className="stat-icon green"><BarChart3 size={18} /></div><h2>{displayStats.avgScore}%</h2><span>Avg Score</span></div>
+        <div className="stats-card"><div className="stat-icon gold"><Trophy size={18} /></div><h2>{displayStats.bestScore}%</h2><span>Best Score</span></div>
+        <div className="stats-card"><div className="stat-icon red"><Flame size={18} /></div><h2>{displayStats.streak} days</h2><span>Study Streak</span></div>
       </div>
       <div className="section-header"><h3>Choose your examination</h3><p onClick={() => setActivePage('exams')}>see more ›</p></div>
       <div className="exam-type-grid">
